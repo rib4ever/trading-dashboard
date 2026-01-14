@@ -27,6 +27,36 @@
       --text:#eef2ff; --muted:#aab2c5;
       --accent:#38bdf8; --ok:#34d399; --warn:#fbbf24;
     }
+
+    /* Accent-forward palettes (keep same glass format; only palette shifts) */
+    html[data-theme="ocean"]{
+      --bg0:#06101a; --bg1:#081c2c;
+      --card: rgba(255,255,255,.055);
+      --card2: rgba(255,255,255,.035);
+      --text:#e6f3ff; --muted:#a6c2d8;
+      --accent:#38bdf8; --ok:#22c55e; --warn:#f59e0b;
+    }
+    html[data-theme="emerald"]{
+      --bg0:#06120c; --bg1:#081f16;
+      --card: rgba(255,255,255,.055);
+      --card2: rgba(255,255,255,.035);
+      --text:#e7fff3; --muted:#a8d7be;
+      --accent:#34d399; --ok:#22c55e; --warn:#f59e0b;
+    }
+    html[data-theme="royal"]{
+      --bg0:#0a0818; --bg1:#120b2a;
+      --card: rgba(255,255,255,.055);
+      --card2: rgba(255,255,255,.035);
+      --text:#f0ecff; --muted:#c1b6e3;
+      --accent:#a78bfa; --ok:#22c55e; --warn:#f59e0b;
+    }
+    html[data-theme="ruby"]{
+      --bg0:#16070b; --bg1:#240a12;
+      --card: rgba(255,255,255,.055);
+      --card2: rgba(255,255,255,.035);
+      --text:#ffe7ef; --muted:#e2a9b9;
+      --accent:#fb7185; --ok:#22c55e; --warn:#f59e0b;
+    }
     html[data-theme="light"]{
       --bg0:#f7f7fb; --bg1:#ffffff;
       --card: rgba(17,24,39,.06);
@@ -176,6 +206,10 @@
           <select class="select" id="themeSel">
             <option value="midnight">Midnight</option>
             <option value="slate">Slate</option>
+            <option value="ocean">Ocean Blue</option>
+            <option value="emerald">Emerald Green</option>
+            <option value="royal">Royal Purple</option>
+            <option value="ruby">Ruby Red</option>
             <option value="light">Light</option>
           </select>
         </div>

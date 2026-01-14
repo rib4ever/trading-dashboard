@@ -73,6 +73,103 @@
       --goldText: #ffe3a8;
     }
 
+    /* Accent-forward palettes (glass stays the same, but all accents adapt) */
+    html[data-theme="ocean"]{
+      --bg0:#06101a;
+      --bg1:#081c2c;
+      --card: rgba(255,255,255,.055);
+      --card2: rgba(255,255,255,.035);
+      --line: rgba(255,255,255,.10);
+
+      --text:#e6f3ff;
+      --muted:#a6c2d8;
+
+      --accent:#38bdf8; /* blue */
+      --ok:#22c55e;
+      --warn:#f59e0b;
+      --soon:#60a5fa;
+
+      --asia: rgba(56,189,248,.16);
+      --london: rgba(34,197,94,.14);
+      --overlap: rgba(245,158,11,.16);
+      --ny: rgba(96,165,250,.16);
+
+      --gold: rgba(245,158,11,.16);
+      --goldText: #ffe3a8;
+    }
+
+    html[data-theme="emerald"]{
+      --bg0:#06120c;
+      --bg1:#081f16;
+      --card: rgba(255,255,255,.055);
+      --card2: rgba(255,255,255,.035);
+      --line: rgba(255,255,255,.10);
+
+      --text:#e7fff3;
+      --muted:#a8d7be;
+
+      --accent:#34d399; /* green */
+      --ok:#22c55e;
+      --warn:#f59e0b;
+      --soon:#86efac;
+
+      --asia: rgba(52,211,153,.16);
+      --london: rgba(34,197,94,.14);
+      --overlap: rgba(245,158,11,.16);
+      --ny: rgba(134,239,172,.14);
+
+      --gold: rgba(245,158,11,.16);
+      --goldText: #ffe3a8;
+    }
+
+    html[data-theme="royal"]{
+      --bg0:#0a0818;
+      --bg1:#120b2a;
+      --card: rgba(255,255,255,.055);
+      --card2: rgba(255,255,255,.035);
+      --line: rgba(255,255,255,.10);
+
+      --text:#f0ecff;
+      --muted:#c1b6e3;
+
+      --accent:#a78bfa; /* purple */
+      --ok:#22c55e;
+      --warn:#f59e0b;
+      --soon:#c4b5fd;
+
+      --asia: rgba(167,139,250,.16);
+      --london: rgba(34,197,94,.14);
+      --overlap: rgba(245,158,11,.16);
+      --ny: rgba(196,181,253,.16);
+
+      --gold: rgba(245,158,11,.16);
+      --goldText: #ffe3a8;
+    }
+
+    html[data-theme="ruby"]{
+      --bg0:#16070b;
+      --bg1:#240a12;
+      --card: rgba(255,255,255,.055);
+      --card2: rgba(255,255,255,.035);
+      --line: rgba(255,255,255,.10);
+
+      --text:#ffe7ef;
+      --muted:#e2a9b9;
+
+      --accent:#fb7185; /* red/pink */
+      --ok:#22c55e;
+      --warn:#f59e0b;
+      --soon:#fda4af;
+
+      --asia: rgba(251,113,133,.14);
+      --london: rgba(34,197,94,.14);
+      --overlap: rgba(245,158,11,.16);
+      --ny: rgba(253,164,175,.14);
+
+      --gold: rgba(245,158,11,.16);
+      --goldText: #ffe3a8;
+    }
+
     html[data-theme="light"]{
       --bg0:#f7f7fb;
       --bg1:#ffffff;
@@ -205,7 +302,7 @@
 
     /* Tables */
     .tableWrap{overflow:hidden}
-    table{width:100%;border-collapse:collapse}
+    table{width:100%;border-collapse:collapse; table-layout:fixed}
     thead th{
       text-align:left;
       font-size:12px;
@@ -224,8 +321,12 @@
       vertical-align:top;
       font-size:13px;
       line-height:1.25;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
     }
     tbody tr{transition: background .15s var(--ease)}
+    tbody tr{height:54px; cursor:pointer}
     tbody tr:hover{background: color-mix(in srgb, var(--card) 40%, transparent)}
     tbody tr:last-child td{border-bottom:none}
 
@@ -322,6 +423,191 @@
     }
 
     .muted{color:var(--muted)}
+
+    /* =========================
+       Details modal
+       ========================= */
+    .modalOverlay{
+      position:fixed; inset:0;
+      background: rgba(0,0,0,.45);
+      display:none;
+      align-items:center;
+      justify-content:center;
+      padding:16px;
+      z-index:999;
+    }
+    .modalOverlay[data-open="1"]{display:flex}
+    .modal{
+      width:min(860px, 100%);
+      max-height: min(86vh, 820px);
+      overflow:hidden;
+      border-radius: 20px;
+    }
+    .modalHead{
+      display:flex; gap:10px; align-items:flex-start; justify-content:space-between;
+      padding:14px;
+      border-bottom: 1px solid var(--line);
+    }
+    .modalTitle{
+      display:flex; gap:10px; align-items:center;
+      font-weight:1000;
+      font-size:16px;
+    }
+    .modalSub{margin-top:4px; color:var(--muted); font-size:12px}
+    .modalClose{
+      border:1px solid var(--line);
+      background: color-mix(in srgb, var(--card) 60%, transparent);
+      color:var(--text);
+      border-radius: 14px;
+      padding:10px 12px;
+      cursor:pointer;
+      font-weight:900;
+    }
+    .modalBody{
+      padding:14px;
+      overflow:auto;
+      max-height: calc(min(86vh, 820px) - 64px);
+    }
+    .modalGrid{display:grid; gap:12px}
+    .modalRow{display:grid; gap:10px; grid-template-columns: 1fr 1fr}
+    @media (max-width: 720px){ .modalRow{grid-template-columns:1fr} }
+    .kv{
+      padding:12px;
+    }
+    .k{color:var(--muted); font-size:12px}
+    .v{margin-top:6px; font-weight:900; font-size:13px}
+    .chartBox{
+      padding:12px;
+      border:1px solid var(--line);
+      border-radius:16px;
+      background: color-mix(in srgb, var(--card) 55%, transparent);
+      min-height: 140px;
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+      justify-content:center;
+      align-items:flex-start;
+    }
+    .bigBox{
+      width:100%;
+      border:1px solid var(--line);
+      border-radius:16px;
+      background: color-mix(in srgb, var(--card) 55%, transparent);
+      color:var(--text);
+      padding:12px;
+      min-height: 110px;
+      resize: vertical;
+      font-family: inherit;
+      font-size: 13px;
+      outline:none;
+    }
+    .modalActions{display:flex; gap:10px; flex-wrap:wrap; margin-top:10px}
+    .modalBtn{
+      border:1px solid var(--line);
+      background: color-mix(in srgb, var(--card) 60%, transparent);
+      color:var(--text);
+      padding:10px 12px;
+      border-radius:14px;
+      cursor:pointer;
+      font-weight:900;
+      text-decoration:none;
+      display:inline-flex; gap:8px; align-items:center;
+    }
+    .modalBtn.primary{border-color: color-mix(in srgb, var(--accent) 55%, transparent)}
+    .modalBtn.ok{border-color: color-mix(in srgb, var(--ok) 55%, transparent)}
+
+    /* Clickable rows (primary UX rule) */
+    tr[data-idx]{cursor:pointer}
+    tr[data-idx]:active{transform: translateY(0.5px)}
+
+    /* =========================
+       Modal (Details Popup)
+       ========================= */
+    .modalBack{
+      position:fixed; inset:0;
+      background: rgba(0,0,0,.55);
+      display:none;
+      align-items:flex-end;
+      justify-content:center;
+      padding:14px;
+      z-index:9999;
+    }
+    .modalBack.show{display:flex}
+    .modal{
+      width:min(980px, 100%);
+      max-height: 92vh;
+      overflow:auto;
+      border-radius: 22px;
+      border:1px solid var(--line);
+      background: linear-gradient(180deg, var(--card), var(--card2));
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      box-shadow: var(--shadow);
+      padding: 14px;
+      transform: translateY(14px);
+      animation: popIn .16s var(--ease) forwards;
+    }
+    @keyframes popIn{to{transform: translateY(0)}}
+    .mHead{display:flex; gap:10px; align-items:flex-start; justify-content:space-between}
+    .mTitle{display:flex; gap:10px; align-items:center; font-weight:1000}
+    .mTitle .pairTxt{font-size:16px}
+    .mTitle .sessTxt{color:var(--muted); font-size:12px; font-weight:800}
+    .mActions{display:flex; gap:10px; align-items:center; flex-wrap:wrap; justify-content:flex-end}
+    .xBtn{
+      border:1px solid var(--line);
+      background: color-mix(in srgb, var(--card) 65%, transparent);
+      color:var(--text);
+      padding:8px 10px;
+      border-radius: 14px;
+      cursor:pointer;
+      font-weight:900;
+    }
+    .xBtn:hover{background: color-mix(in srgb, var(--card) 82%, transparent)}
+    .mGrid{display:grid; gap:12px; margin-top:12px}
+    .mGrid.two{grid-template-columns: repeat(2,minmax(0,1fr))}
+    @media (max-width: 900px){
+      .modalBack{align-items:stretch}
+      .modal{max-height:100vh}
+      .mGrid.two{grid-template-columns: 1fr}
+    }
+    .mBox{padding:12px}
+    .mK{color:var(--muted); font-size:12px; font-weight:900; letter-spacing:.2px}
+    .mV{margin-top:6px; font-size:13px}
+    .mArea{
+      width:100%;
+      min-height: 110px;
+      resize: vertical;
+      border:1px solid color-mix(in srgb, var(--line) 85%, transparent);
+      background: color-mix(in srgb, var(--card) 55%, transparent);
+      color:var(--text);
+      border-radius: 16px;
+      padding: 10px 12px;
+      outline:none;
+      line-height:1.35;
+      font-family: inherit;
+      font-size: 13px;
+      white-space: pre-wrap;
+    }
+    .chartBox{
+      padding:12px;
+      min-height:140px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+    }
+    .chartHint{color:var(--muted); font-size:12px; line-height:1.35}
+    .miniLink{
+      text-decoration:none;
+      border:1px solid var(--line);
+      background: color-mix(in srgb, var(--card) 60%, transparent);
+      color:var(--text);
+      padding:8px 10px;
+      border-radius: 14px;
+      font-weight:900;
+      white-space:nowrap;
+    }
+    .miniLink:hover{background: color-mix(in srgb, var(--card) 82%, transparent)}
   </style>
 </head>
 
@@ -338,6 +624,10 @@
           <select class="select" id="themeSel">
             <option value="midnight">Midnight</option>
             <option value="slate">Slate</option>
+            <option value="ocean">Ocean Blue</option>
+            <option value="emerald">Emerald Green</option>
+            <option value="royal">Royal Purple</option>
+            <option value="ruby">Ruby Red</option>
             <option value="light">Light</option>
           </select>
         </div>
@@ -428,6 +718,73 @@
         </thead>
         <tbody id="allBody"></tbody>
       </table>
+    </div>
+  </div>
+
+  <!-- Details popup modal (row click) -->
+  <div class="modalOverlay" id="modalOverlay" role="dialog" aria-modal="true" aria-hidden="true">
+    <div class="modal glass" id="modalBox">
+      <div class="modalHead">
+        <div>
+          <div class="modalTitle" id="mTitle">
+            <span class="pairIcon" id="mIcon">📈</span>
+            <span id="mPair">—</span>
+          </div>
+          <div class="modalSub" id="mSub">—</div>
+        </div>
+        <button class="modalClose" id="mClose" title="Close">✖</button>
+      </div>
+
+      <div class="modalBody">
+        <div class="modalGrid">
+          <div class="modalRow">
+            <div class="kv glass">
+              <div class="k">Status</div>
+              <div class="v" id="mStatus">—</div>
+            </div>
+            <div class="kv glass">
+              <div class="k">Countdown</div>
+              <div class="v" id="mCountdown">—</div>
+            </div>
+          </div>
+
+          <div class="modalRow">
+            <div class="kv glass">
+              <div class="k">Chart TF</div>
+              <div class="v" id="mTF">—</div>
+            </div>
+            <div class="kv glass">
+              <div class="k">Windows</div>
+              <div class="v"><span id="mParisWin">—</span><br><span class="muted">IST:</span> <span id="mISTWin">—</span></div>
+            </div>
+          </div>
+
+          <div class="chartBox glass">
+            <div><b>Chart</b> (quick open)</div>
+            <div class="muted" id="mChartHint">Open a live chart for this pair in a new tab.</div>
+            <div class="modalActions" id="mChartActions"></div>
+          </div>
+
+          <div>
+            <div class="k">Tight Rules</div>
+            <textarea class="bigBox" id="mRules" placeholder="(rules / checklist)"></textarea>
+          </div>
+
+          <div>
+            <div class="k">Comments</div>
+            <textarea class="bigBox" id="mComments" placeholder="(comments)"></textarea>
+          </div>
+
+          <div>
+            <div class="k">Notes</div>
+            <textarea class="bigBox" id="mNotes" placeholder="(your notes for this pair)"></textarea>
+            <div class="modalActions">
+              <button class="modalBtn ok" id="mSaveNotes">💾 Save Notes</button>
+              <a class="modalBtn primary" id="mJournalBtn" target="_blank" rel="noopener" style="display:none">📓 Journal ↗</a>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -559,6 +916,13 @@
     return `<a class="journalLink" href="${url}" target="_blank" rel="noopener">Journal ↗</a>`;
   }
 
+  function escapeHtml(s){
+    return String(s ?? "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+  function oneLine(s){
+    return escapeHtml(String(s||"").replace(/\s+/g," ").trim());
+  }
+
   // =========================
   // Pair icons (emoji-based, zero external assets)
   // =========================
@@ -591,6 +955,16 @@
     return `<span class="pairIcon" title="Pair">📈</span>`;
   }
 
+  function pairEmoji(pair){
+    const core = extractCorePairLabel(pair);
+    if(core.startsWith("XAU")) return "🟡";
+    if(core.length >= 6){
+      const base = core.slice(0,3);
+      return CCY_EMOJI[base] || "📈";
+    }
+    return "📈";
+  }
+
   // =========================
   // Rendering
   // =========================
@@ -600,7 +974,8 @@
     const res = await fetch("./config.json?x=" + Date.now());
     const json = await res.json();
     if(!json.rows) json.rows = [];
-    json.rows = json.rows.map(r=>({
+    json.rows = json.rows.map((r,i)=>({
+      _idx: i,
       session: r.session ?? "",
       pair: r.pair ?? "",
       chartTF: r.chartTF ?? r.chartTimeFrame ?? "",
@@ -625,25 +1000,25 @@
     const icon = pairIconHTML(r.pair);
 
     return `
-      <tr class="${heat}">
+      <tr class="${heat}" data-idx="${r._idx}">
         <td>${r.session||""}</td>
         <td>
           <div class="pairRow">
             ${icon}
-            <span>${r.pair||""}</span>
+            <span class="pairName" data-open="1">${escapeHtml(r.pair||"")}</span>
             <span class="pairMeta">
               ${gold}
               ${j}
             </span>
           </div>
         </td>
-        <td>${r.chartTF||""}</td>
-        <td>${r.bestWindowParis||""}</td>
-        <td>${r.istWindow||""}</td>
+        <td>${escapeHtml(r.chartTF||"")}</td>
+        <td>${escapeHtml(r.bestWindowParis||"")}</td>
+        <td>${escapeHtml(r.istWindow||"")}</td>
         <td>${statusPill(cd.status)}</td>
-        <td>${countdownTxt}</td>
-        <td>${(r.tightRules||"").replace(/\n/g,"<br>")}</td>
-        <td>${(r.comments||"").replace(/\n/g,"<br>")}</td>
+        <td>${escapeHtml(countdownTxt)}</td>
+        <td>${oneLine(r.tightRules)}</td>
+        <td>${oneLine(r.comments)}</td>
       </tr>
     `;
   }
@@ -658,7 +1033,7 @@
     const icon = pairIconHTML(r.pair);
 
     return `
-      <div class="mCard glass ${heat}">
+      <div class="mCard glass ${heat}" data-idx="${r._idx}">
         <div class="mTop">
           <div>
             <div class="mPair">${icon}<span>${r.pair||""}</span>${gold}</div>
@@ -726,6 +1101,142 @@
   async function main(){
     CFG = await loadConfig();
     initTheme(CFG.defaultTheme);
+
+    // =========================
+    // Details popup (row click)
+    // =========================
+    const overlay = document.getElementById("modalOverlay");
+    const closeBtn = document.getElementById("mClose");
+    const NOTES_KEY = "tsd_notes_v1";
+    let activeIdx = null;
+
+    function readNotesMap(){
+      try{ return JSON.parse(localStorage.getItem(NOTES_KEY) || "{}"); }catch(e){ return {}; }
+    }
+    function writeNotesMap(map){
+      localStorage.setItem(NOTES_KEY, JSON.stringify(map));
+    }
+
+    function tvUrl(pair){
+      // Best-effort TradingView symbol mapping (keeps it simple; user can edit manually there)
+      const core = extractCorePairLabel(pair);
+      if(core.startsWith("XAU")) return "https://www.tradingview.com/symbols/XAUUSD/";
+      if(core.length >= 6) return `https://www.tradingview.com/symbols/${core}/`;
+      return "https://www.tradingview.com/";
+    }
+
+    function openDetails(idx){
+      const row = CFG.rows.find(r => r._idx === idx);
+      if(!row) return;
+
+      activeIdx = idx;
+      const wins = windowsFromText(row.bestWindowParis);
+      const cd = countdownForRow(wins);
+      const countdownTxt = `${cd.mode} in ${msToHHMMSS(cd.ms)}`;
+
+      // Title + icon + session
+      document.getElementById("mIcon").textContent = pairEmoji(row.pair);
+      document.getElementById("mPair").textContent = row.pair || "—";
+      document.getElementById("mSub").textContent = `${row.session || ""}${row.golden ? " • GOLD 🔥" : ""}`.trim() || "—";
+
+      // Status + countdown
+      document.getElementById("mStatus").textContent = cd.status;
+      document.getElementById("mCountdown").textContent = countdownTxt;
+
+      // TF + windows
+      document.getElementById("mTF").textContent = row.chartTF || "—";
+      document.getElementById("mParisWin").textContent = row.bestWindowParis || "—";
+      document.getElementById("mISTWin").textContent = row.istWindow || "—";
+
+      // Big fields
+      const rulesEl = document.getElementById("mRules");
+      const comEl = document.getElementById("mComments");
+      rulesEl.value = row.tightRules || "";
+      comEl.value = row.comments || "";
+      rulesEl.readOnly = true;
+      comEl.readOnly = true;
+
+      // Chart actions (external open; we don't load widgets)
+      const chartActions = document.getElementById("mChartActions");
+      chartActions.innerHTML = "";
+      const a = document.createElement("a");
+      a.className = "modalBtn primary";
+      a.target = "_blank";
+      a.rel = "noopener";
+      a.href = tvUrl(row.pair);
+      a.textContent = "📈 Open TradingView";
+      chartActions.appendChild(a);
+
+      const jBtn = document.getElementById("mJournalBtn");
+      if(row.journal){
+        jBtn.href = row.journal;
+        jBtn.style.display = "inline-flex";
+      }else{
+        jBtn.style.display = "none";
+      }
+
+      // Notes (local only)
+      const notesMap = readNotesMap();
+      document.getElementById("mNotes").value = notesMap[row.pair] || "";
+
+      overlay.setAttribute("data-open","1");
+      overlay.setAttribute("aria-hidden","false");
+    }
+
+    function closeDetails(){
+      overlay.removeAttribute("data-open");
+      overlay.setAttribute("aria-hidden","true");
+      activeIdx = null;
+    }
+
+    closeBtn.addEventListener("click", closeDetails);
+    overlay.addEventListener("click", (e)=>{
+      if(e.target === overlay) closeDetails();
+    });
+    window.addEventListener("keydown", (e)=>{
+      if(e.key === "Escape") closeDetails();
+    });
+
+    document.getElementById("mSaveNotes").addEventListener("click", ()=>{
+      if(activeIdx === null) return;
+      const row = CFG.rows.find(r=>r._idx === activeIdx);
+      if(!row) return;
+      const map = readNotesMap();
+      map[row.pair] = document.getElementById("mNotes").value;
+      writeNotesMap(map);
+    });
+
+    // Event delegation: table rows
+    function bindRowClicks(containerId){
+      const el = document.getElementById(containerId);
+      if(!el) return;
+      el.addEventListener("click", (e)=>{
+        const a = e.target.closest("a");
+        if(a) return; // allow Journal ↗ links
+        const tr = e.target.closest("tr[data-idx]");
+        if(!tr) return;
+        const idx = Number(tr.getAttribute("data-idx"));
+        openDetails(idx);
+      });
+    }
+    bindRowClicks("liveBody");
+    bindRowClicks("allBody");
+
+    // Event delegation: mobile cards
+    function bindMobileClicks(containerId){
+      const el = document.getElementById(containerId);
+      if(!el) return;
+      el.addEventListener("click", (e)=>{
+        const a = e.target.closest("a");
+        if(a) return;
+        const card = e.target.closest("[data-idx]");
+        if(!card) return;
+        const idx = Number(card.getAttribute("data-idx"));
+        openDetails(idx);
+      });
+    }
+    bindMobileClicks("liveMobile");
+    bindMobileClicks("allMobile");
 
     // theme change
     document.getElementById("themeSel").addEventListener("change", (e)=> applyTheme(e.target.value));

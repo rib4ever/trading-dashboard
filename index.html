@@ -4,210 +4,327 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Trading Sessions Dashboard</title>
+
   <style>
+    /* =========================
+       THEME SYSTEM
+       - Theme is applied on <html data-theme="...">
+       - Add more themes by extending [data-theme="..."]
+       ========================= */
     :root{
-      --bg:#0b0f17;
-      --card:#111827;
-      --card2:#0f172a;
-      --text:#e5e7eb;
-      --muted:#9ca3af;
-      --line:rgba(255,255,255,.10);
-      --shadow:0 18px 50px rgba(0,0,0,.35);
-      --radius:16px;
+      --radius: 18px;
+      --radius-sm: 14px;
+      --shadow: 0 18px 55px rgba(0,0,0,.35);
 
-      --live:#22c55e;
-      --up:#f59e0b;
-      --soon:#60a5fa;
+      /* layout */
+      --maxw: 1200px;
+      --gap: 12px;
 
-      --asia: rgba(96,165,250,.14);
-      --london: rgba(34,197,94,.12);
-      --overlap: rgba(245,158,11,.14);
-      --ny: rgba(168,85,247,.14);
-
-      --gold: rgba(245,158,11,.18);
+      /* motion */
+      --ease: cubic-bezier(.2,.8,.2,1);
     }
 
+    /* Default theme: midnight */
+    html[data-theme="midnight"]{
+      --bg0:#070a11;
+      --bg1:#0b1220;
+      --card: rgba(255,255,255,.055);
+      --card2: rgba(255,255,255,.035);
+      --line: rgba(255,255,255,.10);
+
+      --text:#e5e7eb;
+      --muted:#9ca3af;
+
+      --accent:#60a5fa;
+      --ok:#22c55e;
+      --warn:#f59e0b;
+      --soon:#a78bfa;
+
+      --asia: rgba(96,165,250,.16);
+      --london: rgba(34,197,94,.14);
+      --overlap: rgba(245,158,11,.16);
+      --ny: rgba(167,139,250,.16);
+
+      --gold: rgba(245,158,11,.16);
+      --goldText: #ffd28a;
+    }
+
+    html[data-theme="slate"]{
+      --bg0:#0b1020;
+      --bg1:#0e1629;
+      --card: rgba(255,255,255,.06);
+      --card2: rgba(255,255,255,.04);
+      --line: rgba(255,255,255,.12);
+
+      --text:#eef2ff;
+      --muted:#aab2c5;
+
+      --accent:#38bdf8;
+      --ok:#34d399;
+      --warn:#fbbf24;
+      --soon:#c4b5fd;
+
+      --asia: rgba(56,189,248,.16);
+      --london: rgba(52,211,153,.14);
+      --overlap: rgba(251,191,36,.16);
+      --ny: rgba(196,181,253,.16);
+
+      --gold: rgba(251,191,36,.16);
+      --goldText: #ffe3a8;
+    }
+
+    html[data-theme="light"]{
+      --bg0:#f7f7fb;
+      --bg1:#ffffff;
+      --card: rgba(17,24,39,.06);
+      --card2: rgba(17,24,39,.04);
+      --line: rgba(17,24,39,.12);
+
+      --text:#0b1220;
+      --muted:#374151;
+
+      --accent:#2563eb;
+      --ok:#16a34a;
+      --warn:#d97706;
+      --soon:#7c3aed;
+
+      --asia: rgba(37,99,235,.10);
+      --london: rgba(22,163,74,.10);
+      --overlap: rgba(217,119,6,.10);
+      --ny: rgba(124,58,237,.10);
+
+      --gold: rgba(217,119,6,.10);
+      --goldText: #7a3b00;
+      --shadow: 0 18px 55px rgba(0,0,0,.12);
+    }
+
+    /* =========================
+       BASE
+       ========================= */
     *{box-sizing:border-box}
     body{
       margin:0;
       font-family: system-ui,-apple-system,Segoe UI,Roboto,Arial;
-      background:
-        radial-gradient(1200px 800px at 20% 0%, rgba(96,165,250,.10), transparent 60%),
-        radial-gradient(900px 700px at 90% 20%, rgba(245,158,11,.10), transparent 60%),
-        radial-gradient(900px 700px at 50% 100%, rgba(34,197,94,.08), transparent 60%),
-        var(--bg);
       color:var(--text);
+      background:
+        radial-gradient(1200px 800px at 16% -10%, color-mix(in srgb, var(--accent) 20%, transparent), transparent 60%),
+        radial-gradient(950px 700px at 90% 10%, color-mix(in srgb, var(--warn) 18%, transparent), transparent 60%),
+        radial-gradient(900px 650px at 50% 110%, color-mix(in srgb, var(--ok) 12%, transparent), transparent 60%),
+        linear-gradient(180deg, var(--bg0), var(--bg1));
+      min-height:100vh;
     }
 
-    .wrap{max-width:1200px;margin:0 auto;padding:18px 14px 34px}
+    .wrap{max-width:var(--maxw);margin:0 auto;padding:16px 12px 34px}
     .topbar{display:flex;gap:12px;align-items:flex-end;justify-content:space-between;flex-wrap:wrap}
     h1{margin:0;font-size:22px;letter-spacing:.2px}
-    .subtitle{color:var(--muted);font-size:12px;margin-top:6px}
+    .subtitle{color:var(--muted);font-size:12px;margin-top:6px;line-height:1.25}
+
+    /* Glass utility */
+    .glass{
+      border:1px solid var(--line);
+      background: linear-gradient(180deg, var(--card), var(--card2));
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      box-shadow: var(--shadow);
+      border-radius: var(--radius);
+    }
 
     .btn{
       border:1px solid var(--line);
-      background:rgba(255,255,255,.04);
+      background: color-mix(in srgb, var(--card) 60%, transparent);
       color:var(--text);
-      padding:10px 12px;border-radius:12px;
+      padding:10px 12px;border-radius:14px;
       cursor:pointer;
-      transition: transform .12s ease, background .12s ease;
+      transition: transform .12s var(--ease), background .12s var(--ease), border-color .12s var(--ease);
       text-decoration:none;
       display:inline-flex;gap:8px;align-items:center;
     }
-    .btn:hover{background:rgba(255,255,255,.06); transform: translateY(-1px);}
+    .btn:hover{background: color-mix(in srgb, var(--card) 80%, transparent); transform: translateY(-1px);}
     .btn:active{transform: translateY(0px);}
 
-    .grid{display:grid;gap:12px;margin-top:14px}
+    .ctrls{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    .select{
+      appearance:none;
+      border:1px solid var(--line);
+      background: color-mix(in srgb, var(--card) 60%, transparent);
+      color:var(--text);
+      padding:10px 36px 10px 12px;
+      border-radius:14px;
+      outline:none;
+      cursor:pointer;
+    }
+    .selectWrap{position:relative}
+    .selectWrap:after{
+      content:"▾";
+      position:absolute;right:12px;top:50%;
+      transform:translateY(-50%);
+      color:var(--muted);pointer-events:none;
+      font-size:12px;
+    }
+
+    .grid{display:grid;gap:var(--gap);margin-top:14px}
     .cards{grid-template-columns:repeat(3,minmax(0,1fr))}
     @media (max-width: 980px){ .cards{grid-template-columns:1fr} }
 
-    .card{
-      border:1px solid var(--line);
-      background:linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02));
-      border-radius:var(--radius);
-      box-shadow:var(--shadow);
-      padding:14px;
-      overflow:hidden;
-      position:relative;
+    .card{padding:14px;position:relative;overflow:hidden}
+    .card:before{
+      content:"";
+      position:absolute;inset:-2px;
+      background: radial-gradient(500px 180px at 10% 0%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 60%);
+      opacity:.6;
+      pointer-events:none;
     }
     .clockLabel{font-size:12px;color:var(--muted)}
-    .clockTime{font-size:28px;font-weight:800;letter-spacing:.5px;margin-top:4px}
+    .clockTime{font-size:30px;font-weight:900;letter-spacing:.5px;margin-top:4px}
     .clockMeta{margin-top:6px;font-size:12px;color:var(--muted)}
 
-    .pill{
-      display:inline-flex;align-items:center;gap:8px;
+    .searchRow{display:flex;gap:10px;align-items:center;margin-top:12px;flex-wrap:wrap}
+    .search{
+      flex:1;min-width:220px;
       border:1px solid var(--line);
-      border-radius:999px;
-      padding:6px 10px;
-      font-size:12px;
-      background:rgba(255,255,255,.03);
+      background: color-mix(in srgb, var(--card) 55%, transparent);
+      color:var(--text);
+      padding:10px 12px;border-radius:14px;
+      outline:none;
     }
-    .dot{width:8px;height:8px;border-radius:999px;background:var(--muted);box-shadow:0 0 0 3px rgba(255,255,255,.02)}
-    .dot.live{background:var(--live)}
-    .dot.up{background:var(--up)}
-    .dot.soon{background:var(--soon)}
+    .toggle{
+      display:flex;gap:8px;align-items:center;
+      border:1px solid var(--line);
+      border-radius:14px;
+      padding:8px 10px;
+      background: color-mix(in srgb, var(--card) 55%, transparent);
+      color:var(--muted);
+      font-size:12px;
+      user-select:none;
+    }
+    .toggle input{accent-color:var(--accent)}
 
     .panelTitle{display:flex;align-items:center;justify-content:space-between;margin-top:16px;margin-bottom:8px}
-    .panelTitle h2{margin:0;font-size:14px;color:var(--muted);font-weight:700;letter-spacing:.2px}
+    .panelTitle h2{margin:0;font-size:13px;color:var(--muted);font-weight:800;letter-spacing:.24px}
     .panelTitle .mini{font-size:12px;color:var(--muted)}
 
-    /* Desktop table */
-    .tableWrap{
-      border:1px solid var(--line);
-      background:rgba(255,255,255,.02);
-      border-radius:var(--radius);
-      overflow:hidden;
-    }
+    /* Tables */
+    .tableWrap{overflow:hidden}
     table{width:100%;border-collapse:collapse}
     thead th{
       text-align:left;
       font-size:12px;
-      padding:12px 12px;
+      padding:12px;
       color:var(--muted);
-      background:rgba(255,255,255,.03);
+      background: color-mix(in srgb, var(--card) 65%, transparent);
       border-bottom:1px solid var(--line);
       position:sticky; top:0;
-      backdrop-filter: blur(8px);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      white-space:nowrap;
     }
     tbody td{
-      padding:12px 12px;
-      border-bottom:1px solid rgba(255,255,255,.06);
+      padding:12px;
+      border-bottom:1px solid color-mix(in srgb, var(--line) 60%, transparent);
       vertical-align:top;
       font-size:13px;
+      line-height:1.25;
     }
-    tbody tr{
-      transition: background .15s ease, transform .12s ease;
-    }
-    tbody tr:hover{background:rgba(255,255,255,.03)}
+    tbody tr{transition: background .15s var(--ease)}
+    tbody tr:hover{background: color-mix(in srgb, var(--card) 40%, transparent)}
     tbody tr:last-child td{border-bottom:none}
 
-    .pair{
-      display:flex;gap:8px;align-items:center;font-weight:800;
+    /* Pair cell */
+    .pairRow{
+      display:flex;align-items:center;gap:10px;
+      font-weight:900;
+    }
+    .pairMeta{display:flex;align-items:center;gap:8px;margin-left:auto}
+    .pairIcon{
+      width:26px;height:26px;border-radius:999px;
+      display:inline-flex;align-items:center;justify-content:center;
+      border:1px solid var(--line);
+      background: color-mix(in srgb, var(--card) 70%, transparent);
+      font-size:14px;
+      flex:0 0 26px;
+      box-shadow: 0 10px 26px rgba(0,0,0,.15);
     }
     .goldBadge{
+      display:inline-flex;align-items:center;gap:8px;
       font-size:11px;
-      padding:3px 8px;border-radius:999px;
-      border:1px solid rgba(245,158,11,.35);
-      background:rgba(245,158,11,.10);
-      color:#ffd28a;
+      padding:4px 10px;border-radius:999px;
+      border:1px solid color-mix(in srgb, var(--warn) 45%, transparent);
+      background: color-mix(in srgb, var(--warn) 14%, transparent);
+      color: var(--goldText);
+      font-weight:900;
+      position:relative;
+      overflow:hidden;
+    }
+    .goldBadge .flame{
+      display:inline-block;
+      transform-origin:50% 100%;
+      animation: flameFloat 1.15s var(--ease) infinite;
+      filter: drop-shadow(0 0 10px color-mix(in srgb, var(--warn) 60%, transparent));
+    }
+    @keyframes flameFloat{
+      0%{ transform: translateY(0) rotate(-6deg) scale(.95); opacity:.95 }
+      50%{ transform: translateY(-2px) rotate(6deg) scale(1.05); opacity:1 }
+      100%{ transform: translateY(0) rotate(-6deg) scale(.95); opacity:.95 }
+    }
+    /* Subtle glow on golden rows */
+    .heat-goldGlow{
+      box-shadow:
+        inset 0 0 0 9999px var(--gold),
+        inset 0 0 0 1px color-mix(in srgb, var(--warn) 25%, transparent);
     }
 
     .journalLink{
-      margin-left:auto;
       font-size:12px;
       color:var(--muted);
       text-decoration:none;
       border:1px solid var(--line);
-      padding:4px 8px;border-radius:10px;
-      background:rgba(255,255,255,.02);
-      transition: background .12s ease;
+      padding:5px 9px;border-radius:12px;
+      background: color-mix(in srgb, var(--card) 55%, transparent);
+      transition: background .12s var(--ease);
       white-space:nowrap;
     }
-    .journalLink:hover{background:rgba(255,255,255,.05)}
+    .journalLink:hover{background: color-mix(in srgb, var(--card) 80%, transparent);}
 
+    /* Status */
     .statusPill{
       display:inline-flex;align-items:center;gap:8px;
       border:1px solid var(--line);
       border-radius:999px;
-      padding:6px 10px;
+      padding:7px 11px;
       font-size:12px;
-      font-weight:800;
+      font-weight:900;
+      letter-spacing:.2px;
     }
-    .status-live{border-color:rgba(34,197,94,.35); background:rgba(34,197,94,.10)}
-    .status-up{border-color:rgba(245,158,11,.35); background:rgba(245,158,11,.10)}
-    .status-soon{border-color:rgba(96,165,250,.35); background:rgba(96,165,250,.10)}
+    .dot{width:8px;height:8px;border-radius:999px;background:var(--muted);box-shadow:0 0 0 3px rgba(255,255,255,.02)}
+    .dot.live{background:var(--ok)}
+    .dot.up{background:var(--warn)}
+    .status-live{border-color:color-mix(in srgb, var(--ok) 50%, transparent); background: color-mix(in srgb, var(--ok) 12%, transparent)}
+    .status-up{border-color:color-mix(in srgb, var(--warn) 50%, transparent); background: color-mix(in srgb, var(--warn) 12%, transparent)}
 
-    .heat-asia{background:linear-gradient(90deg,var(--asia), transparent 60%)}
-    .heat-london{background:linear-gradient(90deg,var(--london), transparent 60%)}
-    .heat-overlap{background:linear-gradient(90deg,var(--overlap), transparent 60%)}
-    .heat-ny{background:linear-gradient(90deg,var(--ny), transparent 60%)}
-    .heat-gold{box-shadow: inset 0 0 0 9999px var(--gold)}
+    /* Session heat */
+    .heat-asia{background:linear-gradient(90deg,var(--asia), transparent 58%)}
+    .heat-london{background:linear-gradient(90deg,var(--london), transparent 58%)}
+    .heat-overlap{background:linear-gradient(90deg,var(--overlap), transparent 58%)}
+    .heat-ny{background:linear-gradient(90deg,var(--ny), transparent 58%)}
 
-    /* Mobile cards (hide table) */
+    /* Mobile cards */
     .mobileList{display:none}
     @media (max-width: 900px){
-      .tableWrap{display:none}
+      .desktopOnly{display:none}
       .mobileList{display:grid;gap:10px}
-      .mCard{
-        border:1px solid var(--line);
-        border-radius:var(--radius);
-        background:rgba(255,255,255,.02);
-        padding:12px;
-      }
+      .mCard{padding:12px}
       .mTop{display:flex;gap:10px;align-items:flex-start;justify-content:space-between}
-      .mPair{font-weight:900}
+      .mPair{font-weight:1000;display:flex;gap:10px;align-items:center}
       .mMeta{color:var(--muted);font-size:12px;margin-top:3px}
       .mRow{display:flex;gap:10px;margin-top:10px}
       .mK{width:120px;flex:0 0 120px;color:var(--muted);font-size:12px}
       .mV{font-size:12px}
     }
 
-    .searchRow{display:flex;gap:10px;align-items:center;margin-top:12px;flex-wrap:wrap}
-    .search{
-      flex:1;
-      min-width:220px;
-      border:1px solid var(--line);
-      background:rgba(255,255,255,.03);
-      color:var(--text);
-      padding:10px 12px;
-      border-radius:12px;
-      outline:none;
-    }
-    .toggle{
-      display:flex;gap:8px;align-items:center;
-      border:1px solid var(--line);
-      border-radius:12px;
-      padding:8px 10px;
-      background:rgba(255,255,255,.03);
-      color:var(--muted);
-      font-size:12px;
-    }
-    .toggle input{accent-color:#60a5fa}
-
     .muted{color:var(--muted)}
-    .right{display:flex;gap:10px;align-items:center}
   </style>
 </head>
+
 <body>
   <div class="wrap">
     <div class="topbar">
@@ -215,7 +332,16 @@
         <h1>Trading Sessions Dashboard</h1>
         <div class="subtitle">Live clocks • live windows • countdowns (Paris-based) • mobile-first</div>
       </div>
-      <div class="right">
+
+      <div class="ctrls">
+        <div class="selectWrap" title="Theme">
+          <select class="select" id="themeSel">
+            <option value="midnight">Midnight</option>
+            <option value="slate">Slate</option>
+            <option value="light">Light</option>
+          </select>
+        </div>
+
         <a class="btn" href="./editor.html" title="Edit config">
           ✏️ <span>Open Editor</span>
         </a>
@@ -223,19 +349,19 @@
     </div>
 
     <div class="grid cards">
-      <div class="card" id="cardParis">
+      <div class="card glass" id="cardParis">
         <div class="clockLabel">Paris Time</div>
         <div class="clockTime" id="tParis">--:--:--</div>
         <div class="clockMeta" id="dParis">--</div>
       </div>
 
-      <div class="card" id="cardNY">
+      <div class="card glass" id="cardNY">
         <div class="clockLabel">New York Time</div>
         <div class="clockTime" id="tNY">--:--:--</div>
         <div class="clockMeta" id="dNY">--</div>
       </div>
 
-      <div class="card" id="cardIST">
+      <div class="card glass" id="cardIST">
         <div class="clockLabel">IST Time</div>
         <div class="clockTime" id="tIST">--:--:--</div>
         <div class="clockMeta" id="dIST">--</div>
@@ -260,12 +386,12 @@
     </div>
 
     <div class="mobileList" id="liveMobile"></div>
-    <div class="tableWrap">
+    <div class="tableWrap glass desktopOnly">
       <table>
         <thead>
           <tr>
             <th style="width:170px">Session</th>
-            <th style="width:250px">Pair</th>
+            <th style="width:320px">Pair</th>
             <th style="width:130px">Chart TF</th>
             <th style="width:190px">Best Window (Paris)</th>
             <th style="width:190px">IST Window</th>
@@ -285,12 +411,12 @@
     </div>
 
     <div class="mobileList" id="allMobile"></div>
-    <div class="tableWrap">
+    <div class="tableWrap glass desktopOnly">
       <table>
         <thead>
           <tr>
             <th style="width:170px">Session</th>
-            <th style="width:250px">Pair</th>
+            <th style="width:320px">Pair</th>
             <th style="width:130px">Chart TF</th>
             <th style="width:190px">Best Window (Paris)</th>
             <th style="width:190px">IST Window</th>
@@ -306,6 +432,25 @@
   </div>
 
 <script>
+  // =========================
+  // Theme selection
+  // =========================
+  const THEME_KEY = "tsd_theme_v1";
+  function applyTheme(theme){
+    document.documentElement.setAttribute("data-theme", theme);
+    localStorage.setItem(THEME_KEY, theme);
+  }
+  function initTheme(defaultTheme){
+    const saved = localStorage.getItem(THEME_KEY);
+    const theme = saved || defaultTheme || "midnight";
+    applyTheme(theme);
+    const sel = document.getElementById("themeSel");
+    if(sel) sel.value = theme;
+  }
+
+  // =========================
+  // Time / windows logic
+  // =========================
   const TZ_PARIS = "Europe/Paris";
   const TZ_NY = "America/New_York";
   const TZ_IST = "Asia/Kolkata";
@@ -320,14 +465,12 @@
   const dParisF = fmtDate(TZ_PARIS), dNYF = fmtDate(TZ_NY), dISTF = fmtDate(TZ_IST);
 
   function parseHHMM(s){
-    // supports "00H30", "00:30", "00H30 " etc.
-    const t = s.trim().toUpperCase().replace(":", "H");
+    const t = String(s||"").trim().toUpperCase().replace(":", "H");
     const [hh, mm] = t.split("H");
     return { h: Number(hh), m: Number(mm) };
   }
 
   function windowsFromText(text){
-    // "01H00 - 05H00 / 14H00 - 18H00"
     return String(text||"")
       .split("/")
       .map(x => x.trim())
@@ -335,35 +478,32 @@
       .map(seg=>{
         const [a,b] = seg.split("-").map(x=>x.trim());
         if(!a || !b) return null;
-        const s = parseHHMM(a);
-        const e = parseHHMM(b);
-        return { s, e, label: `${a} - ${b}` };
+        return { s: parseHHMM(a), e: parseHHMM(b), label: `${a} - ${b}` };
       })
       .filter(Boolean);
   }
 
   function nowInTZ(tz){
-    // get "now" parts in tz by formatting and re-parsing (safe enough for daily windows)
     const parts = new Intl.DateTimeFormat("en-GB", {
       timeZone: tz, year:"numeric", month:"2-digit", day:"2-digit",
       hour:"2-digit", minute:"2-digit", second:"2-digit", hour12:false
     }).formatToParts(new Date()).reduce((acc,p)=> (acc[p.type]=p.value, acc), {});
-    const y = Number(parts.year), mo = Number(parts.month), d = Number(parts.day);
-    const h = Number(parts.hour), mi = Number(parts.minute), se = Number(parts.second);
-    return { y, mo, d, h, mi, se };
+    return {
+      y: Number(parts.year),
+      mo: Number(parts.month),
+      d: Number(parts.day),
+      h: Number(parts.hour),
+      mi: Number(parts.minute),
+      se: Number(parts.second)
+    };
   }
 
   function msUntilInParis(targetHM){
-    // milliseconds until today's (or tomorrow's) target time in Paris tz
     const n = nowInTZ(TZ_PARIS);
-    const now = Date.now();
-    const target = new Date(`${n.y}-${String(n.mo).padStart(2,"0")}-${String(n.d).padStart(2,"0")}T00:00:00`);
-    // target is local time; we just need relative comparisons, so we compute using minutes in tz via parts:
-    // We'll compute diff purely by hm minutes in paris day:
     const nowMin = n.h*60 + n.mi + n.se/60;
     const tMin = targetHM.h*60 + targetHM.m;
     let deltaMin = tMin - nowMin;
-    if(deltaMin < 0) deltaMin += 24*60; // tomorrow
+    if(deltaMin < 0) deltaMin += 24*60;
     return Math.max(0, deltaMin*60*1000);
   }
 
@@ -372,24 +512,15 @@
     const nowMin = n.h*60 + n.mi + n.se/60;
     const sMin = win.s.h*60 + win.s.m;
     const eMin = win.e.h*60 + win.e.m;
-    // handle wrap-around windows (rare)
     if(eMin >= sMin) return nowMin >= sMin && nowMin <= eMin;
     return (nowMin >= sMin) || (nowMin <= eMin);
   }
 
   function countdownForRow(wins){
-    // wins = [{s,e,label}, ...] in Paris time
-    // status:
-    // LIVE if within any window
-    // otherwise UPCOMING (starts in)
-    // countdown = ends in / starts in for nearest relevant
     const live = wins.find(withinWindowParis);
     if(live){
-      // ends in
-      const ms = msUntilInParis(live.e);
-      return { status:"LIVE", ms, mode:"ends" };
+      return { status:"LIVE", ms: msUntilInParis(live.e), mode:"ends" };
     }
-    // next start (choose minimum ms until start)
     let best = null;
     for(const w of wins){
       const ms = msUntilInParis(w.s);
@@ -414,7 +545,7 @@
     else if(s.includes("london") && s.includes("overlap")) c = "heat-overlap";
     else if(s.includes("london")) c = "heat-london";
     else if(s.includes("new york")) c = "heat-ny";
-    if(golden) c += " heat-gold";
+    if(golden) c += " heat-goldGlow";
     return c.trim();
   }
 
@@ -428,26 +559,82 @@
     return `<a class="journalLink" href="${url}" target="_blank" rel="noopener">Journal ↗</a>`;
   }
 
-  function rowHTML(r, liveOnly=false){
+  // =========================
+  // Pair icons (emoji-based, zero external assets)
+  // =========================
+  const CCY_EMOJI = {
+    USD:"🇺🇸", EUR:"🇪🇺", GBP:"🇬🇧", JPY:"🇯🇵", AUD:"🇦🇺", NZD:"🇳🇿",
+    CAD:"🇨🇦", CHF:"🇨🇭", SEK:"🇸🇪", NOK:"🇳🇴", DKK:"🇩🇰",
+    XAU:"🟡", XAG:"🥈", BTC:"₿", ETH:"◇"
+  };
+
+  function extractCorePairLabel(raw){
+    const s = String(raw||"").trim();
+    // take first token before spaces
+    const token = s.split(" ")[0];
+    // strip common suffixes/prefixes (keep letters/numbers)
+    return token.replace(/[^A-Za-z0-9]/g,"").toUpperCase();
+  }
+
+  function pairIconHTML(pair){
+    const core = extractCorePairLabel(pair);
+    if(core.startsWith("XAU")) return `<span class="pairIcon" title="Gold">🟡</span>`;
+    if(core.length >= 6){
+      const base = core.slice(0,3);
+      const quote = core.slice(3,6);
+      const b = CCY_EMOJI[base] || base;
+      const q = CCY_EMOJI[quote] || quote;
+      // show base flag; tooltip includes pair
+      return `<span class="pairIcon" title="${base}/${quote}">${b}</span>`;
+    }
+    // fallback
+    return `<span class="pairIcon" title="Pair">📈</span>`;
+  }
+
+  // =========================
+  // Rendering
+  // =========================
+  let CFG = { schemaVersion: 2, defaultTheme: "midnight", rows: [] };
+
+  async function loadConfig(){
+    const res = await fetch("./config.json?x=" + Date.now());
+    const json = await res.json();
+    if(!json.rows) json.rows = [];
+    json.rows = json.rows.map(r=>({
+      session: r.session ?? "",
+      pair: r.pair ?? "",
+      chartTF: r.chartTF ?? r.chartTimeFrame ?? "",
+      bestWindowParis: r.bestWindowParis ?? r.bestCTE ?? "",
+      istWindow: r.istWindow ?? "",
+      golden: !!r.golden,
+      tightRules: r.tightRules ?? "",
+      comments: r.comments ?? "",
+      journal: r.journal ?? ""
+    }));
+    return json;
+  }
+
+  function rowHTML(r){
     const wins = windowsFromText(r.bestWindowParis);
     const cd = countdownForRow(wins);
     const countdownTxt = `${cd.mode} in ${msToHHMMSS(cd.ms)}`;
 
-    const isLive = cd.status === "LIVE";
-    if(liveOnly && !isLive) return "";
-
     const heat = heatClass(r.session, !!r.golden);
-    const gold = r.golden ? `<span class="goldBadge">GOLD</span>` : "";
+    const gold = r.golden ? `<span class="goldBadge"><span class="flame">🔥</span> GOLD</span>` : "";
     const j = journalAnchor(r.journal);
+    const icon = pairIconHTML(r.pair);
 
     return `
       <tr class="${heat}">
         <td>${r.session||""}</td>
         <td>
-          <div class="pair">
+          <div class="pairRow">
+            ${icon}
             <span>${r.pair||""}</span>
-            ${gold}
-            ${j}
+            <span class="pairMeta">
+              ${gold}
+              ${j}
+            </span>
           </div>
         </td>
         <td>${r.chartTF||""}</td>
@@ -465,15 +652,16 @@
     const wins = windowsFromText(r.bestWindowParis);
     const cd = countdownForRow(wins);
     const heat = heatClass(r.session, !!r.golden);
-    const gold = r.golden ? ` <span class="goldBadge">GOLD</span>` : "";
+    const gold = r.golden ? ` <span class="goldBadge"><span class="flame">🔥</span> GOLD</span>` : "";
     const j = r.journal ? `<a class="journalLink" href="${r.journal}" target="_blank" rel="noopener">Journal ↗</a>` : "";
     const countdownTxt = `${cd.mode} in ${msToHHMMSS(cd.ms)}`;
+    const icon = pairIconHTML(r.pair);
 
     return `
-      <div class="mCard ${heat}">
+      <div class="mCard glass ${heat}">
         <div class="mTop">
           <div>
-            <div class="mPair">${r.pair||""}${gold}</div>
+            <div class="mPair">${icon}<span>${r.pair||""}</span>${gold}</div>
             <div class="mMeta">${r.session||""} • ${r.chartTF||""}</div>
           </div>
           <div>${j}</div>
@@ -487,27 +675,6 @@
         ${r.comments ? `<div class="mRow"><div class="mK">Notes</div><div class="mV">${String(r.comments).replace(/\n/g,"<br>")}</div></div>` : ``}
       </div>
     `;
-  }
-
-  let CFG = { rows: [] };
-
-  async function loadConfig(){
-    const res = await fetch("./config.json?x=" + Date.now());
-    const json = await res.json();
-    if(!json.rows) json.rows = [];
-    // normalize fields
-    json.rows = json.rows.map(r=>({
-      session: r.session ?? "",
-      pair: r.pair ?? "",
-      chartTF: r.chartTF ?? r.chartTimeFrame ?? "",
-      bestWindowParis: r.bestWindowParis ?? r.bestCTE ?? "",
-      istWindow: r.istWindow ?? "",
-      golden: !!r.golden,
-      tightRules: r.tightRules ?? "",
-      comments: r.comments ?? "",
-      journal: r.journal ?? ""
-    }));
-    return json;
   }
 
   function render(){
@@ -531,16 +698,15 @@
     const liveRows = rows.filter(r => countdownForRow(windowsFromText(r.bestWindowParis)).status === "LIVE");
     document.getElementById("liveMeta").textContent = `${liveRows.length} live pair(s)`;
 
-    // LIVE table
-    document.getElementById("liveBody").innerHTML = liveRows.map(r => rowHTML(r, true)).join("") || `
+    // LIVE
+    document.getElementById("liveBody").innerHTML = liveRows.map(rowHTML).join("") || `
       <tr><td colspan="9" class="muted">No LIVE pairs right now.</td></tr>
     `;
     document.getElementById("liveMobile").innerHTML = liveRows.map(mobileCardHTML).join("") || `<div class="muted">No LIVE pairs right now.</div>`;
 
-    // ALL table (optionally live only)
+    // ALL (optionally live only)
     const finalRows = onlyLive ? liveRows : rows;
-
-    document.getElementById("allBody").innerHTML = finalRows.map(r => rowHTML(r)).join("") || `
+    document.getElementById("allBody").innerHTML = finalRows.map(rowHTML).join("") || `
       <tr><td colspan="9" class="muted">No rows match your filters.</td></tr>
     `;
     document.getElementById("allMobile").innerHTML = finalRows.map(mobileCardHTML).join("") || `<div class="muted">No rows match your filters.</div>`;
@@ -559,6 +725,11 @@
 
   async function main(){
     CFG = await loadConfig();
+    initTheme(CFG.defaultTheme);
+
+    // theme change
+    document.getElementById("themeSel").addEventListener("change", (e)=> applyTheme(e.target.value));
+
     tickClocks();
     render();
     setInterval(()=>{ tickClocks(); render(); }, 1000);

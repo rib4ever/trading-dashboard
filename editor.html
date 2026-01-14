@@ -6,484 +6,369 @@
   <title>Dashboard Editor</title>
   <style>
     :root{
-      --radius: 18px;
-      --shadow: 0 18px 55px rgba(0,0,0,.35);
-      --line: rgba(255,255,255,.10);
-      --maxw: 1280px;
-      --gap: 12px;
+      --bg:#0b0f17;
+      --card:#111827;
+      --text:#e5e7eb;
+      --muted:#9ca3af;
+      --line:rgba(255,255,255,.10);
+      --radius:16px;
+      --shadow:0 18px 50px rgba(0,0,0,.35);
+      --ok:#22c55e;
+      --warn:#f59e0b;
+      --bad:#ef4444;
     }
-
-    html[data-theme="midnight"]{
-      --bg0:#070a11; --bg1:#0b1220;
-      --card: rgba(255,255,255,.055);
-      --card2: rgba(255,255,255,.035);
-      --text:#e5e7eb; --muted:#9ca3af;
-      --accent:#60a5fa; --ok:#22c55e; --warn:#f59e0b;
-    }
-    html[data-theme="slate"]{
-      --bg0:#0b1020; --bg1:#0e1629;
-      --card: rgba(255,255,255,.06);
-      --card2: rgba(255,255,255,.04);
-      --text:#eef2ff; --muted:#aab2c5;
-      --accent:#38bdf8; --ok:#34d399; --warn:#fbbf24;
-    }
-    html[data-theme="light"]{
-      --bg0:#f7f7fb; --bg1:#ffffff;
-      --card: rgba(17,24,39,.06);
-      --card2: rgba(17,24,39,.04);
-      --line: rgba(17,24,39,.12);
-      --text:#0b1220; --muted:#374151;
-      --accent:#2563eb; --ok:#16a34a; --warn:#d97706;
-      --shadow: 0 18px 55px rgba(0,0,0,.12);
-    }
-
     *{box-sizing:border-box}
     body{
       margin:0;
       font-family: system-ui,-apple-system,Segoe UI,Roboto,Arial;
-      color:var(--text);
       background:
-        radial-gradient(1200px 800px at 16% -10%, color-mix(in srgb, var(--accent) 20%, transparent), transparent 60%),
-        radial-gradient(900px 650px at 90% 10%, color-mix(in srgb, var(--warn) 18%, transparent), transparent 60%),
-        linear-gradient(180deg, var(--bg0), var(--bg1));
-      min-height:100vh;
+        radial-gradient(1200px 800px at 20% 0%, rgba(96,165,250,.10), transparent 60%),
+        radial-gradient(900px 700px at 90% 20%, rgba(245,158,11,.10), transparent 60%),
+        var(--bg);
+      color:var(--text);
     }
-
-    .wrap{max-width:var(--maxw);margin:0 auto;padding:16px 12px 34px}
+    .wrap{max-width:1200px;margin:0 auto;padding:18px 14px 34px}
     .topbar{display:flex;gap:12px;align-items:flex-end;justify-content:space-between;flex-wrap:wrap}
-    h1{margin:0;font-size:22px;letter-spacing:.2px}
-    .subtitle{color:var(--muted);font-size:12px;margin-top:6px;line-height:1.25}
-
-    .glass{
-      border:1px solid var(--line);
-      background: linear-gradient(180deg, var(--card), var(--card2));
-      backdrop-filter: blur(14px);
-      -webkit-backdrop-filter: blur(14px);
-      box-shadow: var(--shadow);
-      border-radius: var(--radius);
-    }
-
+    h1{margin:0;font-size:20px}
+    .sub{color:var(--muted);font-size:12px;margin-top:6px;line-height:1.4}
+    .row{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
     .btn{
       border:1px solid var(--line);
-      background: color-mix(in srgb, var(--card) 60%, transparent);
+      background:rgba(255,255,255,.04);
       color:var(--text);
-      padding:10px 12px;border-radius:14px;
+      padding:10px 12px;border-radius:12px;
       cursor:pointer;
+      transition: transform .12s ease, background .12s ease;
       text-decoration:none;
       display:inline-flex;gap:8px;align-items:center;
-      transition: transform .12s ease, background .12s ease;
-      font-weight:700;
     }
-    .btn:hover{background: color-mix(in srgb, var(--card) 80%, transparent); transform: translateY(-1px);}
+    .btn:hover{background:rgba(255,255,255,.06); transform: translateY(-1px);}
     .btn:active{transform: translateY(0px);}
-    .btn.warn{border-color: color-mix(in srgb, var(--warn) 50%, transparent);}
-    .btn.ok{border-color: color-mix(in srgb, var(--ok) 50%, transparent);}
+    .btn.ok{border-color:rgba(34,197,94,.35); background:rgba(34,197,94,.08)}
+    .btn.warn{border-color:rgba(245,158,11,.35); background:rgba(245,158,11,.08)}
+    .btn.bad{border-color:rgba(239,68,68,.35); background:rgba(239,68,68,.08)}
+    .hint{color:var(--muted);font-size:12px;margin-top:10px}
 
-    .ctrls{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-
-    .select{
-      appearance:none;
+    .card{
       border:1px solid var(--line);
-      background: color-mix(in srgb, var(--card) 60%, transparent);
-      color:var(--text);
-      padding:10px 36px 10px 12px;
-      border-radius:14px;
-      outline:none;
-      cursor:pointer;
-      font-weight:700;
-    }
-    .selectWrap{position:relative}
-    .selectWrap:after{
-      content:"▾";
-      position:absolute;right:12px;top:50%;
-      transform:translateY(-50%);
-      color:var(--muted);pointer-events:none;
-      font-size:12px;
+      background:rgba(255,255,255,.02);
+      border-radius:var(--radius);
+      box-shadow:var(--shadow);
+      overflow:hidden;
+      margin-top:14px;
     }
 
-    .hint{
-      margin-top:12px;
-      padding:12px;
-      color:var(--muted);
-      font-size:12px;
-      line-height:1.35;
-    }
-    code{background:rgba(255,255,255,.06); padding:2px 6px; border-radius:8px}
-
-    .tableWrap{margin-top:12px; overflow:auto}
-    table{width:100%;border-collapse:separate;border-spacing:0; min-width:1100px}
+    .tableWrap{overflow:auto}
+    table{width:100%;border-collapse:collapse;min-width:1100px}
     thead th{
-      text-align:left;
-      font-size:12px;
-      padding:12px;
-      color:var(--muted);
-      background: color-mix(in srgb, var(--card) 65%, transparent);
-      border-bottom:1px solid var(--line);
-      position:sticky; top:0;
-      backdrop-filter: blur(14px);
-      -webkit-backdrop-filter: blur(14px);
+      text-align:left;font-size:12px;color:var(--muted);
+      padding:12px;border-bottom:1px solid var(--line);
+      background:rgba(255,255,255,.03);
+      position:sticky;top:0;backdrop-filter: blur(8px);
       white-space:nowrap;
     }
     tbody td{
-      padding:10px 12px;
-      border-bottom:1px solid color-mix(in srgb, var(--line) 60%, transparent);
+      padding:10px 12px;border-bottom:1px solid rgba(255,255,255,.06);
       vertical-align:top;
-      font-size:13px;
     }
-    tbody tr:hover{background: color-mix(in srgb, var(--card) 40%, transparent)}
-    tbody tr:last-child td{border-bottom:none}
-
-    .cell{
+    tbody tr:hover{background:rgba(255,255,255,.03)}
+    input[type="text"], textarea{
       width:100%;
-      border:1px solid color-mix(in srgb, var(--line) 80%, transparent);
-      background: color-mix(in srgb, var(--card) 45%, transparent);
+      border:1px solid rgba(255,255,255,.12);
+      background:rgba(255,255,255,.03);
       color:var(--text);
-      border-radius:12px;
+      border-radius:10px;
       padding:8px 10px;
       outline:none;
-      font-size:13px;
+      font-size:12px;
     }
-    .cell.small{min-width:140px}
-    .cell.long{min-width:240px}
-    .cell.area{min-height:70px; resize:vertical}
-    .actions{display:flex;gap:8px;justify-content:flex-end}
+    textarea{min-height:44px;resize:vertical}
+    .chk{transform:scale(1.1)}
+    .act{display:flex;gap:8px;align-items:center}
     .miniBtn{
       border:1px solid var(--line);
-      background: color-mix(in srgb, var(--card) 55%, transparent);
+      background:rgba(255,255,255,.03);
       color:var(--text);
-      border-radius:12px;
-      padding:8px 10px;
+      padding:7px 10px;border-radius:10px;
       cursor:pointer;
-      font-weight:800;
+      font-size:12px;
     }
-    .miniBtn.danger{border-color: color-mix(in srgb, var(--warn) 50%, transparent);}
-
-    .footerRow{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px}
-    .muted{color:var(--muted)}
+    .miniBtn:hover{background:rgba(255,255,255,.05)}
+    .pill{
+      display:inline-flex;align-items:center;gap:8px;
+      border:1px solid var(--line);
+      border-radius:999px;
+      padding:6px 10px;
+      font-size:12px;
+      background:rgba(255,255,255,.03);
+      color:var(--muted);
+    }
+    .fileRow{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+    .file{
+      border:1px dashed rgba(255,255,255,.18);
+      padding:10px 12px;border-radius:12px;
+      color:var(--muted);
+      font-size:12px;
+    }
   </style>
 </head>
-
 <body>
-  <div class="wrap">
-    <div class="topbar">
-      <div>
-        <h1>Dashboard Editor (Excel-like)</h1>
-        <div class="subtitle">Edits happen locally in your browser. Export <code>config.json</code> and upload to GitHub to publish.</div>
-      </div>
-
-      <div class="ctrls">
-        <div class="selectWrap" title="Theme">
-          <select class="select" id="themeSel">
-            <option value="midnight">Midnight</option>
-            <option value="slate">Slate</option>
-            <option value="light">Light</option>
-          </select>
-        </div>
-
-        <a class="btn" href="./index.html">← Open Dashboard</a>
+<div class="wrap">
+  <div class="topbar">
+    <div>
+      <h1>Dashboard Editor (Excel-like)</h1>
+      <div class="sub">
+        Loads <b>config.json</b> automatically • Edit rows • Import CSV/XLSX • Export config.json<br>
+        <span class="pill">Workflow: Export → replace config.json in VS Code → commit/push</span>
       </div>
     </div>
-
-    <div class="hint glass">
-      <div><b>CSV import:</b> You can import from Excel by exporting CSV.</div>
-      <div class="muted">Expected header:
-        <code>session,pair,chartTF,bestWindowParis,istWindow,golden,tightRules,comments,journal</code>
-        (golden can be TRUE/FALSE or 1/0)
-      </div>
-      <div class="muted" style="margin-top:8px">
-        <b>Notes:</b> use a separate <code>notes.json</code> file (cleaner config). We'll wire it into the dashboard next.
-      </div>
-    </div>
-
-    <div class="footerRow">
+    <div class="row">
+      <a class="btn" href="./index.html">📊 Open Dashboard</a>
       <button class="btn ok" id="addRow">＋ Add Row</button>
-      <button class="btn" id="saveBrowser">Save (Browser)</button>
-      <button class="btn" id="clearBrowser">Clear (Browser)</button>
-      <button class="btn" id="importCsv">Import CSV</button>
-      <button class="btn" id="exportCfg">Export config.json</button>
+      <button class="btn warn" id="exportJson">⬇ Export config.json</button>
+      <button class="btn" id="exportCsv">⬇ Export CSV</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="row" style="padding:12px 12px 0">
+      <div class="fileRow">
+        <label class="file">
+          Import CSV
+          <input type="file" id="csvFile" accept=".csv,text/csv" style="display:block;margin-top:8px" />
+        </label>
+        <label class="file">
+          Import Excel (.xlsx)
+          <input type="file" id="xlsxFile" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="display:block;margin-top:8px" />
+        </label>
+        <span class="hint">
+          Expected headers: <code>session,pair,chartTF,bestWindowParis,istWindow,golden,tightRules,comments,journal</code>
+        </span>
+      </div>
     </div>
 
-    <div class="tableWrap glass">
+    <div class="tableWrap">
       <table>
         <thead>
           <tr>
             <th style="width:160px">Session</th>
-            <th style="width:220px">Pair</th>
+            <th style="width:190px">Pair</th>
             <th style="width:140px">Chart TF</th>
-            <th style="width:210px">Best Window (Paris)</th>
-            <th style="width:210px">IST Window</th>
+            <th style="width:190px">Best Window (Paris)</th>
+            <th style="width:190px">IST Window</th>
             <th style="width:90px">Golden?</th>
-            <th style="width:260px">Tight Rules</th>
-            <th style="width:240px">Comments</th>
-            <th style="width:260px">Journal link</th>
-            <th style="width:120px">Action</th>
+            <th style="width:240px">Tight Rules</th>
+            <th style="width:220px">Comments</th>
+            <th style="width:260px">Journal URL</th>
+            <th style="width:160px">Action</th>
           </tr>
         </thead>
         <tbody id="tbody"></tbody>
       </table>
     </div>
-
-    <div class="footerRow">
-      <span class="muted" id="status">—</span>
-    </div>
   </div>
+</div>
 
+<!-- SheetJS (Excel import) -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.19.3/dist/xlsx.full.min.js"></script>
 <script>
-  const THEME_KEY = "tsd_theme_v1";
-  const BROWSER_KEY = "tsd_config_v2";
+  const CFG_URL = "./config.json?x=" + Date.now();
+  const state = { rows: [] };
 
-  let CFG = { schemaVersion: 2, defaultTheme: "midnight", rows: [] };
-
-  function applyTheme(theme){
-    document.documentElement.setAttribute("data-theme", theme);
-    localStorage.setItem(THEME_KEY, theme);
-  }
-  function initTheme(defaultTheme){
-    const saved = localStorage.getItem(THEME_KEY);
-    const theme = saved || defaultTheme || "midnight";
-    applyTheme(theme);
-    document.getElementById("themeSel").value = theme;
-  }
-
-  function normalizeRow(r){
+  function normRow(r){
     return {
       session: r.session ?? "",
       pair: r.pair ?? "",
-      chartTF: r.chartTF ?? "",
-      bestWindowParis: r.bestWindowParis ?? "",
+      chartTF: r.chartTF ?? r.chartTimeFrame ?? "",
+      bestWindowParis: r.bestWindowParis ?? r.bestCTE ?? "",
       istWindow: r.istWindow ?? "",
-      golden: !!r.golden,
+      golden: (r.golden === true || r.golden === 1 || String(r.golden).toLowerCase() === "true"),
       tightRules: r.tightRules ?? "",
       comments: r.comments ?? "",
       journal: r.journal ?? ""
     };
   }
 
-  async function loadFromRepo(){
-    const res = await fetch("./config.json?x=" + Date.now());
+  async function load(){
+    const res = await fetch(CFG_URL);
     const json = await res.json();
-    json.rows = (json.rows || []).map(normalizeRow);
-    return json;
-  }
-
-  function loadFromBrowser(){
-    const raw = localStorage.getItem(BROWSER_KEY);
-    if(!raw) return null;
-    try{
-      const json = JSON.parse(raw);
-      json.rows = (json.rows || []).map(normalizeRow);
-      return json;
-    }catch(e){
-      return null;
-    }
-  }
-
-  function saveToBrowser(){
-    localStorage.setItem(BROWSER_KEY, JSON.stringify(CFG, null, 2));
-    setStatus("Saved to browser storage ✅");
-  }
-
-  function clearBrowser(){
-    localStorage.removeItem(BROWSER_KEY);
-    setStatus("Browser storage cleared 🧹");
-  }
-
-  function setStatus(msg){
-    document.getElementById("status").textContent = msg;
-  }
-
-  function tdInput(value, cls="cell"){
-    return `<input class="${cls}" value="${escapeHtml(String(value||""))}">`;
-  }
-  function tdArea(value){
-    return `<textarea class="cell area">${escapeHtml(String(value||""))}</textarea>`;
-  }
-  function tdCheckbox(checked){
-    return `<input type="checkbox" ${checked ? "checked" : ""} />`;
-  }
-
-  function escapeHtml(s){
-    return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const rows = (json.rows || []).map(normRow);
+    state.rows = rows;
+    render();
   }
 
   function render(){
-    const tbody = document.getElementById("tbody");
-    tbody.innerHTML = "";
-    CFG.rows.forEach((r, idx) => {
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${tdInput(r.session,"cell small")}</td>
-        <td>${tdInput(r.pair,"cell small")}</td>
-        <td>${tdInput(r.chartTF,"cell small")}</td>
-        <td>${tdInput(r.bestWindowParis,"cell")}</td>
-        <td>${tdInput(r.istWindow,"cell")}</td>
-        <td style="text-align:center">${tdCheckbox(r.golden)}</td>
-        <td>${tdArea(r.tightRules)}</td>
-        <td>${tdArea(r.comments)}</td>
-        <td>${tdInput(r.journal,"cell long")}</td>
+    const tb = document.getElementById("tbody");
+    tb.innerHTML = state.rows.map((r, i) => `
+      <tr>
+        <td><input type="text" value="${esc(r.session)}" data-k="session" data-i="${i}"></td>
+        <td><input type="text" value="${esc(r.pair)}" data-k="pair" data-i="${i}"></td>
+        <td><input type="text" value="${esc(r.chartTF)}" data-k="chartTF" data-i="${i}"></td>
+        <td><input type="text" value="${esc(r.bestWindowParis)}" data-k="bestWindowParis" data-i="${i}"></td>
+        <td><input type="text" value="${esc(r.istWindow)}" data-k="istWindow" data-i="${i}"></td>
+        <td style="text-align:center">
+          <input class="chk" type="checkbox" ${r.golden ? "checked" : ""} data-k="golden" data-i="${i}">
+        </td>
+        <td><textarea data-k="tightRules" data-i="${i}">${esc(r.tightRules)}</textarea></td>
+        <td><textarea data-k="comments" data-i="${i}">${esc(r.comments)}</textarea></td>
+        <td><input type="text" value="${esc(r.journal)}" data-k="journal" data-i="${i}" placeholder="https://..."></td>
         <td>
-          <div class="actions">
-            <button class="miniBtn danger" data-del="${idx}">Delete</button>
+          <div class="act">
+            <button class="miniBtn" data-act="dup" data-i="${i}">Duplicate</button>
+            <button class="miniBtn" data-act="del" data-i="${i}" style="border-color:rgba(239,68,68,.35)">Delete</button>
           </div>
         </td>
-      `;
-      tbody.appendChild(tr);
-    });
-    setStatus(`Loaded ${CFG.rows.length} rows`);
+      </tr>
+    `).join("");
   }
 
-  function readTableToCFG(){
-    const rows = [];
-    const tbody = document.getElementById("tbody");
-    for(const tr of tbody.querySelectorAll("tr")){
-      const tds = tr.querySelectorAll("td");
-      rows.push({
-        session: tds[0].querySelector("input").value.trim(),
-        pair: tds[1].querySelector("input").value.trim(),
-        chartTF: tds[2].querySelector("input").value.trim(),
-        bestWindowParis: tds[3].querySelector("input").value.trim(),
-        istWindow: tds[4].querySelector("input").value.trim(),
-        golden: tds[5].querySelector("input[type=checkbox]").checked,
-        tightRules: tds[6].querySelector("textarea").value,
-        comments: tds[7].querySelector("textarea").value,
-        journal: tds[8].querySelector("input").value.trim()
-      });
-    }
-    CFG.rows = rows.map(normalizeRow);
+  function esc(s){
+    return String(s ?? "")
+      .replaceAll("&","&amp;")
+      .replaceAll("<","&lt;")
+      .replaceAll(">","&gt;")
+      .replaceAll('"',"&quot;");
   }
 
-  function downloadJSON(filename, obj){
-    const blob = new Blob([JSON.stringify(obj, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-  }
+  // Update state on input
+  document.addEventListener("input", (e)=>{
+    const el = e.target;
+    const i = el.getAttribute("data-i");
+    const k = el.getAttribute("data-k");
+    if(i === null || k === null) return;
+    const idx = Number(i);
+    if(k === "golden") state.rows[idx][k] = el.checked;
+    else state.rows[idx][k] = el.value;
+  });
 
-  function parseCsv(text){
-    // Minimal CSV parser (handles quotes) - enough for Excel export.
-    const rows = [];
-    let cur = [], val = "", inQ = false;
-    for(let i=0;i<text.length;i++){
-      const ch = text[i];
-      const next = text[i+1];
-      if(inQ){
-        if(ch === '"' && next === '"'){ val += '"'; i++; }
-        else if(ch === '"'){ inQ = false; }
-        else val += ch;
-      }else{
-        if(ch === '"') inQ = true;
-        else if(ch === ','){ cur.push(val); val=""; }
-        else if(ch === '\n'){ cur.push(val); rows.push(cur); cur=[]; val=""; }
-        else if(ch === '\r'){ /* ignore */ }
-        else val += ch;
-      }
-    }
-    if(val.length || cur.length) { cur.push(val); rows.push(cur); }
-    return rows;
-  }
-
-  function toBool(x){
-    const s = String(x||"").trim().toLowerCase();
-    return (s === "true" || s === "1" || s === "yes" || s === "y");
-  }
-
-  async function importCSV(){
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = ".csv,text/csv";
-    input.onchange = async () => {
-      if(!input.files?.length) return;
-      const file = input.files[0];
-      const text = await file.text();
-      const parsed = parseCsv(text);
-      if(!parsed.length) return;
-
-      const header = parsed[0].map(h=>h.trim());
-      const idx = (name) => header.indexOf(name);
-
-      if(idx("session") === -1 || idx("pair") === -1){
-        alert("CSV header must include at least: session,pair,...");
-        return;
-      }
-
-      const out = [];
-      for(const row of parsed.slice(1)){
-        if(!row.join("").trim()) continue;
-        out.push(normalizeRow({
-          session: row[idx("session")] ?? "",
-          pair: row[idx("pair")] ?? "",
-          chartTF: row[idx("chartTF")] ?? "",
-          bestWindowParis: row[idx("bestWindowParis")] ?? "",
-          istWindow: row[idx("istWindow")] ?? "",
-          golden: toBool(row[idx("golden")]),
-          tightRules: row[idx("tightRules")] ?? "",
-          comments: row[idx("comments")] ?? "",
-          journal: row[idx("journal")] ?? ""
-        }));
-      }
-      CFG.rows = out;
+  document.addEventListener("click", (e)=>{
+    const el = e.target;
+    const act = el.getAttribute("data-act");
+    if(!act) return;
+    const idx = Number(el.getAttribute("data-i"));
+    if(act === "del"){
+      state.rows.splice(idx,1);
       render();
-      setStatus("CSV imported ✅");
-    };
-    input.click();
-  }
+    }
+    if(act === "dup"){
+      state.rows.splice(idx+1,0,{...state.rows[idx]});
+      render();
+    }
+  });
 
-  async function main(){
-    // Prefer browser copy (drafts), fallback to repo config
-    const fromBrowser = loadFromBrowser();
-    CFG = fromBrowser || await loadFromRepo();
-
-    initTheme(CFG.defaultTheme);
-
-    document.getElementById("themeSel").addEventListener("change", (e)=> applyTheme(e.target.value));
-
+  document.getElementById("addRow").addEventListener("click", ()=>{
+    state.rows.unshift(normRow({}));
     render();
+  });
 
-    // delete handlers
-    document.getElementById("tbody").addEventListener("click", (e)=>{
-      const btn = e.target.closest("[data-del]");
-      if(!btn) return;
-      const idx = Number(btn.getAttribute("data-del"));
-      readTableToCFG();
-      CFG.rows.splice(idx, 1);
-      render();
-    });
-
-    document.getElementById("addRow").addEventListener("click", ()=>{
-      readTableToCFG();
-      CFG.rows.push(normalizeRow({}));
-      render();
-      setStatus("Row added ➕");
-      // scroll to bottom
-      window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
-    });
-
-    document.getElementById("saveBrowser").addEventListener("click", ()=>{
-      readTableToCFG();
-      saveToBrowser();
-    });
-
-    document.getElementById("clearBrowser").addEventListener("click", ()=>{
-      clearBrowser();
-    });
-
-    document.getElementById("exportCfg").addEventListener("click", ()=>{
-      readTableToCFG();
-      // persist defaultTheme to match current UI selection
-      CFG.defaultTheme = document.documentElement.getAttribute("data-theme") || CFG.defaultTheme || "midnight";
-      downloadJSON("config.json", CFG);
-      setStatus("config.json exported (downloaded) ⬇️");
-    });
-
-    document.getElementById("importCsv").addEventListener("click", importCSV);
+  function download(filename, text){
+    const blob = new Blob([text], { type: "application/octet-stream" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.click();
+    setTimeout(()=>URL.revokeObjectURL(a.href), 500);
   }
 
-  main();
+  document.getElementById("exportJson").addEventListener("click", ()=>{
+    const cfg = { rows: state.rows.map(normRow) };
+    download("config.json", JSON.stringify(cfg, null, 2));
+  });
+
+  document.getElementById("exportCsv").addEventListener("click", ()=>{
+    const header = ["session","pair","chartTF","bestWindowParis","istWindow","golden","tightRules","comments","journal"];
+    const lines = [header.join(",")];
+    for(const r of state.rows){
+      const row = [
+        r.session, r.pair, r.chartTF, r.bestWindowParis, r.istWindow,
+        r.golden ? "TRUE" : "FALSE",
+        r.tightRules, r.comments, r.journal
+      ].map(csvCell);
+      lines.push(row.join(","));
+    }
+    download("config.csv", lines.join("\n"));
+  });
+
+  function csvCell(v){
+    const s = String(v ?? "");
+    if(/[",\n]/.test(s)) return `"${s.replaceAll('"','""')}"`;
+    return s;
+  }
+
+  // CSV import
+  document.getElementById("csvFile").addEventListener("change", async (e)=>{
+    const f = e.target.files?.[0];
+    if(!f) return;
+    const text = await f.text();
+    const rows = parseCSV(text);
+    applyImportedRows(rows);
+    e.target.value = "";
+  });
+
+  function parseCSV(text){
+    // Simple CSV parser (handles quoted fields)
+    const lines = text.replace(/\r/g,"").split("\n").filter(l=>l.trim()!=="");
+    if(lines.length === 0) return [];
+    const header = splitCSVLine(lines[0]).map(h=>h.trim());
+    const out = [];
+    for(let i=1;i<lines.length;i++){
+      const cols = splitCSVLine(lines[i]);
+      const obj = {};
+      header.forEach((h, idx)=> obj[h] = cols[idx] ?? "");
+      out.push(obj);
+    }
+    return out;
+  }
+
+  function splitCSVLine(line){
+    const res = [];
+    let cur = "", inQ=false;
+    for(let i=0;i<line.length;i++){
+      const ch = line[i];
+      if(ch === '"' ){
+        if(inQ && line[i+1] === '"'){ cur += '"'; i++; }
+        else inQ = !inQ;
+      } else if(ch === "," && !inQ){
+        res.push(cur); cur = "";
+      } else {
+        cur += ch;
+      }
+    }
+    res.push(cur);
+    return res;
+  }
+
+  // XLSX import
+  document.getElementById("xlsxFile").addEventListener("change", async (e)=>{
+    const f = e.target.files?.[0];
+    if(!f) return;
+    const data = await f.arrayBuffer();
+    const wb = XLSX.read(data, { type: "array" });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const json = XLSX.utils.sheet_to_json(ws, { defval:"" });
+    applyImportedRows(json);
+    e.target.value = "";
+  });
+
+  function applyImportedRows(imported){
+    // Accept headers: session,pair,chartTF,bestWindowParis,istWindow,golden,tightRules,comments,journal
+    const rows = imported.map(r => normRow({
+      session: r.session ?? r.Session ?? "",
+      pair: r.pair ?? r.Pair ?? r["Currency Pair"] ?? "",
+      chartTF: r.chartTF ?? r.ChartTF ?? r["Chart time Frame"] ?? "",
+      bestWindowParis: r.bestWindowParis ?? r["Best Window (Paris)"] ?? r["Best CTE +1 timeframe"] ?? "",
+      istWindow: r.istWindow ?? r["IST Window"] ?? r["IST time Zone GMT+5:30"] ?? "",
+      golden: r.golden ?? r.Golden ?? r["Golden?"] ?? false,
+      tightRules: r.tightRules ?? r["Tight Rules"] ?? "",
+      comments: r.comments ?? r.Comments ?? "",
+      journal: r.journal ?? r.Journal ?? r["Journal URL"] ?? ""
+    }));
+    // Replace all rows (clean import). If you want merge instead, tell me.
+    state.rows = rows;
+    render();
+  }
+
+  load();
 </script>
 </body>
 </html>

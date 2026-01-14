@@ -4,327 +4,325 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Trading Sessions Dashboard</title>
-
   <style>
-    /* =========================
-       THEME SYSTEM
-       - Theme is applied on <html data-theme="...">
-       - Add more themes by extending [data-theme="..."]
-       ========================= */
     :root{
-      --radius: 18px;
-      --radius-sm: 14px;
-      --shadow: 0 18px 55px rgba(0,0,0,.35);
-
-      /* layout */
-      --maxw: 1200px;
-      --gap: 12px;
-
-      /* motion */
-      --ease: cubic-bezier(.2,.8,.2,1);
-    }
-
-    /* Default theme: midnight */
-    html[data-theme="midnight"]{
-      --bg0:#070a11;
-      --bg1:#0b1220;
-      --card: rgba(255,255,255,.055);
-      --card2: rgba(255,255,255,.035);
-      --line: rgba(255,255,255,.10);
-
+      --bg:#0b0f17;
+      --card:#111827;
+      --card2:#0f172a;
       --text:#e5e7eb;
       --muted:#9ca3af;
+      --line:rgba(255,255,255,.10);
+      --shadow:0 18px 50px rgba(0,0,0,.35);
+      --radius:16px;
 
-      --accent:#60a5fa;
-      --ok:#22c55e;
-      --warn:#f59e0b;
-      --soon:#a78bfa;
+      --live:#22c55e;
+      --up:#f59e0b;
+      --soon:#60a5fa;
 
-      --asia: rgba(96,165,250,.16);
-      --london: rgba(34,197,94,.14);
-      --overlap: rgba(245,158,11,.16);
-      --ny: rgba(167,139,250,.16);
+      --asia: rgba(96,165,250,.14);
+      --london: rgba(34,197,94,.12);
+      --overlap: rgba(245,158,11,.14);
+      --ny: rgba(168,85,247,.14);
 
-      --gold: rgba(245,158,11,.16);
-      --goldText: #ffd28a;
+      --gold: rgba(245,158,11,.18);
     }
 
-    html[data-theme="slate"]{
-      --bg0:#0b1020;
-      --bg1:#0e1629;
-      --card: rgba(255,255,255,.06);
-      --card2: rgba(255,255,255,.04);
-      --line: rgba(255,255,255,.12);
-
-      --text:#eef2ff;
-      --muted:#aab2c5;
-
-      --accent:#38bdf8;
-      --ok:#34d399;
-      --warn:#fbbf24;
-      --soon:#c4b5fd;
-
-      --asia: rgba(56,189,248,.16);
-      --london: rgba(52,211,153,.14);
-      --overlap: rgba(251,191,36,.16);
-      --ny: rgba(196,181,253,.16);
-
-      --gold: rgba(251,191,36,.16);
-      --goldText: #ffe3a8;
-    }
-
-    html[data-theme="light"]{
-      --bg0:#f7f7fb;
-      --bg1:#ffffff;
-      --card: rgba(17,24,39,.06);
-      --card2: rgba(17,24,39,.04);
-      --line: rgba(17,24,39,.12);
-
-      --text:#0b1220;
-      --muted:#374151;
-
-      --accent:#2563eb;
-      --ok:#16a34a;
-      --warn:#d97706;
-      --soon:#7c3aed;
-
-      --asia: rgba(37,99,235,.10);
-      --london: rgba(22,163,74,.10);
-      --overlap: rgba(217,119,6,.10);
-      --ny: rgba(124,58,237,.10);
-
-      --gold: rgba(217,119,6,.10);
-      --goldText: #7a3b00;
-      --shadow: 0 18px 55px rgba(0,0,0,.12);
-    }
-
-    /* =========================
-       BASE
-       ========================= */
     *{box-sizing:border-box}
     body{
       margin:0;
       font-family: system-ui,-apple-system,Segoe UI,Roboto,Arial;
-      color:var(--text);
       background:
-        radial-gradient(1200px 800px at 16% -10%, color-mix(in srgb, var(--accent) 20%, transparent), transparent 60%),
-        radial-gradient(950px 700px at 90% 10%, color-mix(in srgb, var(--warn) 18%, transparent), transparent 60%),
-        radial-gradient(900px 650px at 50% 110%, color-mix(in srgb, var(--ok) 12%, transparent), transparent 60%),
-        linear-gradient(180deg, var(--bg0), var(--bg1));
-      min-height:100vh;
+        radial-gradient(1200px 800px at 20% 0%, rgba(96,165,250,.10), transparent 60%),
+        radial-gradient(900px 700px at 90% 20%, rgba(245,158,11,.10), transparent 60%),
+        radial-gradient(900px 700px at 50% 100%, rgba(34,197,94,.08), transparent 60%),
+        var(--bg);
+      color:var(--text);
     }
 
-    .wrap{max-width:var(--maxw);margin:0 auto;padding:16px 12px 34px}
+    .wrap{max-width:1200px;margin:0 auto;padding:18px 14px 34px}
     .topbar{display:flex;gap:12px;align-items:flex-end;justify-content:space-between;flex-wrap:wrap}
     h1{margin:0;font-size:22px;letter-spacing:.2px}
-    .subtitle{color:var(--muted);font-size:12px;margin-top:6px;line-height:1.25}
-
-    /* Glass utility */
-    .glass{
-      border:1px solid var(--line);
-      background: linear-gradient(180deg, var(--card), var(--card2));
-      backdrop-filter: blur(14px);
-      -webkit-backdrop-filter: blur(14px);
-      box-shadow: var(--shadow);
-      border-radius: var(--radius);
-    }
+    .subtitle{color:var(--muted);font-size:12px;margin-top:6px}
 
     .btn{
       border:1px solid var(--line);
-      background: color-mix(in srgb, var(--card) 60%, transparent);
+      background:rgba(255,255,255,.04);
       color:var(--text);
-      padding:10px 12px;border-radius:14px;
+      padding:10px 12px;border-radius:12px;
       cursor:pointer;
-      transition: transform .12s var(--ease), background .12s var(--ease), border-color .12s var(--ease);
+      transition: transform .12s ease, background .12s ease;
       text-decoration:none;
       display:inline-flex;gap:8px;align-items:center;
     }
-    .btn:hover{background: color-mix(in srgb, var(--card) 80%, transparent); transform: translateY(-1px);}
+    .btn:hover{background:rgba(255,255,255,.06); transform: translateY(-1px);}
     .btn:active{transform: translateY(0px);}
 
-    .ctrls{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-    .select{
-      appearance:none;
-      border:1px solid var(--line);
-      background: color-mix(in srgb, var(--card) 60%, transparent);
-      color:var(--text);
-      padding:10px 36px 10px 12px;
-      border-radius:14px;
-      outline:none;
-      cursor:pointer;
-    }
-    .selectWrap{position:relative}
-    .selectWrap:after{
-      content:"▾";
-      position:absolute;right:12px;top:50%;
-      transform:translateY(-50%);
-      color:var(--muted);pointer-events:none;
-      font-size:12px;
-    }
-
-    .grid{display:grid;gap:var(--gap);margin-top:14px}
+    .grid{display:grid;gap:12px;margin-top:14px}
     .cards{grid-template-columns:repeat(3,minmax(0,1fr))}
     @media (max-width: 980px){ .cards{grid-template-columns:1fr} }
 
-    .card{padding:14px;position:relative;overflow:hidden}
-    .card:before{
-      content:"";
-      position:absolute;inset:-2px;
-      background: radial-gradient(500px 180px at 10% 0%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 60%);
-      opacity:.6;
-      pointer-events:none;
+    .card{
+      border:1px solid var(--line);
+      background:linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02));
+      border-radius:var(--radius);
+      box-shadow:var(--shadow);
+      padding:14px;
+      overflow:hidden;
+      position:relative;
     }
     .clockLabel{font-size:12px;color:var(--muted)}
-    .clockTime{font-size:30px;font-weight:900;letter-spacing:.5px;margin-top:4px}
+    .clockTime{font-size:28px;font-weight:800;letter-spacing:.5px;margin-top:4px}
     .clockMeta{margin-top:6px;font-size:12px;color:var(--muted)}
 
-    .searchRow{display:flex;gap:10px;align-items:center;margin-top:12px;flex-wrap:wrap}
-    .search{
-      flex:1;min-width:220px;
+    .pill{
+      display:inline-flex;align-items:center;gap:8px;
       border:1px solid var(--line);
-      background: color-mix(in srgb, var(--card) 55%, transparent);
-      color:var(--text);
-      padding:10px 12px;border-radius:14px;
-      outline:none;
-    }
-    .toggle{
-      display:flex;gap:8px;align-items:center;
-      border:1px solid var(--line);
-      border-radius:14px;
-      padding:8px 10px;
-      background: color-mix(in srgb, var(--card) 55%, transparent);
-      color:var(--muted);
+      border-radius:999px;
+      padding:6px 10px;
       font-size:12px;
-      user-select:none;
+      background:rgba(255,255,255,.03);
     }
-    .toggle input{accent-color:var(--accent)}
+    .dot{width:8px;height:8px;border-radius:999px;background:var(--muted);box-shadow:0 0 0 3px rgba(255,255,255,.02)}
+    .dot.live{background:var(--live)}
+    .dot.up{background:var(--up)}
+    .dot.soon{background:var(--soon)}
 
     .panelTitle{display:flex;align-items:center;justify-content:space-between;margin-top:16px;margin-bottom:8px}
-    .panelTitle h2{margin:0;font-size:13px;color:var(--muted);font-weight:800;letter-spacing:.24px}
+    .panelTitle h2{margin:0;font-size:14px;color:var(--muted);font-weight:700;letter-spacing:.2px}
     .panelTitle .mini{font-size:12px;color:var(--muted)}
 
-    /* Tables */
-    .tableWrap{overflow:hidden}
+    /* Desktop table */
+    .tableWrap{
+      border:1px solid var(--line);
+      background:rgba(255,255,255,.02);
+      border-radius:var(--radius);
+      overflow:hidden;
+    }
     table{width:100%;border-collapse:collapse}
     thead th{
       text-align:left;
       font-size:12px;
-      padding:12px;
+      padding:12px 12px;
       color:var(--muted);
-      background: color-mix(in srgb, var(--card) 65%, transparent);
+      background:rgba(255,255,255,.03);
       border-bottom:1px solid var(--line);
       position:sticky; top:0;
-      backdrop-filter: blur(14px);
-      -webkit-backdrop-filter: blur(14px);
-      white-space:nowrap;
+      backdrop-filter: blur(8px);
     }
     tbody td{
-      padding:12px;
-      border-bottom:1px solid color-mix(in srgb, var(--line) 60%, transparent);
+      padding:12px 12px;
+      border-bottom:1px solid rgba(255,255,255,.06);
       vertical-align:top;
       font-size:13px;
-      line-height:1.25;
     }
-    tbody tr{transition: background .15s var(--ease)}
-    tbody tr:hover{background: color-mix(in srgb, var(--card) 40%, transparent)}
+    tbody tr{
+      transition: background .15s ease, transform .12s ease;
+    }
+    tbody tr:hover{background:rgba(255,255,255,.03)}
     tbody tr:last-child td{border-bottom:none}
 
-    /* Pair cell */
-    .pairRow{
-      display:flex;align-items:center;gap:10px;
-      font-weight:900;
-    }
-    .pairMeta{display:flex;align-items:center;gap:8px;margin-left:auto}
-    .pairIcon{
-      width:26px;height:26px;border-radius:999px;
-      display:inline-flex;align-items:center;justify-content:center;
-      border:1px solid var(--line);
-      background: color-mix(in srgb, var(--card) 70%, transparent);
-      font-size:14px;
-      flex:0 0 26px;
-      box-shadow: 0 10px 26px rgba(0,0,0,.15);
+    .pair{
+      display:flex;gap:8px;align-items:center;font-weight:800;
     }
     .goldBadge{
-      display:inline-flex;align-items:center;gap:8px;
       font-size:11px;
-      padding:4px 10px;border-radius:999px;
-      border:1px solid color-mix(in srgb, var(--warn) 45%, transparent);
-      background: color-mix(in srgb, var(--warn) 14%, transparent);
-      color: var(--goldText);
-      font-weight:900;
-      position:relative;
-      overflow:hidden;
-    }
-    .goldBadge .flame{
-      display:inline-block;
-      transform-origin:50% 100%;
-      animation: flameFloat 1.15s var(--ease) infinite;
-      filter: drop-shadow(0 0 10px color-mix(in srgb, var(--warn) 60%, transparent));
-    }
-    @keyframes flameFloat{
-      0%{ transform: translateY(0) rotate(-6deg) scale(.95); opacity:.95 }
-      50%{ transform: translateY(-2px) rotate(6deg) scale(1.05); opacity:1 }
-      100%{ transform: translateY(0) rotate(-6deg) scale(.95); opacity:.95 }
-    }
-    /* Subtle glow on golden rows */
-    .heat-goldGlow{
-      box-shadow:
-        inset 0 0 0 9999px var(--gold),
-        inset 0 0 0 1px color-mix(in srgb, var(--warn) 25%, transparent);
+      padding:3px 8px;border-radius:999px;
+      border:1px solid rgba(245,158,11,.35);
+      background:rgba(245,158,11,.10);
+      color:#ffd28a;
     }
 
     .journalLink{
+      margin-left:auto;
       font-size:12px;
       color:var(--muted);
       text-decoration:none;
       border:1px solid var(--line);
-      padding:5px 9px;border-radius:12px;
-      background: color-mix(in srgb, var(--card) 55%, transparent);
-      transition: background .12s var(--ease);
+      padding:4px 8px;border-radius:10px;
+      background:rgba(255,255,255,.02);
+      transition: background .12s ease;
       white-space:nowrap;
     }
-    .journalLink:hover{background: color-mix(in srgb, var(--card) 80%, transparent);}
+    .journalLink:hover{background:rgba(255,255,255,.05)}
 
-    /* Status */
     .statusPill{
       display:inline-flex;align-items:center;gap:8px;
       border:1px solid var(--line);
       border-radius:999px;
-      padding:7px 11px;
+      padding:6px 10px;
       font-size:12px;
-      font-weight:900;
-      letter-spacing:.2px;
+      font-weight:800;
     }
-    .dot{width:8px;height:8px;border-radius:999px;background:var(--muted);box-shadow:0 0 0 3px rgba(255,255,255,.02)}
-    .dot.live{background:var(--ok)}
-    .dot.up{background:var(--warn)}
-    .status-live{border-color:color-mix(in srgb, var(--ok) 50%, transparent); background: color-mix(in srgb, var(--ok) 12%, transparent)}
-    .status-up{border-color:color-mix(in srgb, var(--warn) 50%, transparent); background: color-mix(in srgb, var(--warn) 12%, transparent)}
+    .status-live{border-color:rgba(34,197,94,.35); background:rgba(34,197,94,.10)}
+    .status-up{border-color:rgba(245,158,11,.35); background:rgba(245,158,11,.10)}
+    .status-soon{border-color:rgba(96,165,250,.35); background:rgba(96,165,250,.10)}
 
-    /* Session heat */
-    .heat-asia{background:linear-gradient(90deg,var(--asia), transparent 58%)}
-    .heat-london{background:linear-gradient(90deg,var(--london), transparent 58%)}
-    .heat-overlap{background:linear-gradient(90deg,var(--overlap), transparent 58%)}
-    .heat-ny{background:linear-gradient(90deg,var(--ny), transparent 58%)}
+    .heat-asia{background:linear-gradient(90deg,var(--asia), transparent 60%)}
+    .heat-london{background:linear-gradient(90deg,var(--london), transparent 60%)}
+    .heat-overlap{background:linear-gradient(90deg,var(--overlap), transparent 60%)}
+    .heat-ny{background:linear-gradient(90deg,var(--ny), transparent 60%)}
+    .heat-gold{box-shadow: inset 0 0 0 9999px var(--gold)}
 
-    /* Mobile cards */
+    /* Mobile cards (hide table) */
     .mobileList{display:none}
     @media (max-width: 900px){
-      .desktopOnly{display:none}
+      .tableWrap{display:none}
       .mobileList{display:grid;gap:10px}
-      .mCard{padding:12px}
+      .mCard{
+        border:1px solid var(--line);
+        border-radius:var(--radius);
+        background:rgba(255,255,255,.02);
+        padding:12px;
+      }
       .mTop{display:flex;gap:10px;align-items:flex-start;justify-content:space-between}
-      .mPair{font-weight:1000;display:flex;gap:10px;align-items:center}
+      .mPair{font-weight:900}
       .mMeta{color:var(--muted);font-size:12px;margin-top:3px}
       .mRow{display:flex;gap:10px;margin-top:10px}
       .mK{width:120px;flex:0 0 120px;color:var(--muted);font-size:12px}
       .mV{font-size:12px}
     }
 
+    .searchRow{display:flex;gap:10px;align-items:center;margin-top:12px;flex-wrap:wrap}
+    .search{
+      flex:1;
+      min-width:220px;
+      border:1px solid var(--line);
+      background:rgba(255,255,255,.03);
+      color:var(--text);
+      padding:10px 12px;
+      border-radius:12px;
+      outline:none;
+    }
+    .toggle{
+      display:flex;gap:8px;align-items:center;
+      border:1px solid var(--line);
+      border-radius:12px;
+      padding:8px 10px;
+      background:rgba(255,255,255,.03);
+      color:var(--muted);
+      font-size:12px;
+    }
+    .toggle input{accent-color:#60a5fa}
+
     .muted{color:var(--muted)}
+    .right{display:flex;gap:10px;align-items:center}
+  
+    /* =========================
+       Row expand (keep table uniform)
+       ========================= */
+    .cellClip{
+      max-width: 100%;
+      display:-webkit-box;
+      -webkit-line-clamp:2;
+      -webkit-box-orient:vertical;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:normal;
+    }
+    tr.isExpandable{cursor:pointer}
+    tr.isExpandable.expanded .cellClip{
+      -webkit-line-clamp:unset;
+      display:block;
+      overflow:visible;
+    }
+    tr.isExpandable.expanded td{
+      background: color-mix(in srgb, var(--card) 50%, transparent);
+    }
+
+    /* =========================
+       Notes panel + gallery
+       ========================= */
+    .notesWrap{margin-top:14px}
+    .notesHeader{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;padding:12px}
+    .notesHeader h3{margin:0;font-size:13px;color:var(--muted);font-weight:900;letter-spacing:.22px}
+    .chipRow{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    .chip{
+      border:1px solid var(--line);
+      background: color-mix(in srgb, var(--card) 55%, transparent);
+      padding:6px 10px;border-radius:999px;
+      font-size:11px;color:var(--muted);
+      cursor:pointer;
+      user-select:none;
+      transition: background .12s var(--ease), transform .12s var(--ease);
+    }
+    .chip:hover{background: color-mix(in srgb, var(--card) 80%, transparent); transform: translateY(-1px);}
+    .chip.active{border-color: color-mix(in srgb, var(--accent) 55%, transparent); color: var(--text);}
+
+    .notesGrid{display:grid;gap:10px;padding:12px}
+    @media (min-width: 980px){ .notesGrid{grid-template-columns: repeat(2, minmax(0,1fr));} }
+
+    .noteCard{padding:12px}
+    .noteTop{display:flex;gap:10px;align-items:flex-start;justify-content:space-between}
+    .noteTitle{font-weight:1000}
+    .noteText{margin-top:8px;color:var(--text);font-size:12px;line-height:1.35;white-space:pre-wrap}
+    .noteTags{margin-top:10px;display:flex;gap:6px;flex-wrap:wrap}
+    .tag{
+      font-size:10px;
+      padding:3px 8px;border-radius:999px;
+      border:1px solid var(--line);
+      color:var(--muted);
+      background: color-mix(in srgb, var(--card) 50%, transparent);
+    }
+
+    .imgGrid{margin-top:10px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+    .imgThumb{
+      width:100%;aspect-ratio: 4/3;object-fit:cover;
+      border-radius:12px;border:1px solid var(--line);
+      cursor:zoom-in;
+      background: color-mix(in srgb, var(--card) 60%, transparent);
+    }
+
+    .modal{
+      position:fixed;inset:0;display:none;place-items:center;
+      background: rgba(0,0,0,.55);
+      z-index:9999;
+      padding:18px;
+    }
+    .modal.open{display:grid}
+    .modalInner{
+      max-width: min(1100px, 96vw);
+      max-height: min(740px, 88vh);
+      border-radius: 18px;
+      overflow:hidden;
+      border:1px solid rgba(255,255,255,.18);
+      box-shadow: 0 30px 90px rgba(0,0,0,.45);
+      background: rgba(0,0,0,.2);
+      backdrop-filter: blur(16px);
+    }
+    .modalInner img{width:100%;height:100%;object-fit:contain;display:block;background:#0b0f1a}
+    .modalClose{
+      position:fixed;top:14px;right:14px;
+      border:1px solid rgba(255,255,255,.22);
+      background: rgba(0,0,0,.35);
+      color:#fff;
+      border-radius:14px;
+      padding:10px 12px;
+      cursor:pointer;
+      font-weight:900;
+    }
+
+    /* =========================
+       Fire (gold) - slightly more “pro”
+       ========================= */
+    .goldBadge:before{
+      content:"";
+      position:absolute;inset:-40%;
+      background:
+        radial-gradient(closest-side, color-mix(in srgb, var(--warn) 55%, transparent), transparent 65%),
+        radial-gradient(closest-side, color-mix(in srgb, #ff6a00 38%, transparent), transparent 60%);
+      opacity:.45;
+      filter: blur(10px);
+      animation: goldGlow 1.6s var(--ease) infinite;
+      pointer-events:none;
+    }
+    @keyframes goldGlow{
+      0%{transform: translate(-6px, 2px) scale(.96); opacity:.35}
+      50%{transform: translate(6px, -2px) scale(1.04); opacity:.55}
+      100%{transform: translate(-6px, 2px) scale(.96); opacity:.35}
+    }
+
   </style>
 </head>
-
 <body>
   <div class="wrap">
     <div class="topbar">
@@ -332,16 +330,7 @@
         <h1>Trading Sessions Dashboard</h1>
         <div class="subtitle">Live clocks • live windows • countdowns (Paris-based) • mobile-first</div>
       </div>
-
-      <div class="ctrls">
-        <div class="selectWrap" title="Theme">
-          <select class="select" id="themeSel">
-            <option value="midnight">Midnight</option>
-            <option value="slate">Slate</option>
-            <option value="light">Light</option>
-          </select>
-        </div>
-
+      <div class="right">
         <a class="btn" href="./editor.html" title="Edit config">
           ✏️ <span>Open Editor</span>
         </a>
@@ -349,19 +338,19 @@
     </div>
 
     <div class="grid cards">
-      <div class="card glass" id="cardParis">
+      <div class="card" id="cardParis">
         <div class="clockLabel">Paris Time</div>
         <div class="clockTime" id="tParis">--:--:--</div>
         <div class="clockMeta" id="dParis">--</div>
       </div>
 
-      <div class="card glass" id="cardNY">
+      <div class="card" id="cardNY">
         <div class="clockLabel">New York Time</div>
         <div class="clockTime" id="tNY">--:--:--</div>
         <div class="clockMeta" id="dNY">--</div>
       </div>
 
-      <div class="card glass" id="cardIST">
+      <div class="card" id="cardIST">
         <div class="clockLabel">IST Time</div>
         <div class="clockTime" id="tIST">--:--:--</div>
         <div class="clockMeta" id="dIST">--</div>
@@ -378,7 +367,43 @@
         <input type="checkbox" id="onlyGold" />
         Only GOLDEN
       </label>
+      <label class="toggle" title="Notify me when a session becomes LIVE">
+        <input type="checkbox" id="notifyToggle" />
+        Notifications
+      </label>
     </div>
+
+    
+    <div class="notesWrap glass" id="notesPanel">
+      <div class="notesHeader">
+        <h3>NOTES (Day + tags)</h3>
+        <div class="chipRow">
+          <div class="selectWrap" title="Day">
+            <select class="select" id="notesDay">
+              <option value="Mon">Mon</option>
+              <option value="Tue">Tue</option>
+              <option value="Wed">Wed</option>
+              <option value="Thu">Thu</option>
+              <option value="Fri">Fri</option>
+              <option value="Sat">Sat</option>
+              <option value="Sun">Sun</option>
+            </select>
+          </div>
+          <input class="search" style="max-width:240px" id="tagSearch" placeholder="Filter tags..." />
+        </div>
+      </div>
+      <div class="notesHeader" style="padding-top:0;border-top:1px solid var(--line);border-radius:0 0 var(--radius) var(--radius);">
+        <div class="chipRow" id="tagChips"></div>
+        <div class="mini muted" id="notesMeta">—</div>
+      </div>
+      <div class="notesGrid" id="notesGrid"></div>
+    </div>
+
+    <div class="modal" id="imgModal" aria-hidden="true">
+      <button class="modalClose" id="modalClose">✕</button>
+      <div class="modalInner glass"><img id="modalImg" alt="Note image" /></div>
+    </div>
+
 
     <div class="panelTitle">
       <h2>LIVE NOW</h2>
@@ -386,12 +411,12 @@
     </div>
 
     <div class="mobileList" id="liveMobile"></div>
-    <div class="tableWrap glass desktopOnly">
+    <div class="tableWrap">
       <table>
         <thead>
           <tr>
             <th style="width:170px">Session</th>
-            <th style="width:320px">Pair</th>
+            <th style="width:250px">Pair</th>
             <th style="width:130px">Chart TF</th>
             <th style="width:190px">Best Window (Paris)</th>
             <th style="width:190px">IST Window</th>
@@ -411,12 +436,12 @@
     </div>
 
     <div class="mobileList" id="allMobile"></div>
-    <div class="tableWrap glass desktopOnly">
+    <div class="tableWrap">
       <table>
         <thead>
           <tr>
             <th style="width:170px">Session</th>
-            <th style="width:320px">Pair</th>
+            <th style="width:250px">Pair</th>
             <th style="width:130px">Chart TF</th>
             <th style="width:190px">Best Window (Paris)</th>
             <th style="width:190px">IST Window</th>
@@ -432,25 +457,6 @@
   </div>
 
 <script>
-  // =========================
-  // Theme selection
-  // =========================
-  const THEME_KEY = "tsd_theme_v1";
-  function applyTheme(theme){
-    document.documentElement.setAttribute("data-theme", theme);
-    localStorage.setItem(THEME_KEY, theme);
-  }
-  function initTheme(defaultTheme){
-    const saved = localStorage.getItem(THEME_KEY);
-    const theme = saved || defaultTheme || "midnight";
-    applyTheme(theme);
-    const sel = document.getElementById("themeSel");
-    if(sel) sel.value = theme;
-  }
-
-  // =========================
-  // Time / windows logic
-  // =========================
   const TZ_PARIS = "Europe/Paris";
   const TZ_NY = "America/New_York";
   const TZ_IST = "Asia/Kolkata";
@@ -465,12 +471,14 @@
   const dParisF = fmtDate(TZ_PARIS), dNYF = fmtDate(TZ_NY), dISTF = fmtDate(TZ_IST);
 
   function parseHHMM(s){
-    const t = String(s||"").trim().toUpperCase().replace(":", "H");
+    // supports "00H30", "00:30", "00H30 " etc.
+    const t = s.trim().toUpperCase().replace(":", "H");
     const [hh, mm] = t.split("H");
     return { h: Number(hh), m: Number(mm) };
   }
 
   function windowsFromText(text){
+    // "01H00 - 05H00 / 14H00 - 18H00"
     return String(text||"")
       .split("/")
       .map(x => x.trim())
@@ -478,32 +486,35 @@
       .map(seg=>{
         const [a,b] = seg.split("-").map(x=>x.trim());
         if(!a || !b) return null;
-        return { s: parseHHMM(a), e: parseHHMM(b), label: `${a} - ${b}` };
+        const s = parseHHMM(a);
+        const e = parseHHMM(b);
+        return { s, e, label: `${a} - ${b}` };
       })
       .filter(Boolean);
   }
 
   function nowInTZ(tz){
+    // get "now" parts in tz by formatting and re-parsing (safe enough for daily windows)
     const parts = new Intl.DateTimeFormat("en-GB", {
       timeZone: tz, year:"numeric", month:"2-digit", day:"2-digit",
       hour:"2-digit", minute:"2-digit", second:"2-digit", hour12:false
     }).formatToParts(new Date()).reduce((acc,p)=> (acc[p.type]=p.value, acc), {});
-    return {
-      y: Number(parts.year),
-      mo: Number(parts.month),
-      d: Number(parts.day),
-      h: Number(parts.hour),
-      mi: Number(parts.minute),
-      se: Number(parts.second)
-    };
+    const y = Number(parts.year), mo = Number(parts.month), d = Number(parts.day);
+    const h = Number(parts.hour), mi = Number(parts.minute), se = Number(parts.second);
+    return { y, mo, d, h, mi, se };
   }
 
   function msUntilInParis(targetHM){
+    // milliseconds until today's (or tomorrow's) target time in Paris tz
     const n = nowInTZ(TZ_PARIS);
+    const now = Date.now();
+    const target = new Date(`${n.y}-${String(n.mo).padStart(2,"0")}-${String(n.d).padStart(2,"0")}T00:00:00`);
+    // target is local time; we just need relative comparisons, so we compute using minutes in tz via parts:
+    // We'll compute diff purely by hm minutes in paris day:
     const nowMin = n.h*60 + n.mi + n.se/60;
     const tMin = targetHM.h*60 + targetHM.m;
     let deltaMin = tMin - nowMin;
-    if(deltaMin < 0) deltaMin += 24*60;
+    if(deltaMin < 0) deltaMin += 24*60; // tomorrow
     return Math.max(0, deltaMin*60*1000);
   }
 
@@ -512,15 +523,24 @@
     const nowMin = n.h*60 + n.mi + n.se/60;
     const sMin = win.s.h*60 + win.s.m;
     const eMin = win.e.h*60 + win.e.m;
+    // handle wrap-around windows (rare)
     if(eMin >= sMin) return nowMin >= sMin && nowMin <= eMin;
     return (nowMin >= sMin) || (nowMin <= eMin);
   }
 
   function countdownForRow(wins){
+    // wins = [{s,e,label}, ...] in Paris time
+    // status:
+    // LIVE if within any window
+    // otherwise UPCOMING (starts in)
+    // countdown = ends in / starts in for nearest relevant
     const live = wins.find(withinWindowParis);
     if(live){
-      return { status:"LIVE", ms: msUntilInParis(live.e), mode:"ends" };
+      // ends in
+      const ms = msUntilInParis(live.e);
+      return { status:"LIVE", ms, mode:"ends" };
     }
+    // next start (choose minimum ms until start)
     let best = null;
     for(const w of wins){
       const ms = msUntilInParis(w.s);
@@ -545,7 +565,7 @@
     else if(s.includes("london") && s.includes("overlap")) c = "heat-overlap";
     else if(s.includes("london")) c = "heat-london";
     else if(s.includes("new york")) c = "heat-ny";
-    if(golden) c += " heat-goldGlow";
+    if(golden) c += " heat-gold";
     return c.trim();
   }
 
@@ -559,82 +579,27 @@
     return `<a class="journalLink" href="${url}" target="_blank" rel="noopener">Journal ↗</a>`;
   }
 
-  // =========================
-  // Pair icons (emoji-based, zero external assets)
-  // =========================
-  const CCY_EMOJI = {
-    USD:"🇺🇸", EUR:"🇪🇺", GBP:"🇬🇧", JPY:"🇯🇵", AUD:"🇦🇺", NZD:"🇳🇿",
-    CAD:"🇨🇦", CHF:"🇨🇭", SEK:"🇸🇪", NOK:"🇳🇴", DKK:"🇩🇰",
-    XAU:"🟡", XAG:"🥈", BTC:"₿", ETH:"◇"
-  };
-
-  function extractCorePairLabel(raw){
-    const s = String(raw||"").trim();
-    // take first token before spaces
-    const token = s.split(" ")[0];
-    // strip common suffixes/prefixes (keep letters/numbers)
-    return token.replace(/[^A-Za-z0-9]/g,"").toUpperCase();
-  }
-
-  function pairIconHTML(pair){
-    const core = extractCorePairLabel(pair);
-    if(core.startsWith("XAU")) return `<span class="pairIcon" title="Gold">🟡</span>`;
-    if(core.length >= 6){
-      const base = core.slice(0,3);
-      const quote = core.slice(3,6);
-      const b = CCY_EMOJI[base] || base;
-      const q = CCY_EMOJI[quote] || quote;
-      // show base flag; tooltip includes pair
-      return `<span class="pairIcon" title="${base}/${quote}">${b}</span>`;
-    }
-    // fallback
-    return `<span class="pairIcon" title="Pair">📈</span>`;
-  }
-
-  // =========================
-  // Rendering
-  // =========================
-  let CFG = { schemaVersion: 2, defaultTheme: "midnight", rows: [] };
-
-  async function loadConfig(){
-    const res = await fetch("./config.json?x=" + Date.now());
-    const json = await res.json();
-    if(!json.rows) json.rows = [];
-    json.rows = json.rows.map(r=>({
-      session: r.session ?? "",
-      pair: r.pair ?? "",
-      chartTF: r.chartTF ?? r.chartTimeFrame ?? "",
-      bestWindowParis: r.bestWindowParis ?? r.bestCTE ?? "",
-      istWindow: r.istWindow ?? "",
-      golden: !!r.golden,
-      tightRules: r.tightRules ?? "",
-      comments: r.comments ?? "",
-      journal: r.journal ?? ""
-    }));
-    return json;
-  }
-
-  function rowHTML(r){
+  function rowHTML(r, liveOnly=false){
     const wins = windowsFromText(r.bestWindowParis);
     const cd = countdownForRow(wins);
     const countdownTxt = `${cd.mode} in ${msToHHMMSS(cd.ms)}`;
 
+    const isLive = cd.status === "LIVE";
+    if(liveOnly && !isLive) return "";
+    const rowId = `${(r.session||"").trim()}|${(r.pair||"").trim()}|${(r.bestWindowParis||"").trim()}`;
+
     const heat = heatClass(r.session, !!r.golden);
-    const gold = r.golden ? `<span class="goldBadge"><span class="flame">🔥</span> GOLD</span>` : "";
+    const gold = r.golden ? `<span class="goldBadge">GOLD</span>` : "";
     const j = journalAnchor(r.journal);
-    const icon = pairIconHTML(r.pair);
 
     return `
-      <tr class="${heat}">
+      <tr class="${heat} isExpandable" data-rowid="${rowId}">
         <td>${r.session||""}</td>
         <td>
-          <div class="pairRow">
-            ${icon}
+          <div class="pair">
             <span>${r.pair||""}</span>
-            <span class="pairMeta">
-              ${gold}
-              ${j}
-            </span>
+            ${gold}
+            ${j}
           </div>
         </td>
         <td>${r.chartTF||""}</td>
@@ -642,8 +607,8 @@
         <td>${r.istWindow||""}</td>
         <td>${statusPill(cd.status)}</td>
         <td>${countdownTxt}</td>
-        <td>${(r.tightRules||"").replace(/\n/g,"<br>")}</td>
-        <td>${(r.comments||"").replace(/\n/g,"<br>")}</td>
+        <td><div class="cellClip">${(r.tightRules||"").replace(/\n/g,"<br>")}</div></td>
+        <td><div class="cellClip">${(r.comments||"").replace(/\n/g,"<br>")}</div></td>
       </tr>
     `;
   }
@@ -652,16 +617,15 @@
     const wins = windowsFromText(r.bestWindowParis);
     const cd = countdownForRow(wins);
     const heat = heatClass(r.session, !!r.golden);
-    const gold = r.golden ? ` <span class="goldBadge"><span class="flame">🔥</span> GOLD</span>` : "";
+    const gold = r.golden ? ` <span class="goldBadge">GOLD</span>` : "";
     const j = r.journal ? `<a class="journalLink" href="${r.journal}" target="_blank" rel="noopener">Journal ↗</a>` : "";
     const countdownTxt = `${cd.mode} in ${msToHHMMSS(cd.ms)}`;
-    const icon = pairIconHTML(r.pair);
 
     return `
-      <div class="mCard glass ${heat}">
+      <div class="mCard ${heat}">
         <div class="mTop">
           <div>
-            <div class="mPair">${icon}<span>${r.pair||""}</span>${gold}</div>
+            <div class="mPair">${r.pair||""}${gold}</div>
             <div class="mMeta">${r.session||""} • ${r.chartTF||""}</div>
           </div>
           <div>${j}</div>
@@ -676,6 +640,152 @@
       </div>
     `;
   }
+
+  let CFG = { rows: [] };
+
+  async function loadConfig(){
+    const res = await fetch("./config.json?x=" + Date.now());
+    const json = await res.json();
+    if(!json.rows) json.rows = [];
+    // normalize fields
+    json.rows = json.rows.map(r=>({
+      session: r.session ?? "",
+      pair: r.pair ?? "",
+      chartTF: r.chartTF ?? r.chartTimeFrame ?? "",
+      bestWindowParis: r.bestWindowParis ?? r.bestCTE ?? "",
+      istWindow: r.istWindow ?? "",
+      golden: !!r.golden,
+      tightRules: r.tightRules ?? "",
+      comments: r.comments ?? "",
+      journal: r.journal ?? ""
+    }));
+    return json;
+  }
+
+
+  // =========================
+  // Notes (notes.json)
+  // =========================
+  let NOTES = {}; // {Mon:[{title,tags,text,images}], ...}
+  const NOTES_TAG_KEY = "tsd_notes_tags_v1";
+
+  function parisWeekdayShort(){
+    const s = new Intl.DateTimeFormat("en-GB",{ timeZone: TZ_PARIS, weekday:"short" }).format(new Date());
+    // en-GB gives Mon/Tue/... perfect
+    return s;
+  }
+
+  function uniq(arr){ return Array.from(new Set(arr)); }
+
+  function loadSelectedTags(){
+    try{ return JSON.parse(localStorage.getItem(NOTES_TAG_KEY) || "[]"); }catch(e){ return []; }
+  }
+  function saveSelectedTags(tags){
+    localStorage.setItem(NOTES_TAG_KEY, JSON.stringify(tags));
+  }
+
+  async function loadNotes(){
+    try{
+      const res = await fetch("./notes.json?x=" + Date.now());
+      NOTES = await res.json();
+    }catch(e){
+      NOTES = {};
+    }
+  }
+
+  function noteCardHTML(n){
+    const tags = (n.tags||[]).map(t=>`<span class="tag">${escapeHtml(t)}</span>`).join("");
+    const imgs = (n.images||[]).map(src=>`<img class="imgThumb" src="${src}" data-img="${src}" alt="note image" />`).join("");
+    const hasImgs = (n.images||[]).length > 0;
+    const body = `
+      <div class="noteCard glass">
+        <div class="noteTop">
+          <div>
+            <div class="noteTitle">${escapeHtml(n.title||"Note")}</div>
+            <div class="noteText">${escapeHtml(n.text||"")}</div>
+            <div class="noteTags">${tags}</div>
+          </div>
+          <div class="muted" style="font-size:12px">📌</div>
+        </div>
+        ${hasImgs ? `<div class="imgGrid">${imgs}</div>` : ``}
+      </div>
+    `;
+    return body;
+  }
+
+  function renderNotes(){
+    const panel = document.getElementById("notesPanel");
+    if(!panel) return;
+
+    const day = document.getElementById("notesDay").value;
+    const tagQ = document.getElementById("tagSearch").value.trim().toLowerCase();
+
+    const dayNotes = Array.isArray(NOTES?.[day]) ? NOTES[day] : [];
+    const allTags = uniq(dayNotes.flatMap(n => (n.tags||[])));
+
+    let selected = loadSelectedTags();
+    // keep only tags present today
+    selected = selected.filter(t => allTags.includes(t));
+
+    // build chips (filtered by tag search)
+    const chipContainer = document.getElementById("tagChips");
+    const visibleTags = allTags.filter(t => !tagQ || t.toLowerCase().includes(tagQ));
+    chipContainer.innerHTML = visibleTags.map(t => {
+      const active = selected.includes(t) ? "active" : "";
+      return `<span class="chip ${active}" data-tag="${escapeHtml(t)}">${escapeHtml(t)}</span>`;
+    }).join("") || `<span class="muted" style="font-size:12px">No tags for ${day} yet.</span>`;
+
+    // filter notes by selected tags
+    let notes = dayNotes.slice();
+    if(selected.length){
+      notes = notes.filter(n => selected.every(t => (n.tags||[]).includes(t)));
+    }
+
+    document.getElementById("notesMeta").textContent = `${notes.length} note(s)`;
+
+    const grid = document.getElementById("notesGrid");
+    grid.innerHTML = notes.map(noteCardHTML).join("") || `<div class="muted">No notes for this day (or filters).</div>`;
+
+    // persist selection
+    saveSelectedTags(selected);
+  }
+
+  // =========================
+  // Notifications (LIVE)
+  // =========================
+  const NOTIFY_KEY = "tsd_notify_v1";
+  let prevLiveIds = new Set();
+
+  function notifyEnabled(){
+    return localStorage.getItem(NOTIFY_KEY) === "1";
+  }
+
+  async function requestNotifyPermission(){
+    if(!("Notification" in window)) return false;
+    if(Notification.permission === "granted") return true;
+    if(Notification.permission === "denied") return false;
+    const p = await Notification.requestPermission();
+    return p === "granted";
+  }
+
+  function sendLiveNotification(rows){
+    if(!rows.length) return;
+    const title = "Session LIVE";
+    const body = rows.length === 1
+      ? `${rows[0].pair} is LIVE now (${rows[0].session})`
+      : `${rows.length} pairs are LIVE now`;
+    try{
+      if("Notification" in window && Notification.permission === "granted"){
+        new Notification(title, { body });
+      }else{
+        alert(body);
+      }
+    }catch(e){
+      // fallback
+      alert(body);
+    }
+  }
+
 
   function render(){
     const q = document.getElementById("q").value.trim().toLowerCase();
@@ -698,15 +808,28 @@
     const liveRows = rows.filter(r => countdownForRow(windowsFromText(r.bestWindowParis)).status === "LIVE");
     document.getElementById("liveMeta").textContent = `${liveRows.length} live pair(s)`;
 
-    // LIVE
-    document.getElementById("liveBody").innerHTML = liveRows.map(rowHTML).join("") || `
+    // notify on NEW LIVE rows
+    try{
+      const liveIds = new Set(liveRows.map(r => `${(r.session||"").trim()}|${(r.pair||"").trim()}|${(r.bestWindowParis||"").trim()}`));
+      const newlyLive = liveRows.filter(r => !prevLiveIds.has(`${(r.session||"").trim()}|${(r.pair||"").trim()}|${(r.bestWindowParis||"").trim()}`));
+      if(notifyEnabled() && newlyLive.length){
+        // only notify if tab is visible OR user explicitly enabled (we still notify either way)
+        sendLiveNotification(newlyLive);
+      }
+      prevLiveIds = liveIds;
+    }catch(e){}
+
+
+    // LIVE table
+    document.getElementById("liveBody").innerHTML = liveRows.map(r => rowHTML(r, true)).join("") || `
       <tr><td colspan="9" class="muted">No LIVE pairs right now.</td></tr>
     `;
     document.getElementById("liveMobile").innerHTML = liveRows.map(mobileCardHTML).join("") || `<div class="muted">No LIVE pairs right now.</div>`;
 
-    // ALL (optionally live only)
+    // ALL table (optionally live only)
     const finalRows = onlyLive ? liveRows : rows;
-    document.getElementById("allBody").innerHTML = finalRows.map(rowHTML).join("") || `
+
+    document.getElementById("allBody").innerHTML = finalRows.map(r => rowHTML(r)).join("") || `
       <tr><td colspan="9" class="muted">No rows match your filters.</td></tr>
     `;
     document.getElementById("allMobile").innerHTML = finalRows.map(mobileCardHTML).join("") || `<div class="muted">No rows match your filters.</div>`;
@@ -725,11 +848,6 @@
 
   async function main(){
     CFG = await loadConfig();
-    initTheme(CFG.defaultTheme);
-
-    // theme change
-    document.getElementById("themeSel").addEventListener("change", (e)=> applyTheme(e.target.value));
-
     tickClocks();
     render();
     setInterval(()=>{ tickClocks(); render(); }, 1000);

@@ -8,7 +8,8 @@
       "istWindow": "05H00 - 11H00",
       "golden": false,
       "tightRules": "",
-      "comments": ""
+      "comments": "",
+      "journal": ""
     },
     {
       "session": "Asian Session",
@@ -18,7 +19,8 @@
       "istWindow": "05H00 - 10H00",
       "golden": false,
       "tightRules": "",
-      "comments": ""
+      "comments": "",
+      "journal": ""
     },
     {
       "session": "Asian Session",
@@ -28,7 +30,8 @@
       "istWindow": "05H30 - 09H30 / 18H30 - 22H30",
       "golden": false,
       "tightRules": "",
-      "comments": ""
+      "comments": "",
+      "journal": ""
     },
     {
       "session": "Asian Session",
@@ -38,7 +41,8 @@
       "istWindow": "08H00 - 14H00",
       "golden": false,
       "tightRules": "",
-      "comments": ""
+      "comments": "",
+      "journal": ""
     },
     {
       "session": "London Session",
@@ -48,7 +52,8 @@
       "istWindow": "12H30 - 18H30",
       "golden": false,
       "tightRules": "",
-      "comments": ""
+      "comments": "",
+      "journal": ""
     },
     {
       "session": "London Session",
@@ -58,7 +63,8 @@
       "istWindow": "12H30 - 18H30",
       "golden": false,
       "tightRules": "",
-      "comments": ""
+      "comments": "",
+      "journal": ""
     },
     {
       "session": "London Session",
@@ -68,7 +74,8 @@
       "istWindow": "12H30 - 18H30",
       "golden": false,
       "tightRules": "",
-      "comments": ""
+      "comments": "",
+      "journal": ""
     },
     {
       "session": "London Session",
@@ -78,7 +85,8 @@
       "istWindow": "12H30 - 22H30",
       "golden": false,
       "tightRules": "",
-      "comments": ""
+      "comments": "",
+      "journal": ""
     },
     {
       "session": "London–NY overlap",
@@ -88,7 +96,8 @@
       "istWindow": "18H00 - 20H30",
       "golden": true,
       "tightRules": "",
-      "comments": "GOLD 🔥"
+      "comments": "GOLD 🔥",
+      "journal": ""
     },
     {
       "session": "London–NY overlap",
@@ -98,7 +107,8 @@
       "istWindow": "18H00 - 20H30",
       "golden": true,
       "tightRules": "",
-      "comments": "GOLD 🔥"
+      "comments": "GOLD 🔥",
+      "journal": ""
     },
     {
       "session": "London–NY overlap",
@@ -108,7 +118,8 @@
       "istWindow": "18H00 - 20H30",
       "golden": true,
       "tightRules": "Only trade after NY open\nRequire:\nLiquidity sweep\nStrong displacement\nClean FVG / pullback\nLimit trades (1–2 max)",
-      "comments": "GOLD 🔥"
+      "comments": "GOLD 🔥",
+      "journal": ""
     },
     {
       "session": "New York Session",
@@ -118,7 +129,8 @@
       "istWindow": "18H30 - 22H30",
       "golden": false,
       "tightRules": "",
-      "comments": "Paris Time 15H30 is New York USA time 09H30"
+      "comments": "Paris Time 15H30 is New York USA time 09H30",
+      "journal": ""
     },
     {
       "session": "New York Session",
@@ -128,7 +140,8 @@
       "istWindow": "18H30 - 23H00",
       "golden": false,
       "tightRules": "",
-      "comments": "Paris Time 15H30 is New York USA time 09H30"
+      "comments": "Paris Time 15H30 is New York USA time 09H30",
+      "journal": ""
     }
   ]
 }

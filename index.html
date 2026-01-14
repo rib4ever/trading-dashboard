@@ -12,147 +12,200 @@
       --text:#e5e7eb;
       --muted:#9ca3af;
       --line:rgba(255,255,255,.10);
-      --accent:#60a5fa;
-      --gold:#f59e0b;
-      --live:#22c55e;
-      --warn:#f97316;
-      --shadow: 0 18px 50px rgba(0,0,0,.35);
+      --shadow:0 18px 50px rgba(0,0,0,.35);
       --radius:16px;
+
+      --live:#22c55e;
+      --up:#f59e0b;
+      --soon:#60a5fa;
+
+      --asia: rgba(96,165,250,.14);
+      --london: rgba(34,197,94,.12);
+      --overlap: rgba(245,158,11,.14);
+      --ny: rgba(168,85,247,.14);
+
+      --gold: rgba(245,158,11,.18);
     }
+
     *{box-sizing:border-box}
     body{
       margin:0;
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-      background: radial-gradient(1200px 800px at 20% 0%, rgba(96,165,250,.18), transparent 50%),
-                  radial-gradient(900px 700px at 90% 20%, rgba(245,158,11,.14), transparent 50%),
-                  var(--bg);
+      font-family: system-ui,-apple-system,Segoe UI,Roboto,Arial;
+      background:
+        radial-gradient(1200px 800px at 20% 0%, rgba(96,165,250,.10), transparent 60%),
+        radial-gradient(900px 700px at 90% 20%, rgba(245,158,11,.10), transparent 60%),
+        radial-gradient(900px 700px at 50% 100%, rgba(34,197,94,.08), transparent 60%),
+        var(--bg);
       color:var(--text);
     }
-    a{color:var(--accent); text-decoration:none}
-    .wrap{max-width:1280px;margin:0 auto;padding:22px}
-    .topbar{
-      display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;
-      margin-bottom:14px;
-    }
+
+    .wrap{max-width:1200px;margin:0 auto;padding:18px 14px 34px}
+    .topbar{display:flex;gap:12px;align-items:flex-end;justify-content:space-between;flex-wrap:wrap}
     h1{margin:0;font-size:22px;letter-spacing:.2px}
     .subtitle{color:var(--muted);font-size:12px;margin-top:6px}
+
     .btn{
       border:1px solid var(--line);
       background:rgba(255,255,255,.04);
       color:var(--text);
       padding:10px 12px;border-radius:12px;
       cursor:pointer;
+      transition: transform .12s ease, background .12s ease;
+      text-decoration:none;
+      display:inline-flex;gap:8px;align-items:center;
     }
-    .btn:hover{background:rgba(255,255,255,.06)}
-    .grid{display:grid;gap:12px}
-    .cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+    .btn:hover{background:rgba(255,255,255,.06); transform: translateY(-1px);}
+    .btn:active{transform: translateY(0px);}
+
+    .grid{display:grid;gap:12px;margin-top:14px}
+    .cards{grid-template-columns:repeat(3,minmax(0,1fr))}
+    @media (max-width: 980px){ .cards{grid-template-columns:1fr} }
+
     .card{
-      background:linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.02));
       border:1px solid var(--line);
+      background:linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02));
       border-radius:var(--radius);
-      padding:14px 14px;
       box-shadow:var(--shadow);
+      padding:14px;
       overflow:hidden;
       position:relative;
     }
-    .card::after{
-      content:"";
-      position:absolute; inset:-2px;
-      background: radial-gradient(500px 120px at 20% 0%, rgba(96,165,250,.15), transparent 60%);
-      pointer-events:none;
-    }
-    .label{color:var(--muted);font-size:12px}
-    .time{font-variant-numeric:tabular-nums;font-size:26px;font-weight:800;margin-top:6px}
-    .sub{color:var(--muted);font-size:12px;margin-top:6px}
-    .panel{
-      background:rgba(255,255,255,.03);
+    .clockLabel{font-size:12px;color:var(--muted)}
+    .clockTime{font-size:28px;font-weight:800;letter-spacing:.5px;margin-top:4px}
+    .clockMeta{margin-top:6px;font-size:12px;color:var(--muted)}
+
+    .pill{
+      display:inline-flex;align-items:center;gap:8px;
       border:1px solid var(--line);
-      border-radius:var(--radius);
-      padding:14px;
-      box-shadow:var(--shadow);
+      border-radius:999px;
+      padding:6px 10px;
+      font-size:12px;
+      background:rgba(255,255,255,.03);
     }
-    .panelTitle{display:flex;align-items:center;gap:10px;margin-bottom:10px}
-    .dot{width:10px;height:10px;border-radius:50%;background:var(--live);box-shadow:0 0 0 6px rgba(34,197,94,.12)}
-    .panelTitle h2{margin:0;font-size:14px;letter-spacing:.2px}
-    .chips{display:flex;gap:8px;flex-wrap:wrap}
-    .chip{
+    .dot{width:8px;height:8px;border-radius:999px;background:var(--muted);box-shadow:0 0 0 3px rgba(255,255,255,.02)}
+    .dot.live{background:var(--live)}
+    .dot.up{background:var(--up)}
+    .dot.soon{background:var(--soon)}
+
+    .panelTitle{display:flex;align-items:center;justify-content:space-between;margin-top:16px;margin-bottom:8px}
+    .panelTitle h2{margin:0;font-size:14px;color:var(--muted);font-weight:700;letter-spacing:.2px}
+    .panelTitle .mini{font-size:12px;color:var(--muted)}
+
+    /* Desktop table */
+    .tableWrap{
+      border:1px solid var(--line);
+      background:rgba(255,255,255,.02);
+      border-radius:var(--radius);
+      overflow:hidden;
+    }
+    table{width:100%;border-collapse:collapse}
+    thead th{
+      text-align:left;
+      font-size:12px;
+      padding:12px 12px;
+      color:var(--muted);
+      background:rgba(255,255,255,.03);
+      border-bottom:1px solid var(--line);
+      position:sticky; top:0;
+      backdrop-filter: blur(8px);
+    }
+    tbody td{
+      padding:12px 12px;
+      border-bottom:1px solid rgba(255,255,255,.06);
+      vertical-align:top;
+      font-size:13px;
+    }
+    tbody tr{
+      transition: background .15s ease, transform .12s ease;
+    }
+    tbody tr:hover{background:rgba(255,255,255,.03)}
+    tbody tr:last-child td{border-bottom:none}
+
+    .pair{
+      display:flex;gap:8px;align-items:center;font-weight:800;
+    }
+    .goldBadge{
+      font-size:11px;
+      padding:3px 8px;border-radius:999px;
+      border:1px solid rgba(245,158,11,.35);
+      background:rgba(245,158,11,.10);
+      color:#ffd28a;
+    }
+
+    .journalLink{
+      margin-left:auto;
+      font-size:12px;
+      color:var(--muted);
+      text-decoration:none;
+      border:1px solid var(--line);
+      padding:4px 8px;border-radius:10px;
+      background:rgba(255,255,255,.02);
+      transition: background .12s ease;
+      white-space:nowrap;
+    }
+    .journalLink:hover{background:rgba(255,255,255,.05)}
+
+    .statusPill{
+      display:inline-flex;align-items:center;gap:8px;
+      border:1px solid var(--line);
+      border-radius:999px;
+      padding:6px 10px;
+      font-size:12px;
+      font-weight:800;
+    }
+    .status-live{border-color:rgba(34,197,94,.35); background:rgba(34,197,94,.10)}
+    .status-up{border-color:rgba(245,158,11,.35); background:rgba(245,158,11,.10)}
+    .status-soon{border-color:rgba(96,165,250,.35); background:rgba(96,165,250,.10)}
+
+    .heat-asia{background:linear-gradient(90deg,var(--asia), transparent 60%)}
+    .heat-london{background:linear-gradient(90deg,var(--london), transparent 60%)}
+    .heat-overlap{background:linear-gradient(90deg,var(--overlap), transparent 60%)}
+    .heat-ny{background:linear-gradient(90deg,var(--ny), transparent 60%)}
+    .heat-gold{box-shadow: inset 0 0 0 9999px var(--gold)}
+
+    /* Mobile cards (hide table) */
+    .mobileList{display:none}
+    @media (max-width: 900px){
+      .tableWrap{display:none}
+      .mobileList{display:grid;gap:10px}
+      .mCard{
+        border:1px solid var(--line);
+        border-radius:var(--radius);
+        background:rgba(255,255,255,.02);
+        padding:12px;
+      }
+      .mTop{display:flex;gap:10px;align-items:flex-start;justify-content:space-between}
+      .mPair{font-weight:900}
+      .mMeta{color:var(--muted);font-size:12px;margin-top:3px}
+      .mRow{display:flex;gap:10px;margin-top:10px}
+      .mK{width:120px;flex:0 0 120px;color:var(--muted);font-size:12px}
+      .mV{font-size:12px}
+    }
+
+    .searchRow{display:flex;gap:10px;align-items:center;margin-top:12px;flex-wrap:wrap}
+    .search{
+      flex:1;
+      min-width:220px;
       border:1px solid var(--line);
       background:rgba(255,255,255,.03);
       color:var(--text);
-      padding:6px 10px;border-radius:999px;
-      font-size:12px; font-weight:700;
-      cursor:pointer;
-    }
-    .chip.active{border-color:rgba(96,165,250,.6); box-shadow:0 0 0 4px rgba(96,165,250,.10)}
-    .controls{
-      display:flex;gap:10px;flex-wrap:wrap;align-items:center;
-      justify-content:space-between;
-    }
-    .search{
-      flex:1;min-width:220px;
-      display:flex;gap:10px;align-items:center;
-      background:rgba(255,255,255,.03);
-      border:1px solid var(--line);
-      border-radius:14px;padding:10px 12px;
-    }
-    .search input{
-      border:none;outline:none;background:transparent;color:var(--text);width:100%;
-      font-size:13px;
-    }
-    .tableWrap{
-      border:1px solid var(--line);
-      border-radius:var(--radius);
-      overflow:auto;
-      background:rgba(255,255,255,.02);
-      box-shadow:var(--shadow);
-    }
-    table{border-collapse:collapse;width:100%;min-width:1100px}
-    th,td{padding:12px 12px;border-bottom:1px solid rgba(255,255,255,.06);vertical-align:top;font-size:13px}
-    th{
-      position:sticky;top:0;
-      background:rgba(17,24,39,.92);
-      backdrop-filter: blur(10px);
-      text-align:left;
-      font-size:12px;
-      color:#cbd5e1;
-      letter-spacing:.3px;
-    }
-    tr:hover{background:rgba(255,255,255,.03)}
-    tr[data-state="LIVE"]{background:rgba(96,165,250,.10)}
-    tr[data-golden="true"] td:nth-child(2){font-weight:900}
-    .mono{font-variant-numeric:tabular-nums}
-    .small{font-size:12px;color:#cbd5e1}
-    .pill{
-      display:inline-block;
-      padding:5px 10px;border-radius:999px;
-      font-size:12px;font-weight:900;
-      border:1px solid var(--line);
-      background:rgba(255,255,255,.03);
-    }
-    .pill.live{border-color:rgba(34,197,94,.7); box-shadow:0 0 0 4px rgba(34,197,94,.12)}
-    .pill.up{border-color:rgba(249,115,22,.7); box-shadow:0 0 0 4px rgba(249,115,22,.10)}
-    .pill.end{opacity:.8}
-    .goldBadge{
-      display:inline-flex;align-items:center;gap:6px;
-      padding:5px 10px;border-radius:999px;
-      border:1px solid rgba(245,158,11,.55);
-      background:rgba(245,158,11,.10);
-      font-weight:900;font-size:12px;
-    }
-    .activeList{
-      display:flex;gap:10px;flex-wrap:wrap
-    }
-    .activeItem{
-      border:1px solid var(--line);
-      background:rgba(255,255,255,.03);
-      border-radius:14px;
       padding:10px 12px;
-      min-width:240px;
+      border-radius:12px;
+      outline:none;
     }
-    .activeItem .t{font-weight:900}
-    .activeItem .m{color:var(--muted);font-size:12px;margin-top:4px}
-    .footerNote{color:var(--muted);font-size:12px;margin-top:10px}
-    @media (max-width: 980px){ .cards{grid-template-columns:1fr} }
+    .toggle{
+      display:flex;gap:8px;align-items:center;
+      border:1px solid var(--line);
+      border-radius:12px;
+      padding:8px 10px;
+      background:rgba(255,255,255,.03);
+      color:var(--muted);
+      font-size:12px;
+    }
+    .toggle input{accent-color:#60a5fa}
+
+    .muted{color:var(--muted)}
+    .right{display:flex;gap:10px;align-items:center}
   </style>
 </head>
 <body>
@@ -160,257 +213,361 @@
     <div class="topbar">
       <div>
         <h1>Trading Sessions Dashboard</h1>
-        <div class="subtitle">Live clocks • live session windows • countdowns (Paris-based) • Golden pairs highlighted</div>
+        <div class="subtitle">Live clocks • live windows • countdowns (Paris-based) • mobile-first</div>
       </div>
-      <div style="display:flex;gap:10px;flex-wrap:wrap">
-        <a class="btn" href="./editor.html" target="_blank">Open Editor</a>
-        <button class="btn" id="reloadBtn">Reload Data</button>
+      <div class="right">
+        <a class="btn" href="./editor.html" title="Edit config">
+          ✏️ <span>Open Editor</span>
+        </a>
       </div>
     </div>
 
-    <div class="grid">
-      <div class="cards" id="clockCards"></div>
-
-      <div class="panel">
-        <div class="panelTitle">
-          <div class="dot"></div>
-          <h2>ACTIVE RIGHT NOW</h2>
-        </div>
-        <div class="activeList" id="activeNow"></div>
-        <div class="footerNote">Tip: Golden pairs will show a 🟡 and “GOLDEN” badge.</div>
+    <div class="grid cards">
+      <div class="card" id="cardParis">
+        <div class="clockLabel">Paris Time</div>
+        <div class="clockTime" id="tParis">--:--:--</div>
+        <div class="clockMeta" id="dParis">--</div>
       </div>
 
-      <div class="panel">
-        <div class="controls">
-          <div class="search">
-            <span style="color:var(--muted)">🔎</span>
-            <input id="q" placeholder="Search (pair, session, comments, rules)..." />
-          </div>
-          <div class="chips" id="chips"></div>
-        </div>
+      <div class="card" id="cardNY">
+        <div class="clockLabel">New York Time</div>
+        <div class="clockTime" id="tNY">--:--:--</div>
+        <div class="clockMeta" id="dNY">--</div>
       </div>
 
-      <div class="tableWrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Session</th>
-              <th>Currency Pair</th>
-              <th>Chart time Frame</th>
-              <th>Best CTE +1 timeframe (Paris)</th>
-              <th>IST time Zone GMT+5:30</th>
-              <th>Status</th>
-              <th>Countdown</th>
-              <th>Tight Rules</th>
-              <th>Comments</th>
-            </tr>
-          </thead>
-          <tbody id="rows"></tbody>
-        </table>
+      <div class="card" id="cardIST">
+        <div class="clockLabel">IST Time</div>
+        <div class="clockTime" id="tIST">--:--:--</div>
+        <div class="clockMeta" id="dIST">--</div>
       </div>
+    </div>
+
+    <div class="searchRow">
+      <input class="search" id="q" placeholder="Search pair / session (e.g., XAUUSD, London, overlap)..." />
+      <label class="toggle" title="Show only LIVE rows">
+        <input type="checkbox" id="onlyLive" />
+        Only LIVE
+      </label>
+      <label class="toggle" title="Show only GOLDEN rows">
+        <input type="checkbox" id="onlyGold" />
+        Only GOLDEN
+      </label>
+    </div>
+
+    <div class="panelTitle">
+      <h2>LIVE NOW</h2>
+      <div class="mini" id="liveMeta">—</div>
+    </div>
+
+    <div class="mobileList" id="liveMobile"></div>
+    <div class="tableWrap">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:170px">Session</th>
+            <th style="width:250px">Pair</th>
+            <th style="width:130px">Chart TF</th>
+            <th style="width:190px">Best Window (Paris)</th>
+            <th style="width:190px">IST Window</th>
+            <th style="width:120px">Status</th>
+            <th style="width:170px">Countdown</th>
+            <th style="width:240px">Tight Rules</th>
+            <th>Comments</th>
+          </tr>
+        </thead>
+        <tbody id="liveBody"></tbody>
+      </table>
+    </div>
+
+    <div class="panelTitle">
+      <h2>ALL PAIRS</h2>
+      <div class="mini muted">Auto updates every second</div>
+    </div>
+
+    <div class="mobileList" id="allMobile"></div>
+    <div class="tableWrap">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:170px">Session</th>
+            <th style="width:250px">Pair</th>
+            <th style="width:130px">Chart TF</th>
+            <th style="width:190px">Best Window (Paris)</th>
+            <th style="width:190px">IST Window</th>
+            <th style="width:120px">Status</th>
+            <th style="width:170px">Countdown</th>
+            <th style="width:240px">Tight Rules</th>
+            <th>Comments</th>
+          </tr>
+        </thead>
+        <tbody id="allBody"></tbody>
+      </table>
     </div>
   </div>
 
 <script>
-const TZ = { paris:"Europe/Paris", ny:"America/New_York", ist:"Asia/Kolkata" };
-let CFG = null;
-let FILTER = "ALL"; // ALL | LIVE | UPCOMING | ENDED | GOLDEN
-let QUERY = "";
+  const TZ_PARIS = "Europe/Paris";
+  const TZ_NY = "America/New_York";
+  const TZ_IST = "Asia/Kolkata";
 
-function fmtClock(date, timeZone){
-  return new Intl.DateTimeFormat("en-GB",{timeZone,hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false}).format(date);
-}
-function fmtDate(date, timeZone){
-  return new Intl.DateTimeFormat("en-GB",{timeZone,weekday:"short",year:"numeric",month:"short",day:"2-digit"}).format(date);
-}
-function partsInTZ(date, timeZone){
-  const fmt = new Intl.DateTimeFormat("en-GB",{timeZone,year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false});
-  const parts = fmt.formatToParts(date);
-  const get = (t)=> parts.find(p=>p.type===t)?.value;
-  return { hh:+get("hour"), mm:+get("minute"), ss:+get("second") };
-}
-function minutesSinceMidnight(date, timeZone){
-  const p = partsInTZ(date, timeZone);
-  return p.hh*60 + p.mm + p.ss/60;
-}
-// "13H30 - 16H00" or "01H00-05H00 / 14H00-18H00"
-function parseWindows(str){
-  if(!str) return [];
-  return str.split("/").map(s=>s.trim()).filter(Boolean).map(seg=>{
-    const m = seg.match(/(\d{1,2})\s*[H:]\s*(\d{2})\s*-\s*(\d{1,2})\s*[H:]\s*(\d{2})/i);
-    if(!m) return null;
-    return { startMin:(+m[1])*60 + (+m[2]), endMin:(+m[3])*60 + (+m[4]) };
-  }).filter(Boolean);
-}
-function toHMS(totalSeconds){
-  totalSeconds = Math.max(0, Math.floor(totalSeconds));
-  const h = String(Math.floor(totalSeconds/3600)).padStart(2,"0");
-  const m = String(Math.floor((totalSeconds%3600)/60)).padStart(2,"0");
-  const s = String(totalSeconds%60).padStart(2,"0");
-  return `${h}:${m}:${s}`;
-}
-function stateAndCountdown(now, timeZone, windows){
-  if(!windows.length) return { state:"—", countdown:"—" };
-  const nowMin = minutesSinceMidnight(now, timeZone);
+  function fmtTime(tz){
+    return new Intl.DateTimeFormat("en-GB", { timeZone: tz, hour:"2-digit", minute:"2-digit", second:"2-digit" });
+  }
+  function fmtDate(tz){
+    return new Intl.DateTimeFormat("en-GB", { timeZone: tz, weekday:"short", day:"2-digit", month:"short", year:"numeric" });
+  }
+  const fParis = fmtTime(TZ_PARIS), fNY = fmtTime(TZ_NY), fIST = fmtTime(TZ_IST);
+  const dParisF = fmtDate(TZ_PARIS), dNYF = fmtDate(TZ_NY), dISTF = fmtDate(TZ_IST);
 
-  const inWindow = windows.find(w => nowMin >= w.startMin && nowMin < w.endMin);
-  if(inWindow){
-    const secs = (inWindow.endMin - nowMin) * 60;
-    return { state:"LIVE", countdown:`ends in ${toHMS(secs)}` };
+  function parseHHMM(s){
+    // supports "00H30", "00:30", "00H30 " etc.
+    const t = s.trim().toUpperCase().replace(":", "H");
+    const [hh, mm] = t.split("H");
+    return { h: Number(hh), m: Number(mm) };
   }
 
-  const future = windows.map(w=>w.startMin).filter(s=>s > nowMin).sort((a,b)=>a-b)[0];
-  if(future !== undefined){
-    const secs = (future - nowMin) * 60;
-    return { state:"UPCOMING", countdown:`starts in ${toHMS(secs)}` };
+  function windowsFromText(text){
+    // "01H00 - 05H00 / 14H00 - 18H00"
+    return String(text||"")
+      .split("/")
+      .map(x => x.trim())
+      .filter(Boolean)
+      .map(seg=>{
+        const [a,b] = seg.split("-").map(x=>x.trim());
+        if(!a || !b) return null;
+        const s = parseHHMM(a);
+        const e = parseHHMM(b);
+        return { s, e, label: `${a} - ${b}` };
+      })
+      .filter(Boolean);
   }
 
-  const firstTomorrow = windows.map(w=>w.startMin).sort((a,b)=>a-b)[0];
-  const minsToMidnight = (24*60) - nowMin;
-  const secs = (minsToMidnight + firstTomorrow) * 60;
-  return { state:"ENDED", countdown:`next in ${toHMS(secs)}` };
-}
-function pill(state){
-  if(state==="LIVE") return `<span class="pill live">LIVE</span>`;
-  if(state==="UPCOMING") return `<span class="pill up">UPCOMING</span>`;
-  if(state==="ENDED") return `<span class="pill end">ENDED</span>`;
-  return `<span class="pill">${state}</span>`;
-}
-function renderClocks(now){
-  const cards = [
-    { title:"Paris Time", tz:TZ.paris },
-    { title:"New York Time", tz:TZ.ny },
-    { title:"IST Time", tz:TZ.ist }
-  ];
-  document.getElementById("clockCards").innerHTML = cards.map(c=>`
-    <div class="card">
-      <div class="label">${c.title}</div>
-      <div class="time mono">${fmtClock(now,c.tz)}</div>
-      <div class="sub">${fmtDate(now,c.tz)} • ${c.tz}</div>
-    </div>
-  `).join("");
-}
-
-function rowMatches(r, info){
-  const isGolden = !!r.golden;
-  if(FILTER==="LIVE" && info.state!=="LIVE") return false;
-  if(FILTER==="UPCOMING" && info.state!=="UPCOMING") return false;
-  if(FILTER==="ENDED" && info.state!=="ENDED") return false;
-  if(FILTER==="GOLDEN" && !isGolden) return false;
-
-  const hay = [
-    r.session, r.pair, r.chartTF, r.bestWindowParis, r.istWindow, r.tightRules, r.comments
-  ].join(" ").toLowerCase();
-
-  if(QUERY && !hay.includes(QUERY)) return false;
-  return true;
-}
-
-function renderActiveNow(now){
-  const items = (CFG?.rows || []).map(r=>{
-    const windows = parseWindows(r.bestWindowParis || "");
-    const info = stateAndCountdown(now, TZ.paris, windows);
-    return { r, info };
-  }).filter(x=>x.info.state==="LIVE");
-
-  const el = document.getElementById("activeNow");
-  if(!items.length){
-    el.innerHTML = `<div class="small" style="color:var(--muted)">No active windows right now.</div>`;
-    return;
+  function nowInTZ(tz){
+    // get "now" parts in tz by formatting and re-parsing (safe enough for daily windows)
+    const parts = new Intl.DateTimeFormat("en-GB", {
+      timeZone: tz, year:"numeric", month:"2-digit", day:"2-digit",
+      hour:"2-digit", minute:"2-digit", second:"2-digit", hour12:false
+    }).formatToParts(new Date()).reduce((acc,p)=> (acc[p.type]=p.value, acc), {});
+    const y = Number(parts.year), mo = Number(parts.month), d = Number(parts.day);
+    const h = Number(parts.hour), mi = Number(parts.minute), se = Number(parts.second);
+    return { y, mo, d, h, mi, se };
   }
 
-  // Golden first
-  items.sort((a,b)=> (b.r.golden===true)-(a.r.golden===true));
+  function msUntilInParis(targetHM){
+    // milliseconds until today's (or tomorrow's) target time in Paris tz
+    const n = nowInTZ(TZ_PARIS);
+    const now = Date.now();
+    const target = new Date(`${n.y}-${String(n.mo).padStart(2,"0")}-${String(n.d).padStart(2,"0")}T00:00:00`);
+    // target is local time; we just need relative comparisons, so we compute using minutes in tz via parts:
+    // We'll compute diff purely by hm minutes in paris day:
+    const nowMin = n.h*60 + n.mi + n.se/60;
+    const tMin = targetHM.h*60 + targetHM.m;
+    let deltaMin = tMin - nowMin;
+    if(deltaMin < 0) deltaMin += 24*60; // tomorrow
+    return Math.max(0, deltaMin*60*1000);
+  }
 
-  el.innerHTML = items.map(x=>{
-    const g = x.r.golden ? `<span class="goldBadge">🟡 GOLDEN</span>` : ``;
+  function withinWindowParis(win){
+    const n = nowInTZ(TZ_PARIS);
+    const nowMin = n.h*60 + n.mi + n.se/60;
+    const sMin = win.s.h*60 + win.s.m;
+    const eMin = win.e.h*60 + win.e.m;
+    // handle wrap-around windows (rare)
+    if(eMin >= sMin) return nowMin >= sMin && nowMin <= eMin;
+    return (nowMin >= sMin) || (nowMin <= eMin);
+  }
+
+  function countdownForRow(wins){
+    // wins = [{s,e,label}, ...] in Paris time
+    // status:
+    // LIVE if within any window
+    // otherwise UPCOMING (starts in)
+    // countdown = ends in / starts in for nearest relevant
+    const live = wins.find(withinWindowParis);
+    if(live){
+      // ends in
+      const ms = msUntilInParis(live.e);
+      return { status:"LIVE", ms, mode:"ends" };
+    }
+    // next start (choose minimum ms until start)
+    let best = null;
+    for(const w of wins){
+      const ms = msUntilInParis(w.s);
+      if(best === null || ms < best) best = ms;
+    }
+    return { status:"UPCOMING", ms: best ?? 0, mode:"starts" };
+  }
+
+  function msToHHMMSS(ms){
+    const total = Math.max(0, Math.floor(ms/1000));
+    const h = Math.floor(total/3600);
+    const m = Math.floor((total%3600)/60);
+    const s = total%60;
+    const pad = n => String(n).padStart(2,"0");
+    return `${pad(h)}:${pad(m)}:${pad(s)}`;
+  }
+
+  function heatClass(session, golden){
+    const s = (session||"").toLowerCase();
+    let c = "";
+    if(s.includes("asian")) c = "heat-asia";
+    else if(s.includes("london") && s.includes("overlap")) c = "heat-overlap";
+    else if(s.includes("london")) c = "heat-london";
+    else if(s.includes("new york")) c = "heat-ny";
+    if(golden) c += " heat-gold";
+    return c.trim();
+  }
+
+  function statusPill(status){
+    if(status === "LIVE") return `<span class="statusPill status-live"><span class="dot live"></span>LIVE</span>`;
+    return `<span class="statusPill status-up"><span class="dot up"></span>UPCOMING</span>`;
+  }
+
+  function journalAnchor(url){
+    if(!url) return "";
+    return `<a class="journalLink" href="${url}" target="_blank" rel="noopener">Journal ↗</a>`;
+  }
+
+  function rowHTML(r, liveOnly=false){
+    const wins = windowsFromText(r.bestWindowParis);
+    const cd = countdownForRow(wins);
+    const countdownTxt = `${cd.mode} in ${msToHHMMSS(cd.ms)}`;
+
+    const isLive = cd.status === "LIVE";
+    if(liveOnly && !isLive) return "";
+
+    const heat = heatClass(r.session, !!r.golden);
+    const gold = r.golden ? `<span class="goldBadge">GOLD</span>` : "";
+    const j = journalAnchor(r.journal);
+
     return `
-      <div class="activeItem">
-        <div class="t">${x.r.pair} ${x.r.golden ? "🟡" : ""}</div>
-        <div class="m">${x.r.session} • ${x.r.bestWindowParis}</div>
-        <div class="m"><b>${x.info.countdown}</b> ${g}</div>
-      </div>
-    `;
-  }).join("");
-}
-
-function renderRows(now){
-  const tbody = document.getElementById("rows");
-  const rows = (CFG?.rows || []).map(r=>{
-    const windows = parseWindows(r.bestWindowParis || "");
-    const info = stateAndCountdown(now, TZ.paris, windows);
-    return { r, info };
-  }).filter(x=>rowMatches(x.r, x.info));
-
-  tbody.innerHTML = rows.map(x=>{
-    const r = x.r, info = x.info, isGolden = !!r.golden;
-    return `
-      <tr data-state="${info.state}" data-golden="${isGolden}">
-        <td>${r.session || ""}</td>
-        <td><b>${r.pair || ""}</b> ${isGolden ? " 🟡" : ""}</td>
-        <td class="mono">${r.chartTF || ""}</td>
-        <td class="mono">${r.bestWindowParis || ""}</td>
-        <td class="mono">${r.istWindow || ""}</td>
-        <td>${pill(info.state)}</td>
-        <td class="mono">${info.countdown}</td>
-        <td class="small">${(r.tightRules || "").replaceAll("\n","<br>")}</td>
-        <td class="small">${(r.comments || "").replaceAll("\n","<br>")}</td>
+      <tr class="${heat}">
+        <td>${r.session||""}</td>
+        <td>
+          <div class="pair">
+            <span>${r.pair||""}</span>
+            ${gold}
+            ${j}
+          </div>
+        </td>
+        <td>${r.chartTF||""}</td>
+        <td>${r.bestWindowParis||""}</td>
+        <td>${r.istWindow||""}</td>
+        <td>${statusPill(cd.status)}</td>
+        <td>${countdownTxt}</td>
+        <td>${(r.tightRules||"").replace(/\n/g,"<br>")}</td>
+        <td>${(r.comments||"").replace(/\n/g,"<br>")}</td>
       </tr>
     `;
-  }).join("");
-}
-
-async function loadConfig(){
-  const ls = localStorage.getItem("TRADING_DASH_CFG");
-  if(ls){
-    try { return JSON.parse(ls); } catch(e){}
   }
-  const res = await fetch("./config.json", { cache:"no-store" });
-  return res.json();
-}
 
-function renderChips(){
-  const defs = [
-    ["ALL","All"],["LIVE","Live"],["UPCOMING","Upcoming"],["ENDED","Ended"],["GOLDEN","Golden"]
-  ];
-  const el = document.getElementById("chips");
-  el.innerHTML = defs.map(([k,label])=>`
-    <button class="chip ${FILTER===k ? "active":""}" data-k="${k}">${label}</button>
-  `).join("");
-  el.querySelectorAll("button").forEach(b=>{
-    b.addEventListener("click", ()=>{
-      FILTER = b.getAttribute("data-k");
-      renderChips();
-      tick(); // redraw immediately
-    });
-  });
-}
+  function mobileCardHTML(r){
+    const wins = windowsFromText(r.bestWindowParis);
+    const cd = countdownForRow(wins);
+    const heat = heatClass(r.session, !!r.golden);
+    const gold = r.golden ? ` <span class="goldBadge">GOLD</span>` : "";
+    const j = r.journal ? `<a class="journalLink" href="${r.journal}" target="_blank" rel="noopener">Journal ↗</a>` : "";
+    const countdownTxt = `${cd.mode} in ${msToHHMMSS(cd.ms)}`;
 
-function tick(){
-  const now = new Date();
-  renderClocks(now);
-  renderActiveNow(now);
-  renderRows(now);
-}
+    return `
+      <div class="mCard ${heat}">
+        <div class="mTop">
+          <div>
+            <div class="mPair">${r.pair||""}${gold}</div>
+            <div class="mMeta">${r.session||""} • ${r.chartTF||""}</div>
+          </div>
+          <div>${j}</div>
+        </div>
 
-(async function main(){
-  CFG = await loadConfig();
-  renderChips();
+        <div class="mRow"><div class="mK">Paris Window</div><div class="mV">${r.bestWindowParis||""}</div></div>
+        <div class="mRow"><div class="mK">IST Window</div><div class="mV">${r.istWindow||""}</div></div>
+        <div class="mRow"><div class="mK">Status</div><div class="mV">${cd.status} • ${countdownTxt}</div></div>
 
-  document.getElementById("q").addEventListener("input",(e)=>{
-    QUERY = (e.target.value || "").trim().toLowerCase();
-    tick();
-  });
+        ${r.tightRules ? `<div class="mRow"><div class="mK">Rules</div><div class="mV">${String(r.tightRules).replace(/\n/g,"<br>")}</div></div>` : ``}
+        ${r.comments ? `<div class="mRow"><div class="mK">Notes</div><div class="mV">${String(r.comments).replace(/\n/g,"<br>")}</div></div>` : ``}
+      </div>
+    `;
+  }
 
-  document.getElementById("reloadBtn").addEventListener("click", async ()=>{
-    localStorage.removeItem("TRADING_DASH_CFG"); // force load config.json
+  let CFG = { rows: [] };
+
+  async function loadConfig(){
+    const res = await fetch("./config.json?x=" + Date.now());
+    const json = await res.json();
+    if(!json.rows) json.rows = [];
+    // normalize fields
+    json.rows = json.rows.map(r=>({
+      session: r.session ?? "",
+      pair: r.pair ?? "",
+      chartTF: r.chartTF ?? r.chartTimeFrame ?? "",
+      bestWindowParis: r.bestWindowParis ?? r.bestCTE ?? "",
+      istWindow: r.istWindow ?? "",
+      golden: !!r.golden,
+      tightRules: r.tightRules ?? "",
+      comments: r.comments ?? "",
+      journal: r.journal ?? ""
+    }));
+    return json;
+  }
+
+  function render(){
+    const q = document.getElementById("q").value.trim().toLowerCase();
+    const onlyLive = document.getElementById("onlyLive").checked;
+    const onlyGold = document.getElementById("onlyGold").checked;
+
+    let rows = CFG.rows.slice();
+    if(q){
+      rows = rows.filter(r =>
+        (r.pair||"").toLowerCase().includes(q) ||
+        (r.session||"").toLowerCase().includes(q) ||
+        (r.comments||"").toLowerCase().includes(q)
+      );
+    }
+    if(onlyGold){
+      rows = rows.filter(r => !!r.golden);
+    }
+
+    // compute live rows
+    const liveRows = rows.filter(r => countdownForRow(windowsFromText(r.bestWindowParis)).status === "LIVE");
+    document.getElementById("liveMeta").textContent = `${liveRows.length} live pair(s)`;
+
+    // LIVE table
+    document.getElementById("liveBody").innerHTML = liveRows.map(r => rowHTML(r, true)).join("") || `
+      <tr><td colspan="9" class="muted">No LIVE pairs right now.</td></tr>
+    `;
+    document.getElementById("liveMobile").innerHTML = liveRows.map(mobileCardHTML).join("") || `<div class="muted">No LIVE pairs right now.</div>`;
+
+    // ALL table (optionally live only)
+    const finalRows = onlyLive ? liveRows : rows;
+
+    document.getElementById("allBody").innerHTML = finalRows.map(r => rowHTML(r)).join("") || `
+      <tr><td colspan="9" class="muted">No rows match your filters.</td></tr>
+    `;
+    document.getElementById("allMobile").innerHTML = finalRows.map(mobileCardHTML).join("") || `<div class="muted">No rows match your filters.</div>`;
+  }
+
+  function tickClocks(){
+    const now = new Date();
+    document.getElementById("tParis").textContent = fParis.format(now);
+    document.getElementById("tNY").textContent = fNY.format(now);
+    document.getElementById("tIST").textContent = fIST.format(now);
+
+    document.getElementById("dParis").textContent = `${dParisF.format(now)} • ${TZ_PARIS}`;
+    document.getElementById("dNY").textContent = `${dNYF.format(now)} • ${TZ_NY}`;
+    document.getElementById("dIST").textContent = `${dISTF.format(now)} • ${TZ_IST}`;
+  }
+
+  async function main(){
     CFG = await loadConfig();
-    tick();
-  });
+    tickClocks();
+    render();
+    setInterval(()=>{ tickClocks(); render(); }, 1000);
 
-  tick();
-  setInterval(tick, 1000);
-})();
+    document.getElementById("q").addEventListener("input", render);
+    document.getElementById("onlyLive").addEventListener("change", render);
+    document.getElementById("onlyGold").addEventListener("change", render);
+  }
+  main();
 </script>
 </body>
 </html>

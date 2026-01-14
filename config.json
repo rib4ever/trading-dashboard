@@ -1,4 +1,6 @@
 {
+  "schemaVersion": 2,
+  "defaultTheme": "midnight",
   "rows": [
     {
       "session": "Asian Session",

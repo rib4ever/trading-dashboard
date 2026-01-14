@@ -1,0 +1,134 @@
+{
+  "rows": [
+    {
+      "session": "Asian Session",
+      "pair": "AUDUSD",
+      "chartTF": "1H - 4H",
+      "bestWindowParis": "00H30 - 06H30",
+      "istWindow": "05H00 - 11H00",
+      "golden": false,
+      "tightRules": "",
+      "comments": ""
+    },
+    {
+      "session": "Asian Session",
+      "pair": "NZDUSD",
+      "chartTF": "1H - 4H",
+      "bestWindowParis": "00H30 - 05H30",
+      "istWindow": "05H00 - 10H00",
+      "golden": false,
+      "tightRules": "",
+      "comments": ""
+    },
+    {
+      "session": "Asian Session",
+      "pair": "USDJPY",
+      "chartTF": "1H - 4H",
+      "bestWindowParis": "01H00 - 05H00 / 14H00 - 18H00",
+      "istWindow": "05H30 - 09H30 / 18H30 - 22H30",
+      "golden": false,
+      "tightRules": "",
+      "comments": ""
+    },
+    {
+      "session": "Asian Session",
+      "pair": "EURJPY",
+      "chartTF": "30M - 1H - 4H",
+      "bestWindowParis": "03H30 - 09H30",
+      "istWindow": "08H00 - 14H00",
+      "golden": false,
+      "tightRules": "",
+      "comments": ""
+    },
+    {
+      "session": "London Session",
+      "pair": "GBPUSD",
+      "chartTF": "15H - 1H",
+      "bestWindowParis": "08H00 - 14H00",
+      "istWindow": "12H30 - 18H30",
+      "golden": false,
+      "tightRules": "",
+      "comments": ""
+    },
+    {
+      "session": "London Session",
+      "pair": "GBPJPY",
+      "chartTF": "5M - 30M - 1H",
+      "bestWindowParis": "08H00 - 14H00",
+      "istWindow": "12H30 - 18H30",
+      "golden": false,
+      "tightRules": "",
+      "comments": ""
+    },
+    {
+      "session": "London Session",
+      "pair": "EURGBP",
+      "chartTF": "1H - DAILY",
+      "bestWindowParis": "08H00 - 14H00",
+      "istWindow": "12H30 - 18H30",
+      "golden": false,
+      "tightRules": "",
+      "comments": ""
+    },
+    {
+      "session": "London Session",
+      "pair": "EURUSD",
+      "chartTF": "1H - 4H - DAILY",
+      "bestWindowParis": "08H00 - 18H00",
+      "istWindow": "12H30 - 22H30",
+      "golden": false,
+      "tightRules": "",
+      "comments": ""
+    },
+    {
+      "session": "London–NY overlap",
+      "pair": "GBPUSD_continuation",
+      "chartTF": "15H - 1H",
+      "bestWindowParis": "13H30 - 16H00",
+      "istWindow": "18H00 - 20H30",
+      "golden": true,
+      "tightRules": "",
+      "comments": "GOLD 🔥"
+    },
+    {
+      "session": "London–NY overlap",
+      "pair": "EURUSD_real moves",
+      "chartTF": "1H - 4H - DAILY",
+      "bestWindowParis": "13H30 - 16H00",
+      "istWindow": "18H00 - 20H30",
+      "golden": true,
+      "tightRules": "",
+      "comments": "GOLD 🔥"
+    },
+    {
+      "session": "London–NY overlap",
+      "pair": "XAUUSD (Gold)_expansions",
+      "chartTF": "5M - 15M - 1H",
+      "bestWindowParis": "13H30 - 16H00",
+      "istWindow": "18H00 - 20H30",
+      "golden": true,
+      "tightRules": "Only trade after NY open\nRequire:\nLiquidity sweep\nStrong displacement\nClean FVG / pullback\nLimit trades (1–2 max)",
+      "comments": "GOLD 🔥"
+    },
+    {
+      "session": "New York Session",
+      "pair": "XAUUSD (Gold)",
+      "chartTF": "5M - 15M - 1H",
+      "bestWindowParis": "14H00 - 18H00",
+      "istWindow": "18H30 - 22H30",
+      "golden": false,
+      "tightRules": "",
+      "comments": "Paris Time 15H30 is New York USA time 09H30"
+    },
+    {
+      "session": "New York Session",
+      "pair": "USDCAD",
+      "chartTF": "1H - 4H",
+      "bestWindowParis": "14H00 - 18H30",
+      "istWindow": "18H30 - 23H00",
+      "golden": false,
+      "tightRules": "",
+      "comments": "Paris Time 15H30 is New York USA time 09H30"
+    }
+  ]
+}

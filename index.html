@@ -301,7 +301,10 @@
     .panelTitle .mini{font-size:12px;color:var(--muted)}
 
     /* Tables */
-    .tableWrap{overflow:hidden}
+    /* Prevent right-side clipping on smaller widths.
+       Keep compact, no-wrap cells, but allow horizontal scroll as a safe fallback
+       (GitHub Pages friendly, deterministic, minimal reflow). */
+    .tableWrap{overflow-x:auto; overflow-y:hidden; -webkit-overflow-scrolling:touch}
     table{width:100%;border-collapse:collapse; table-layout:fixed}
     thead th{
       text-align:left;
@@ -680,14 +683,14 @@
       <table>
         <thead>
           <tr>
-            <th style="width:170px">Session</th>
-            <th style="width:320px">Pair</th>
-            <th style="width:130px">Chart TF</th>
-            <th style="width:190px">Best Window (Paris)</th>
-            <th style="width:190px">IST Window</th>
-            <th style="width:120px">Status</th>
-            <th style="width:170px">Countdown</th>
-            <th style="width:240px">Tight Rules</th>
+            <th style="width:130px">Session</th>
+            <th style="width:230px">Pair</th>
+            <th style="width:95px">Chart TF</th>
+            <th style="width:150px">Best Window (Paris)</th>
+            <th style="width:150px">IST Window</th>
+            <th style="width:105px">Status</th>
+            <th style="width:125px">Countdown</th>
+            <th style="width:170px">Tight Rules</th>
             <th>Comments</th>
           </tr>
         </thead>
@@ -705,14 +708,14 @@
       <table>
         <thead>
           <tr>
-            <th style="width:170px">Session</th>
-            <th style="width:320px">Pair</th>
-            <th style="width:130px">Chart TF</th>
-            <th style="width:190px">Best Window (Paris)</th>
-            <th style="width:190px">IST Window</th>
-            <th style="width:120px">Status</th>
-            <th style="width:170px">Countdown</th>
-            <th style="width:240px">Tight Rules</th>
+            <th style="width:130px">Session</th>
+            <th style="width:230px">Pair</th>
+            <th style="width:95px">Chart TF</th>
+            <th style="width:150px">Best Window (Paris)</th>
+            <th style="width:150px">IST Window</th>
+            <th style="width:105px">Status</th>
+            <th style="width:125px">Countdown</th>
+            <th style="width:170px">Tight Rules</th>
             <th>Comments</th>
           </tr>
         </thead>

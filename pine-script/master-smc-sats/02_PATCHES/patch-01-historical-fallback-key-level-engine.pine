@@ -1,0 +1,194 @@
+// ══════════════════════════════════════════════════════════════════════════════
+// PATCH 01 — HISTORICAL FALLBACK KEY LEVEL ENGINE
+// For: Master SMC + SATS Sniper System [Ravi Custom 01] v1.4 LAST WORKING
+// Pine: v6
+// Purpose:
+// 1) When current price is in open space with no nearby current/HTF key level,
+//    search the left-side historical chart for the strongest previous reaction level.
+// 2) Prefer strongest historical level, not nearest level.
+// 3) Include liquidity-style levels using equal highs / equal lows and swing clusters.
+// 4) Keep the engine optional and visually clean to avoid noise.
+//
+// IMPORTANT:
+// This is a patch module, not a standalone indicator.
+// Add the blocks below into the LAST WORKING v1.4 script in the marked locations.
+// Do not replace the whole master script with this file.
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ══════════════════════════════════════════════════════════════════════════════
+// [A] ADD THESE INPUTS AFTER THE CURRENT HTF KEY LEVEL INPUTS
+// Paste after:
+// keyLevelTouchAtrBuffer = input.float(...)
+// ══════════════════════════════════════════════════════════════════════════════
+
+useHistoricalFallbackLevels = input.bool(true, "Use Historical Fallback Key Levels", group = GRP_HTFLVL, tooltip = "When price has no nearby current/HTF key level, search historical left-side price action and select the strongest liquidity/key level, not the nearest.")
+showHistoricalFallbackLevels = input.bool(true, "Show Historical Fallback Levels", group = GRP_HTFLVL)
+historicalFallbackSide = input.string("Both", "Historical Search Side", options = ["Both", "Below only", "Above only"], group = GRP_HTFLVL)
+historicalFallbackLookback = input.int(1500, "Historical Search Lookback Bars", minval = 100, maxval = 5000, group = GRP_HTFLVL)
+historicalPivotStrength = input.int(5, "Historical Pivot Strength", minval = 2, maxval = 20, group = GRP_HTFLVL)
+historicalClusterAtrBuffer = input.float(0.35, "Historical Cluster Buffer xATR", minval = 0.05, maxval = 2.0, step = 0.05, group = GRP_HTFLVL)
+historicalMinScore = input.float(2.5, "Historical Min Strength Score", minval = 1.0, maxval = 20.0, step = 0.5, group = GRP_HTFLVL)
+historicalMaxDistanceAtr = input.float(80.0, "Historical Max Distance xATR", minval = 5.0, maxval = 500.0, step = 5.0, group = GRP_HTFLVL)
+historicalMinDistanceAtr = input.float(0.30, "Historical Min Distance xATR", minval = 0.0, maxval = 10.0, step = 0.10, group = GRP_HTFLVL, tooltip = "Prevents selecting a noisy level sitting almost exactly on current price.")
+historicalShowOnlyWhenNeeded = input.bool(true, "Show Historical Levels Only When Needed", group = GRP_HTFLVL, tooltip = "If ON, fallback levels are shown only when normal key levels are not touched.")
+historicalFallbackColor = input.color(#40E0D0, "Historical Fallback Color", group = GRP_HTFLVL)
+historicalLiquidityColor = input.color(#B388FF, "Historical Liquidity Color", group = GRP_HTFLVL)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// [B] ADD THIS TYPE AFTER EXISTING TYPES
+// Paste after type SwingLabel block.
+// ══════════════════════════════════════════════════════════════════════════════
+
+type HistoricalLevelResult
+    float support
+    float resistance
+    float supportScore
+    float resistanceScore
+    int   supportTouches
+    int   resistanceTouches
+    int   supportBar
+    int   resistanceBar
+
+// ══════════════════════════════════════════════════════════════════════════════
+// [C] ADD THESE FUNCTIONS AFTER nearLevel(float lvl) FUNCTION
+// Paste after:
+// nearLevel(float lvl) =>
+//     not na(lvl) and low <= lvl + touchBuffer and high >= lvl - touchBuffer
+// ══════════════════════════════════════════════════════════════════════════════
+
+scoreHistoricalLevel(float lvl, bool wantSupport, int maxLookback, float clusterBuffer) =>
+    float score = 0.0
+    int touches = 0
+    int lastTouchBar = na
+    int cappedLookback = math.min(maxLookback, bar_index)
+    for i = historicalPivotStrength to cappedLookback
+        bool pivotMatch = wantSupport ? not na(ta.pivotlow(low, historicalPivotStrength, historicalPivotStrength)[i - historicalPivotStrength]) : not na(ta.pivothigh(high, historicalPivotStrength, historicalPivotStrength)[i - historicalPivotStrength])
+        float testPrice = wantSupport ? low[i] : high[i]
+        bool nearCluster = math.abs(testPrice - lvl) <= clusterBuffer
+        bool reactionAway = wantSupport ? close[i - 1] > lvl + clusterBuffer : close[i - 1] < lvl - clusterBuffer
+        bool sweptAndReclaimed = wantSupport ? (low[i] < lvl and close[i] > lvl) : (high[i] > lvl and close[i] < lvl)
+        if nearCluster and (pivotMatch or reactionAway or sweptAndReclaimed)
+            touches += 1
+            lastTouchBar := bar_index - i
+            score += pivotMatch ? 1.25 : 0.75
+            score += reactionAway ? 0.75 : 0.0
+            score += sweptAndReclaimed ? 1.50 : 0.0
+    [score, touches, lastTouchBar]
+
+calcHistoricalFallbackLevels() =>
+    float bestSupport = na
+    float bestResistance = na
+    float bestSupportScore = 0.0
+    float bestResistanceScore = 0.0
+    int bestSupportTouches = 0
+    int bestResistanceTouches = 0
+    int bestSupportBar = na
+    int bestResistanceBar = na
+
+    float clusterBuffer = atrValue * historicalClusterAtrBuffer
+    float minDistance = atrValue * historicalMinDistanceAtr
+    float maxDistance = atrValue * historicalMaxDistanceAtr
+    int cappedLookback = math.min(historicalFallbackLookback, bar_index)
+
+    bool allowBelow = historicalFallbackSide == "Both" or historicalFallbackSide == "Below only"
+    bool allowAbove = historicalFallbackSide == "Both" or historicalFallbackSide == "Above only"
+
+    for i = historicalPivotStrength to cappedLookback
+        float candidateSupport = low[i]
+        float supportDistance = close - candidateSupport
+        bool supportCandidateOk = allowBelow and candidateSupport < close and supportDistance >= minDistance and supportDistance <= maxDistance
+        if supportCandidateOk
+            [sScore, sTouches, sBar] = scoreHistoricalLevel(candidateSupport, true, cappedLookback, clusterBuffer)
+            if sScore > bestSupportScore and sScore >= historicalMinScore
+                bestSupport := candidateSupport
+                bestSupportScore := sScore
+                bestSupportTouches := sTouches
+                bestSupportBar := sBar
+
+        float candidateResistance = high[i]
+        float resistanceDistance = candidateResistance - close
+        bool resistanceCandidateOk = allowAbove and candidateResistance > close and resistanceDistance >= minDistance and resistanceDistance <= maxDistance
+        if resistanceCandidateOk
+            [rScore, rTouches, rBar] = scoreHistoricalLevel(candidateResistance, false, cappedLookback, clusterBuffer)
+            if rScore > bestResistanceScore and rScore >= historicalMinScore
+                bestResistance := candidateResistance
+                bestResistanceScore := rScore
+                bestResistanceTouches := rTouches
+                bestResistanceBar := rBar
+
+    HistoricalLevelResult.new(bestSupport, bestResistance, bestSupportScore, bestResistanceScore, bestSupportTouches, bestResistanceTouches, bestSupportBar, bestResistanceBar)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// [D] ADD THIS BLOCK INSIDE ZONE + KEY LEVEL CONFLUENCE
+// Paste immediately after:
+// keyLevelTouchOk = not requireKeyLevelTouch or anyExistingKeyLevelTouched
+// ══════════════════════════════════════════════════════════════════════════════
+
+historicalResult = calcHistoricalFallbackLevels()
+historicalSupport = useHistoricalFallbackLevels ? historicalResult.support : na
+historicalResistance = useHistoricalFallbackLevels ? historicalResult.resistance : na
+historicalSupportScore = useHistoricalFallbackLevels ? historicalResult.supportScore : na
+historicalResistanceScore = useHistoricalFallbackLevels ? historicalResult.resistanceScore : na
+historicalSupportTouches = useHistoricalFallbackLevels ? historicalResult.supportTouches : 0
+historicalResistanceTouches = useHistoricalFallbackLevels ? historicalResult.resistanceTouches : 0
+
+historicalSupportTouched = useHistoricalFallbackLevels and nearLevel(historicalSupport)
+historicalResistanceTouched = useHistoricalFallbackLevels and nearLevel(historicalResistance)
+anyHistoricalFallbackTouched = historicalSupportTouched or historicalResistanceTouched
+
+// The fallback only activates when normal current/HTF key levels are missing.
+openSpaceFallbackActive = useHistoricalFallbackLevels and not anyExistingKeyLevelTouched and anyHistoricalFallbackTouched
+keyLevelTouchOk := keyLevelTouchOk or openSpaceFallbackActive
+
+// ══════════════════════════════════════════════════════════════════════════════
+// [E] MODIFY bullKeyReaction AND bearKeyReaction
+// Add these two lines inside the existing bull/bear reaction conditions.
+//
+// In bullKeyReaction, add this before the final closing parenthesis:
+//     or historicalSupportTouched
+//
+// In bearKeyReaction, add this before the final closing parenthesis:
+//     or historicalResistanceTouched
+//
+// Result concept:
+// Bull fallback = strongest historical support / sell-side liquidity below.
+// Bear fallback = strongest historical resistance / buy-side liquidity above.
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ══════════════════════════════════════════════════════════════════════════════
+// [F] ADD VISUAL OBJECTS IN THE PLOTS / VISUALS SECTION
+// Paste after the existing HTF key-level visual block, before OB boxes.
+// ══════════════════════════════════════════════════════════════════════════════
+
+var line histSupportLine = na
+var line histResistanceLine = na
+var label histSupportLabel = na
+var label histResistanceLabel = na
+
+makeHistoricalLine(line oldLine, float lvl, color clr, int widthVal) =>
+    line.delete(oldLine)
+    not na(lvl) ? line.new(bar_index - 1, lvl, bar_index + levelExtend, lvl, color = clr, style = line.style_dotted, width = widthVal) : na
+
+makeHistoricalLabel(label oldLabel, float lvl, string txt, color clr, float scoreVal, int touchesVal) =>
+    label.delete(oldLabel)
+    showHtfKeyLabels and not na(lvl) ? label.new(bar_index + levelExtend, lvl, txt + " " + str.tostring(lvl, format.mintick) + " | S " + str.tostring(scoreVal, "#.0") + " | T " + str.tostring(touchesVal), style = label.style_label_left, color = color.new(clr, 82), textcolor = clr, size = size.small) : na
+
+bool showHistoricalNow = showHistoricalFallbackLevels and useHistoricalFallbackLevels and (not historicalShowOnlyWhenNeeded or not anyExistingKeyLevelTouched)
+
+if barstate.islast
+    if showHistoricalNow
+        histSupportLine := makeHistoricalLine(histSupportLine, historicalSupport, historicalFallbackColor, historicalSupportTouched ? 2 : 1)
+        histResistanceLine := makeHistoricalLine(histResistanceLine, historicalResistance, historicalLiquidityColor, historicalResistanceTouched ? 2 : 1)
+        histSupportLabel := makeHistoricalLabel(histSupportLabel, historicalSupport, "HIST SUPPORT", historicalFallbackColor, historicalSupportScore, historicalSupportTouches)
+        histResistanceLabel := makeHistoricalLabel(histResistanceLabel, historicalResistance, "HIST LIQ/RES", historicalLiquidityColor, historicalResistanceScore, historicalResistanceTouches)
+    else
+        line.delete(histSupportLine), line.delete(histResistanceLine)
+        label.delete(histSupportLabel), label.delete(histResistanceLabel)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// [G] OPTIONAL MINI STATUS ADDITION
+// Add to statusTxt if you want debug visibility:
+// + "\nHist Fallback: " + (openSpaceFallbackActive ? "ACTIVE" : "OFF") +
+//   " | S " + str.tostring(historicalSupportScore, "#.0") +
+//   " / R " + str.tostring(historicalResistanceScore, "#.0")
+// ══════════════════════════════════════════════════════════════════════════════

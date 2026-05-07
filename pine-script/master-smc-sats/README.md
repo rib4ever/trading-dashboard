@@ -6,7 +6,7 @@ This folder is dedicated to the TradingView Pine Script project.
 Build and maintain the `Master SMC + SATS Sniper System [Ravi Custom 01]` as a clean, modular project instead of trying to edit one very large script in chat.
 
 ## Current strategy
-We will keep the last working Pine Script as the protected base version, then add new features in small controlled patches.
+We keep the last working Pine Script as the protected base version, then add new features in small controlled patches.
 
 Main feature currently planned:
 
@@ -20,15 +20,26 @@ Main feature currently planned:
 
 ```text
 pine-script/master-smc-sats/
-├── 00_MASTER_COMPILED/          Final complete merged Pine scripts
-├── 01_BASE_WORKING_VERSION/     Last confirmed working script backups
-├── 02_SMC_CORE/                 Market structure, swing, BOS/CHoCH, OB, FVG logic
-├── 03_KEY_LEVEL_ENGINE/         HTF levels, fallback key levels, liquidity levels
-├── 04_SATS_ENGINE/              SATS trend-quality engine
-├── 05_ENTRY_RULES/              Setup, opportunity, sniper, ultra sniper rules
-├── 06_RISK_TP_SL/               SL, TP, liquidity targets, risk display
-├── 07_VISUALS_ALERTS/           Labels, lines, boxes, status panel, alerts
-└── 08_PATCHES/                  Incremental patch notes and implementation plans
+├── README.md                         Main project overview
+├── PROJECT_NETWORK_MAP.md            Folder/script network with descriptions
+├── 00_MASTER_COMPILED/               Final complete merged Pine scripts
+├── 01_BASE_WORKING_VERSION/          Last confirmed working script backups
+├── 02_SMC_CORE/                      Market structure, swing, BOS/CHoCH, OB, FVG logic
+├── 03_KEY_LEVEL_ENGINE/              HTF levels, fallback key levels, liquidity levels
+├── 04_SATS_ENGINE/                   SATS trend-quality engine
+├── 05_ENTRY_RULES/                   Setup, opportunity, sniper, ultra sniper rules
+├── 06_RISK_TP_SL/                    SL, TP, liquidity targets, risk display
+├── 07_VISUALS_ALERTS/                Labels, lines, boxes, status panel, alerts
+├── 08_PATCHES/                       Incremental patch notes and implementation plans
+└── 09_PROJECT_MEMORY/                ChatGPT project memory prompt and update template
+```
+
+## Important files
+
+```text
+PROJECT_NETWORK_MAP.md
+09_PROJECT_MEMORY/chatgpt_project_memory_prompt.md
+09_PROJECT_MEMORY/session_update_template.md
 ```
 
 ## Working rule
@@ -42,3 +53,12 @@ The LuxAlgo-style logic should not be blindly pasted into the master script. The
 3. Equal high / equal low liquidity detection.
 4. Optional visual lines and labels.
 5. Confluence with existing key-touch, sweep, HTF POI, SATS, volume, volatility and killzone rules.
+
+## Memory loop
+After each important project update, update:
+
+1. `09_PROJECT_MEMORY/chatgpt_project_memory_prompt.md`
+2. `PROJECT_NETWORK_MAP.md` when folder/file responsibilities change
+3. Relevant patch notes in `08_PATCHES/`
+
+The goal is to let a future ChatGPT conversation continue from the correct project state without losing context.

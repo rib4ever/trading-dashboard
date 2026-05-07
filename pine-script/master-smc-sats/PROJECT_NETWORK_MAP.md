@@ -19,6 +19,7 @@ pine-script/master-smc-sats/
 ├── 00_MASTER_COMPILED/
 ├── 01_BASE_WORKING_VERSION/
 ├── 02_SMC_CORE/
+├── 03_SCRIPT_BLOCKS/
 ├── 03_MASTER_CANDIDATES/
 ├── 03_KEY_LEVEL_ENGINE/
 ├── 04_SATS_ENGINE/
@@ -38,6 +39,7 @@ pine-script/master-smc-sats/
 | `00_MASTER_COMPILED/` | Final full Pine Script versions after validated patches are merged. | Only place scripts here after they are expected to compile as one complete indicator. |
 | `01_BASE_WORKING_VERSION/` | Protected backups of the last confirmed working Pine Script. | Do not directly modify. This is the fallback restore point. |
 | `02_SMC_CORE/` | Market structure logic: swings, HH/HL/LH/LL, BOS/CHoCH, OB, FVG, sweep/reclaim base logic. | Keep core structure logic separate from entries and visuals where possible. |
+| `03_SCRIPT_BLOCKS/` | Modular Pine block workspace for splitting the master into logical sections before final assembly. | Blocks are for organization/testing only. TradingView still needs one final `.pine` file. |
 | `03_MASTER_CANDIDATES/` | Candidate merged master versions before they become the new protected base. | Use for v1.5+ candidates. Do not treat these as confirmed until TradingView compiles them. |
 | `03_KEY_LEVEL_ENGINE/` | HTF levels, smart fallback historical key levels, equal high/low liquidity, support/resistance strength scoring. | New LuxAlgo-inspired key-level logic belongs here first before master merge. |
 | `04_SATS_ENGINE/` | SATS adaptive trend-quality engine: TQI, ER, ATR adaptation, SuperTrend-style direction. | Keep SATS calculations independent so they can be tested separately. |
@@ -47,11 +49,38 @@ pine-script/master-smc-sats/
 | `08_PATCHES/` | Patch plans, failed attempts, fixes, and implementation notes. | Every new feature should start here before becoming part of the compiled master. |
 | `09_PROJECT_MEMORY/` | ChatGPT memory prompt and session update template. | Update after each important project session so future chats can continue safely. |
 
+## 03_SCRIPT_BLOCKS modular plan
+
+```text
+03_SCRIPT_BLOCKS/
+├── README.md
+├── 00_header_and_groups.pine
+├── 01_inputs_and_presets.pine
+├── 02_types_and_utilities.pine
+├── 03_core_smc_engine.pine
+├── 04_mtf_bias_engine.pine
+├── 05_sats_engine.pine
+├── 06_smart_key_level_engine.pine
+├── 07_entry_confluence_engine.pine
+├── 08_risk_tp_sl_engine.pine
+├── 09_visual_engine.pine
+├── 10_alert_engine.pine
+└── 99_final_assembly_notes.md
+```
+
+Purpose of this modular plan:
+- Keep every engine isolated and easier to troubleshoot.
+- Preserve the current GitHub structure while preparing a cleaner master candidate.
+- Merge only after a block is logically checked and placed in the correct dependency order.
+- Maintain a repeatable loop: patch → block → candidate → TradingView test → final release.
+
 ## Important active files
 
 | File | Description | Status |
 |---|---|---|
 | `01_BASE_WORKING_VERSION/master-smc-sats-ravi-custom-01-v1.4-LAST-WORKING.pine` | Protected last working Pine v6 master script. | Do not edit directly. |
+| `03_SCRIPT_BLOCKS/README.md` | Modular block workspace rules and planned block list. | Created. |
+| `03_SCRIPT_BLOCKS/99_final_assembly_notes.md` | Assembly order, dependencies, and candidate checklist. | Created. |
 | `03_MASTER_CANDIDATES/README.md` | Candidate workflow rulebook. | Created. |
 | `08_PATCHES/patch-02-smart-key-level-engine-plan.md` | Written implementation plan for strongest historical key-level and liquidity engine. | Planning document created. |
 | `08_PATCHES/patch-02-smart-key-level-engine-isolated-v0.1.pine` | Standalone Pine v6 isolated indicator for smart support/resistance and liquidity testing. | TradingView visual test confirmed by Ravi. |
@@ -62,15 +91,15 @@ pine-script/master-smc-sats/
 ```text
 02_SMC_CORE
    ↓ provides structure, OB/FVG, sweep/reclaim
-03_KEY_LEVEL_ENGINE
+03_KEY_LEVEL_ENGINE / 03_SCRIPT_BLOCKS/06_smart_key_level_engine
    ↓ provides key-level touch/reaction and liquidity levels
 04_SATS_ENGINE
    ↓ provides trend quality, TQI, ER, adaptive trend direction
-05_ENTRY_RULES
+05_ENTRY_RULES / 03_SCRIPT_BLOCKS/07_entry_confluence_engine
    ↓ combines SMC + key levels + SATS + filters into signals
-06_RISK_TP_SL
+06_RISK_TP_SL / 03_SCRIPT_BLOCKS/08_risk_tp_sl_engine
    ↓ calculates SL/TP using SMC/liquidity/R-multiple logic
-07_VISUALS_ALERTS
+07_VISUALS_ALERTS / 03_SCRIPT_BLOCKS/09_visual_engine and 10_alert_engine
    ↓ displays signals, levels, status, and alerts
 03_MASTER_CANDIDATES
    ↓ holds testable merged candidates before confirmation
@@ -169,3 +198,13 @@ After each major update:
 2. Update the memory prompt.
 3. Update this network map if paths or responsibilities changed.
 4. Keep the last working script clearly identified.
+
+## Latest structural decision
+
+Ravi approved a safer modular workflow:
+
+```text
+requirements → isolated patch → script block → master candidate → TradingView test → compiled final
+```
+
+This means future work should not directly merge large patches into v1.4. Instead, capture each engine as a separate block inside `03_SCRIPT_BLOCKS/`, then assemble one clean master candidate.

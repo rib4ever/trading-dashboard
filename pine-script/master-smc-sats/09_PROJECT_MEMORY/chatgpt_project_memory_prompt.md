@@ -1,4 +1,4 @@
-# Updated Project Memory Prompt — Master SMC + SATS [2026-05-08 / Modular Block Workflow]
+# Updated Project Memory Prompt — Master SMC + SATS [2026-05-08 / Smart Key Block Created]
 
 Copy and paste this prompt into a new ChatGPT conversation whenever the project needs to continue from the correct state.
 
@@ -61,6 +61,8 @@ TradingView Pine Script must ultimately be one complete `.pine` file, but GitHub
 New modular workspace:
 - Created: pine-script/master-smc-sats/03_SCRIPT_BLOCKS/README.md
 - Created: pine-script/master-smc-sats/03_SCRIPT_BLOCKS/99_final_assembly_notes.md
+- Created: pine-script/master-smc-sats/03_SCRIPT_BLOCKS/06_smart_key_level_engine.pine
+- Created: pine-script/master-smc-sats/03_SCRIPT_BLOCKS/07_entry_confluence_engine_connection_notes.md
 - Updated: pine-script/master-smc-sats/PROJECT_NETWORK_MAP.md
 - Updated: pine-script/master-smc-sats/09_PROJECT_MEMORY/chatgpt_project_memory_prompt.md
 
@@ -71,7 +73,7 @@ Planned script block order:
 4. 03_core_smc_engine.pine — swings, structure, OB/FVG, sweep/reclaim.
 5. 04_mtf_bias_engine.pine — MTF request.security data and HTF bias scoring.
 6. 05_sats_engine.pine — SATS ER/TQI/ATR adaptive trend engine.
-7. 06_smart_key_level_engine.pine — strongest historical support/resistance, EQH/EQL, PD/PW/PM levels.
+7. 06_smart_key_level_engine.pine — strongest historical support/resistance, EQH/EQL liquidity, visual smart levels, and entry hooks.
 8. 07_entry_confluence_engine.pine — setup, opportunity, sniper, ultra-sniper logic.
 9. 08_risk_tp_sl_engine.pine — SL, TP, dynamic R, liquidity targets.
 10. 09_visual_engine.pine — lines, boxes, labels, status panel.
@@ -89,19 +91,39 @@ Required smart key-level behavior:
 - Noise must be filtered so the chart does not become messy.
 - The fallback key-level engine should support entry validation and future TP/liquidity targeting only when enabled.
 
-LuxAlgo-inspired parts worth adapting:
-1. Strong / weak swing high and low tracking.
-2. Internal structure high / low tracking.
-3. Equal high / equal low liquidity detection.
-4. Previous D/W/M highs and lows as liquidity/key levels.
-5. Historical level selection using touch count / strength scoring.
-6. Clean optional lines and labels.
-
 Patch 02 status:
 - File: pine-script/master-smc-sats/08_PATCHES/patch-02-smart-key-level-engine-isolated-v0.1.pine
 - Ravi tested it visually in TradingView.
 - Observed: Smart Support / EQL and Smart Resistance / EQH lines displayed correctly.
-- It should now be converted into a clean modular block: 03_SCRIPT_BLOCKS/06_smart_key_level_engine.pine
+- It has now been converted into a clean modular block.
+
+Block 06 status:
+- File: pine-script/master-smc-sats/03_SCRIPT_BLOCKS/06_smart_key_level_engine.pine
+- Created from Patch 02 isolated v0.1.
+- This is not standalone and should not be pasted into TradingView alone.
+- It intentionally has no `//@version` and no `indicator()` declaration.
+- It uses unique `smart` and `sk` prefixes.
+- It avoids the previously failed corrupted-code pattern.
+
+Block 06 output hooks:
+- `smartAnyKeyTouched`
+- `smartBullKeyReaction`
+- `smartBearKeyReaction`
+- `smartBullLiquidityTouched`
+- `smartBearLiquidityTouched`
+- `smartBuyLiquidityTarget`
+- `smartSellLiquidityTarget`
+
+Entry connection note:
+- File: pine-script/master-smc-sats/03_SCRIPT_BLOCKS/07_entry_confluence_engine_connection_notes.md
+- Purpose: documents exactly how Block 06 should extend the existing v1.4 key-level logic.
+
+Safe entry connection rules:
+1. Do not replace v1.4 key logic. Extend it only.
+2. Add `smartAnyKeyTouched` to `anyExistingKeyLevelTouched`.
+3. Add `smartBullKeyReaction` as an OR condition inside `bullKeyReaction`.
+4. Add `smartBearKeyReaction` as an OR condition inside `bearKeyReaction`.
+5. Keep smart TP integration OFF until the entry validation compiles and works visually.
 
 Candidate status:
 - A v1.5 candidate placeholder / warning version was tested by Ravi and displayed the orange warning label.
@@ -116,13 +138,16 @@ Important Pine Script lessons from failed attempts:
 - If a function call like ta.crossover/ta.crossunder is used inside conditional expressions and TradingView warns about inconsistent calculations, assign the result to a variable first.
 - Keep all new patch variables uniquely prefixed, preferably with smart or sk, to avoid collisions.
 - Do not paste GitHub webpage HTML into TradingView. Always open the raw file and copy raw Pine text.
+- Isolated patch files can have `//@version` and `indicator()`. Modular blocks must not.
 
 Recommended next technical action:
-Create the first real modular block files under 03_SCRIPT_BLOCKS, starting with:
-- 06_smart_key_level_engine.pine
-- 07_entry_confluence_engine.pine connection notes
-
-Then assemble a new v1.5 candidate only after the smart key-level block is logically checked.
+Assemble the first controlled v1.5 candidate by:
+1. Fetching the protected v1.4 base from `01_BASE_WORKING_VERSION/`.
+2. Inserting `03_SCRIPT_BLOCKS/06_smart_key_level_engine.pine` after existing ATR/key-level variables are available and before key-level confluence is calculated.
+3. Extending `anyExistingKeyLevelTouched`, `bullKeyReaction`, and `bearKeyReaction` exactly as described in `07_entry_confluence_engine_connection_notes.md`.
+4. Creating a new candidate file under `03_MASTER_CANDIDATES/`.
+5. Do not touch the protected v1.4 base.
+6. Ask Ravi to test the raw candidate in TradingView.
 
 Self-updating memory-loop instruction:
 At the end of every important project update, generate a new updated version of this memory prompt.

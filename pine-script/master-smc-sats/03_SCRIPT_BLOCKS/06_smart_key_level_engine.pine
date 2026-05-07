@@ -1,0 +1,219 @@
+// ══════════════════════════════════════════════════════════════════════════════
+// 06 SMART KEY LEVEL ENGINE — BLOCK VERSION
+// For: Master SMC + SATS Sniper System [Ravi Custom 01]
+// Source: Patch 02 isolated v0.1, cleaned for master-script integration.
+//
+// IMPORTANT:
+// - This block is NOT a standalone Pine Script.
+// - Do not paste only this block into TradingView by itself.
+// - This block must be inserted into the master after ATR / level variables exist
+//   and before entry confluence variables are calculated.
+// - No //@version and no indicator() declaration are included here on purpose.
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ══════════════════════════════════════════════════════════════════════════════
+// SMART KEY LEVEL INPUTS
+// Unique prefix: smartKey / sk
+// ══════════════════════════════════════════════════════════════════════════════
+GRP_SK = "🧭 Smart Key Levels / Liquidity"
+
+showSmartKeyLevels      = input.bool(true,  "Show Smart Key Levels", group = GRP_SK)
+enableSmartKeyFallback  = input.bool(true,  "Enable Smart Historical Fallback", group = GRP_SK)
+smartKeyPreferStrongest = input.bool(true,  "Prefer Strongest Level", group = GRP_SK)
+smartKeyPivotLen        = input.int(5,      "Smart Pivot Length", minval = 2, maxval = 25, group = GRP_SK)
+smartKeyMaxStored       = input.int(80,     "Max Stored Smart Levels Each Side", minval = 10, maxval = 200, group = GRP_SK)
+smartKeyMinTouches      = input.int(2,      "Minimum Smart Liquidity Touches", minval = 1, maxval = 10, group = GRP_SK)
+smartKeyAtrLen          = input.int(14,     "Smart ATR Length", minval = 1, maxval = 100, group = GRP_SK)
+smartKeyAtrTolerance    = input.float(0.25, "Smart Cluster / Touch Tolerance xATR", minval = 0.05, maxval = 2.0, step = 0.05, group = GRP_SK)
+smartKeyTouchBuffer     = input.float(0.20, "Smart Current Candle Touch Buffer xATR", minval = 0.0, maxval = 2.0, step = 0.05, group = GRP_SK)
+smartKeyExtendBars      = input.int(80,     "Smart Line Extend Bars", minval = 10, maxval = 500, group = GRP_SK)
+showSmartLabels         = input.bool(true,  "Show Smart Key Labels", group = GRP_SK)
+
+useSmartKeyForEntries   = input.bool(true,  "Use Smart Levels For Entry Validation", group = GRP_SK, tooltip = "Adds smart historical support/resistance and EQH/EQL liquidity into key-level touch and reaction logic.")
+useSmartKeyForTP        = input.bool(false, "Use Smart Levels For TP Liquidity", group = GRP_SK, tooltip = "Reserved for a later TP/liquidity upgrade. Keep OFF until TP integration is validated.")
+
+smartSupportColor       = input.color(#40E0D0, "Smart Support Color", group = GRP_SK)
+smartResistanceColor    = input.color(#FF9800, "Smart Resistance Color", group = GRP_SK)
+smartLiquidityColor     = input.color(#FBBF24, "Smart Liquidity Color", group = GRP_SK)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// SMART LEVEL STORAGE
+// Supports are pivot lows / equal lows.
+// Resistances are pivot highs / equal highs.
+// Global arrays are updated in main scope only; no global mutation inside functions.
+// ══════════════════════════════════════════════════════════════════════════════
+var array<float> skSupportLevels = array.new<float>()
+var array<int>   skSupportHits   = array.new<int>()
+var array<int>   skSupportBars   = array.new<int>()
+
+var array<float> skResistanceLevels = array.new<float>()
+var array<int>   skResistanceHits   = array.new<int>()
+var array<int>   skResistanceBars   = array.new<int>()
+
+smartAtr = ta.atr(smartKeyAtrLen)
+skClusterTol = smartAtr * smartKeyAtrTolerance
+skTouchTol = smartAtr * smartKeyTouchBuffer
+
+skPivotHigh = ta.pivothigh(high, smartKeyPivotLen, smartKeyPivotLen)
+skPivotLow  = ta.pivotlow(low, smartKeyPivotLen, smartKeyPivotLen)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// SUPPORT LEVEL UPDATE — pivot lows clustered into strongest levels.
+// ══════════════════════════════════════════════════════════════════════════════
+if enableSmartKeyFallback and not na(skPivotLow)
+    float newSupport = skPivotLow
+    int newSupportBar = bar_index - smartKeyPivotLen
+    int matchedSupportIndex = na
+    int supportCount = array.size(skSupportLevels)
+    if supportCount > 0
+        for i = 0 to supportCount - 1
+            float oldLevel = array.get(skSupportLevels, i)
+            if math.abs(newSupport - oldLevel) <= skClusterTol
+                matchedSupportIndex := i
+                break
+    if na(matchedSupportIndex)
+        array.unshift(skSupportLevels, newSupport)
+        array.unshift(skSupportHits, 1)
+        array.unshift(skSupportBars, newSupportBar)
+        if array.size(skSupportLevels) > smartKeyMaxStored
+            array.pop(skSupportLevels)
+            array.pop(skSupportHits)
+            array.pop(skSupportBars)
+    else
+        float oldLevel = array.get(skSupportLevels, matchedSupportIndex)
+        int oldHits = array.get(skSupportHits, matchedSupportIndex)
+        float updatedLevel = (oldLevel * oldHits + newSupport) / (oldHits + 1)
+        array.set(skSupportLevels, matchedSupportIndex, updatedLevel)
+        array.set(skSupportHits, matchedSupportIndex, oldHits + 1)
+        array.set(skSupportBars, matchedSupportIndex, newSupportBar)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// RESISTANCE LEVEL UPDATE — pivot highs clustered into strongest levels.
+// ══════════════════════════════════════════════════════════════════════════════
+if enableSmartKeyFallback and not na(skPivotHigh)
+    float newResistance = skPivotHigh
+    int newResistanceBar = bar_index - smartKeyPivotLen
+    int matchedResistanceIndex = na
+    int resistanceCount = array.size(skResistanceLevels)
+    if resistanceCount > 0
+        for i = 0 to resistanceCount - 1
+            float oldLevel = array.get(skResistanceLevels, i)
+            if math.abs(newResistance - oldLevel) <= skClusterTol
+                matchedResistanceIndex := i
+                break
+    if na(matchedResistanceIndex)
+        array.unshift(skResistanceLevels, newResistance)
+        array.unshift(skResistanceHits, 1)
+        array.unshift(skResistanceBars, newResistanceBar)
+        if array.size(skResistanceLevels) > smartKeyMaxStored
+            array.pop(skResistanceLevels)
+            array.pop(skResistanceHits)
+            array.pop(skResistanceBars)
+    else
+        float oldLevel = array.get(skResistanceLevels, matchedResistanceIndex)
+        int oldHits = array.get(skResistanceHits, matchedResistanceIndex)
+        float updatedLevel = (oldLevel * oldHits + newResistance) / (oldHits + 1)
+        array.set(skResistanceLevels, matchedResistanceIndex, updatedLevel)
+        array.set(skResistanceHits, matchedResistanceIndex, oldHits + 1)
+        array.set(skResistanceBars, matchedResistanceIndex, newResistanceBar)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// FIND BEST SUPPORT BELOW PRICE AND BEST RESISTANCE ABOVE PRICE
+// Strongest score = touches first, then recency, then distance as tie-breaker.
+// ══════════════════════════════════════════════════════════════════════════════
+float smartSupportLevel = na
+int smartSupportHits = 0
+float smartSupportScore = na
+
+int supportTotal = array.size(skSupportLevels)
+if enableSmartKeyFallback and supportTotal > 0
+    for i = 0 to supportTotal - 1
+        float lvl = array.get(skSupportLevels, i)
+        int hits = array.get(skSupportHits, i)
+        int lastSeenBar = array.get(skSupportBars, i)
+        bool validBelow = lvl <= close
+        if validBelow
+            float distAtr = math.abs(close - lvl) / math.max(smartAtr, syminfo.mintick)
+            float recency = 1.0 / (1.0 + math.max(bar_index - lastSeenBar, 0) / 500.0)
+            float score = smartKeyPreferStrongest ? hits * 10.0 + recency - distAtr * 0.05 : -distAtr + hits * 0.25
+            if na(smartSupportScore) or score > smartSupportScore
+                smartSupportScore := score
+                smartSupportLevel := lvl
+                smartSupportHits := hits
+
+float smartResistanceLevel = na
+int smartResistanceHits = 0
+float smartResistanceScore = na
+
+int resistanceTotal = array.size(skResistanceLevels)
+if enableSmartKeyFallback and resistanceTotal > 0
+    for i = 0 to resistanceTotal - 1
+        float lvl = array.get(skResistanceLevels, i)
+        int hits = array.get(skResistanceHits, i)
+        int lastSeenBar = array.get(skResistanceBars, i)
+        bool validAbove = lvl >= close
+        if validAbove
+            float distAtr = math.abs(lvl - close) / math.max(smartAtr, syminfo.mintick)
+            float recency = 1.0 / (1.0 + math.max(bar_index - lastSeenBar, 0) / 500.0)
+            float score = smartKeyPreferStrongest ? hits * 10.0 + recency - distAtr * 0.05 : -distAtr + hits * 0.25
+            if na(smartResistanceScore) or score > smartResistanceScore
+                smartResistanceScore := score
+                smartResistanceLevel := lvl
+                smartResistanceHits := hits
+
+// ══════════════════════════════════════════════════════════════════════════════
+// CURRENT CANDLE TOUCH / LIQUIDITY BOOLEANS
+// These are the output values intended for entry and TP integration.
+// ══════════════════════════════════════════════════════════════════════════════
+nearSmartLevel(float lvl) =>
+    not na(lvl) and low <= lvl + skTouchTol and high >= lvl - skTouchTol
+
+smartSupportTouched = nearSmartLevel(smartSupportLevel)
+smartResistanceTouched = nearSmartLevel(smartResistanceLevel)
+
+smartBullLiquidityTouched = smartSupportTouched and smartSupportHits >= smartKeyMinTouches
+smartBearLiquidityTouched = smartResistanceTouched and smartResistanceHits >= smartKeyMinTouches
+
+smartAnyKeyTouched = useSmartKeyForEntries and (smartSupportTouched or smartResistanceTouched)
+smartBullKeyReaction = useSmartKeyForEntries and (smartSupportTouched or smartBullLiquidityTouched)
+smartBearKeyReaction = useSmartKeyForEntries and (smartResistanceTouched or smartBearLiquidityTouched)
+
+// Reserved TP hooks. These remain safe even when TP integration is off.
+smartBuyLiquidityTarget = useSmartKeyForTP and not na(smartResistanceLevel) and smartResistanceLevel > close ? smartResistanceLevel : na
+smartSellLiquidityTarget = useSmartKeyForTP and not na(smartSupportLevel) and smartSupportLevel < close ? smartSupportLevel : na
+
+// ══════════════════════════════════════════════════════════════════════════════
+// VISUALS — clean, last-bar-only horizontal lines.
+// ══════════════════════════════════════════════════════════════════════════════
+var line smartSupportLine = na
+var line smartResistanceLine = na
+var label smartSupportLabel = na
+var label smartResistanceLabel = na
+
+if barstate.islast
+    line.delete(smartSupportLine)
+    line.delete(smartResistanceLine)
+    label.delete(smartSupportLabel)
+    label.delete(smartResistanceLabel)
+
+    if showSmartKeyLevels and not na(smartSupportLevel)
+        color supportLineColor = smartSupportHits >= smartKeyMinTouches ? smartLiquidityColor : smartSupportColor
+        string supportTxt = smartSupportHits >= smartKeyMinTouches ? "Smart Support / EQL" : "Smart Support"
+        smartSupportLine := line.new(bar_index - 1, smartSupportLevel, bar_index + smartKeyExtendBars, smartSupportLevel, color = supportLineColor, style = line.style_solid, width = smartSupportHits >= smartKeyMinTouches ? 2 : 1)
+        if showSmartLabels
+            smartSupportLabel := label.new(bar_index + smartKeyExtendBars, smartSupportLevel, supportTxt + " x" + str.tostring(smartSupportHits) + " " + str.tostring(smartSupportLevel, format.mintick), style = label.style_label_left, color = color.new(supportLineColor, 82), textcolor = supportLineColor, size = size.small)
+
+    if showSmartKeyLevels and not na(smartResistanceLevel)
+        color resistanceLineColor = smartResistanceHits >= smartKeyMinTouches ? smartLiquidityColor : smartResistanceColor
+        string resistanceTxt = smartResistanceHits >= smartKeyMinTouches ? "Smart Resistance / EQH" : "Smart Resistance"
+        smartResistanceLine := line.new(bar_index - 1, smartResistanceLevel, bar_index + smartKeyExtendBars, smartResistanceLevel, color = resistanceLineColor, style = line.style_solid, width = smartResistanceHits >= smartKeyMinTouches ? 2 : 1)
+        if showSmartLabels
+            smartResistanceLabel := label.new(bar_index + smartKeyExtendBars, smartResistanceLevel, resistanceTxt + " x" + str.tostring(smartResistanceHits) + " " + str.tostring(smartResistanceLevel, format.mintick), style = label.style_label_left, color = color.new(resistanceLineColor, 82), textcolor = resistanceLineColor, size = size.small)
+
+// Hidden debug markers. Enable from Style tab only if needed.
+plotshape(smartBullLiquidityTouched, title = "Smart Bull Liquidity Touched", style = shape.triangleup, location = location.belowbar, size = size.tiny, color = smartLiquidityColor, display = display.none)
+plotshape(smartBearLiquidityTouched, title = "Smart Bear Liquidity Touched", style = shape.triangledown, location = location.abovebar, size = size.tiny, color = smartLiquidityColor, display = display.none)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// END 06 SMART KEY LEVEL ENGINE BLOCK
+// ══════════════════════════════════════════════════════════════════════════════

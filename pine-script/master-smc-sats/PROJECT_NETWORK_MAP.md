@@ -66,6 +66,7 @@ pine-script/master-smc-sats/
 ├── 08_risk_tp_sl_engine.pine
 ├── 09_visual_engine.pine
 ├── 10_alert_engine.pine
+├── 98_assemble_v1_5_candidate.py
 └── 99_final_assembly_notes.md
 ```
 
@@ -83,6 +84,7 @@ Purpose of this modular plan:
 | `03_SCRIPT_BLOCKS/README.md` | Modular block workspace rules and planned block list. | Created. |
 | `03_SCRIPT_BLOCKS/06_smart_key_level_engine.pine` | Clean modular block converted from Patch 02. Finds strongest historical support/resistance and EQH/EQL liquidity with optional visuals and entry hooks. | Created. Not standalone; must be assembled into master candidate. |
 | `03_SCRIPT_BLOCKS/07_entry_confluence_engine_connection_notes.md` | Exact connection notes showing how smart key hooks extend `anyExistingKeyLevelTouched`, `bullKeyReaction`, and `bearKeyReaction`. | Created. |
+| `03_SCRIPT_BLOCKS/98_assemble_v1_5_candidate.py` | Local assembly script that reads the protected v1.4 base plus Block 06 and writes a v1.5 candidate. | Created. Run locally from repo root. |
 | `03_SCRIPT_BLOCKS/99_final_assembly_notes.md` | Assembly order, dependencies, and candidate checklist. | Created. |
 | `03_MASTER_CANDIDATES/README.md` | Candidate workflow rulebook. | Created. |
 | `08_PATCHES/patch-02-smart-key-level-engine-plan.md` | Written implementation plan for strongest historical key-level and liquidity engine. | Planning document created. |
@@ -106,6 +108,8 @@ Purpose of this modular plan:
    ↓ calculates SL/TP using SMC/liquidity/R-multiple logic
 07_VISUALS_ALERTS / 03_SCRIPT_BLOCKS/09_visual_engine and 10_alert_engine
    ↓ displays signals, levels, status, and alerts
+03_SCRIPT_BLOCKS/98_assemble_v1_5_candidate.py
+   ↓ creates the first controlled v1.5 candidate from v1.4 + Block 06
 03_MASTER_CANDIDATES
    ↓ holds testable merged candidates before confirmation
 00_MASTER_COMPILED
@@ -183,6 +187,33 @@ Connection note:
 03_SCRIPT_BLOCKS/07_entry_confluence_engine_connection_notes.md
 ```
 
+## v1.5 candidate assembly script
+
+Created:
+
+```text
+03_SCRIPT_BLOCKS/98_assemble_v1_5_candidate.py
+```
+
+Run locally from the repository root after pulling the latest `main`:
+
+```bash
+python pine-script/master-smc-sats/03_SCRIPT_BLOCKS/98_assemble_v1_5_candidate.py
+```
+
+Expected output:
+
+```text
+03_MASTER_CANDIDATES/master-smc-sats-ravi-custom-01-v1.5-smart-key-liquidity-candidate.pine
+```
+
+The script checks:
+- Base starts with `//@version=6`.
+- Base has one `indicator()` declaration.
+- Block 06 has no `//@version` and no `indicator()` declaration.
+- Smart hooks are inserted.
+- Existing v1.4 key logic is extended, not replaced.
+
 ## Patch 03 / v1.5 merge objective
 
 Use this file as the merge map:
@@ -242,14 +273,13 @@ After each major update:
 Ravi approved a safer modular workflow:
 
 ```text
-requirements → isolated patch → script block → master candidate → TradingView test → compiled final
+requirements → isolated patch → script block → assembly script → master candidate → TradingView test → compiled final
 ```
 
 This means future work should not directly merge large patches into v1.4. Instead, capture each engine as a separate block inside `03_SCRIPT_BLOCKS/`, then assemble one clean master candidate.
 
 ## Latest session update
 
-- Created `03_SCRIPT_BLOCKS/06_smart_key_level_engine.pine`.
-- Created `03_SCRIPT_BLOCKS/07_entry_confluence_engine_connection_notes.md`.
-- Updated this network map to include both files.
-- Next recommended action: assemble the first controlled v1.5 candidate by inserting Block 06 into the v1.4 master and extending the existing key-level reaction logic exactly as documented in the connection notes.
+- Created `03_SCRIPT_BLOCKS/98_assemble_v1_5_candidate.py`.
+- Updated this network map to include the assembly script.
+- Next recommended action: pull the repo locally and run the assembly script, or continue by preparing a GitHub-generated candidate once full raw content can be assembled safely.

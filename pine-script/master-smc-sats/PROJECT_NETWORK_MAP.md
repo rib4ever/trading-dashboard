@@ -45,6 +45,14 @@ pine-script/master-smc-sats/
 | `08_PATCHES/` | Patch plans, failed attempts, fixes, and implementation notes. | Every new feature should start here before becoming part of the compiled master. |
 | `09_PROJECT_MEMORY/` | ChatGPT memory prompt and session update template. | Update after each important project session so future chats can continue safely. |
 
+## Important active files
+
+| File | Description | Status |
+|---|---|---|
+| `01_BASE_WORKING_VERSION/master-smc-sats-ravi-custom-01-v1.4-LAST-WORKING.pine` | Protected last working Pine v6 master script. | Do not edit directly. |
+| `08_PATCHES/patch-02-smart-key-level-engine-plan.md` | Written implementation plan for strongest historical key-level and liquidity engine. | Planning document created. |
+| `08_PATCHES/patch-02-smart-key-level-engine-isolated-v0.1.pine` | Standalone Pine v6 isolated indicator for smart support/resistance and liquidity testing. | Created for TradingView compile/visual testing before master merge. |
+
 ## Key logic relationships
 
 ```text
@@ -66,7 +74,11 @@ pine-script/master-smc-sats/
 
 ## Current protected base
 
-The latest protected working base remains the Master SMC + SATS Pine Script v1.4 shared by Ravi.
+The latest protected working base remains:
+
+```text
+01_BASE_WORKING_VERSION/master-smc-sats-ravi-custom-01-v1.4-LAST-WORKING.pine
+```
 
 Rules:
 - Never overwrite the base working version directly.
@@ -79,12 +91,37 @@ Rules:
 Smart historical fallback key-level and liquidity engine:
 
 - Use LuxAlgo-style concepts, but do not paste the LuxAlgo v5 script directly.
-- Adapt the logic safely into Pine v6.
+- Adapt the useful logic safely into Pine v6.
 - Prefer strongest key level, not nearest.
 - Include liquidity levels such as equal highs/lows and previous highs/lows.
 - Add optional visual settings.
 - Reduce noise with strength/touch filters.
 - Connect to existing `anyExistingKeyLevelTouched`, `bullKeyReaction`, and `bearKeyReaction` only after isolated testing.
+
+## Patch 02 isolated testing goal
+
+Test this file first in TradingView:
+
+```text
+08_PATCHES/patch-02-smart-key-level-engine-isolated-v0.1.pine
+```
+
+Expected result:
+- One strongest support below price.
+- One strongest resistance above price.
+- Equal-low/equal-high style liquidity when touches are repeated.
+- Clean labels with touch count.
+- No compile errors before merging into the master script.
+
+## Suggested next enhancement ideas
+
+After Patch 02 compiles and visually behaves correctly:
+
+1. Add previous day/week/month highs and lows into the smart score.
+2. Add HTF smart levels from 15M and 1H using `request.security`.
+3. Use smart resistance/support as optional TP liquidity targets.
+4. Add a debug table showing why a level was selected: touches, distance, recency, liquidity.
+5. Add strict toggle: `Require Smart Key Level When No HTF Level Exists`.
 
 ## Known Pine Script safety rules
 

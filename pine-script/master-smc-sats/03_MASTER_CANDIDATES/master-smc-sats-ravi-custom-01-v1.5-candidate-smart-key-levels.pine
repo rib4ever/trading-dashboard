@@ -1,0 +1,46 @@
+//@version=6
+// ══════════════════════════════════════════════════════════════════════════════
+// MASTER SMC + SATS SNIPER SYSTEM [Ravi Custom 01]
+// v1.5 MASTER CANDIDATE — SMART KEY LEVELS PLACEHOLDER
+// ══════════════════════════════════════════════════════════════════════════════
+// IMPORTANT:
+// This file is intentionally a SAFE PLACEHOLDER, not the final merged master code.
+// Do NOT use this as the production Master SMC + SATS indicator.
+//
+// Why this placeholder exists:
+// - 01_BASE_WORKING_VERSION contains the confirmed working v1.4 master script.
+// - 08_PATCHES contains Patch 02 Smart Historical Key Level + Liquidity Engine.
+// - 03_MASTER_CANDIDATES is the staging folder where the future v1.5 merged master
+//   will be placed after a clean, line-by-line merge.
+//
+// Current safe testing method:
+// 1) Add the v1.4 master from 01_BASE_WORKING_VERSION to TradingView.
+// 2) Add Patch 02 isolated from 08_PATCHES as a second indicator.
+// 3) Confirm Smart Support / Smart Resistance behaves correctly.
+// 4) After visual validation, merge only the required Patch 02 variables into v1.4.
+//
+// This placeholder compiles by itself so that the file is never accidentally an HTML,
+// README, or broken copied GitHub page in TradingView.
+// ══════════════════════════════════════════════════════════════════════════════
+
+indicator(
+     title = "Master SMC + SATS v1.5 Candidate Placeholder [Ravi]",
+     shorttitle = "SMC_SATS_v1.5_WAIT",
+     overlay = true,
+     max_lines_count = 10,
+     max_labels_count = 10,
+     max_bars_back = 5000)
+
+var label infoLabel = na
+if barstate.islast
+    label.delete(infoLabel)
+    infoLabel := label.new(
+         bar_index,
+         close,
+         "v1.5 candidate placeholder\nUse v1.4 base + Patch 02 isolated for now\nDo not treat this as final master code",
+         style = label.style_label_left,
+         color = color.new(color.orange, 20),
+         textcolor = color.white,
+         size = size.small)
+
+plot(na, title = "Placeholder - no trading logic")

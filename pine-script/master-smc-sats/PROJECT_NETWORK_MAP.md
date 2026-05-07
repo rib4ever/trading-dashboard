@@ -62,6 +62,7 @@ pine-script/master-smc-sats/
 ├── 05_sats_engine.pine
 ├── 06_smart_key_level_engine.pine
 ├── 07_entry_confluence_engine.pine
+├── 07_entry_confluence_engine_connection_notes.md
 ├── 08_risk_tp_sl_engine.pine
 ├── 09_visual_engine.pine
 ├── 10_alert_engine.pine
@@ -80,6 +81,8 @@ Purpose of this modular plan:
 |---|---|---|
 | `01_BASE_WORKING_VERSION/master-smc-sats-ravi-custom-01-v1.4-LAST-WORKING.pine` | Protected last working Pine v6 master script. | Do not edit directly. |
 | `03_SCRIPT_BLOCKS/README.md` | Modular block workspace rules and planned block list. | Created. |
+| `03_SCRIPT_BLOCKS/06_smart_key_level_engine.pine` | Clean modular block converted from Patch 02. Finds strongest historical support/resistance and EQH/EQL liquidity with optional visuals and entry hooks. | Created. Not standalone; must be assembled into master candidate. |
+| `03_SCRIPT_BLOCKS/07_entry_confluence_engine_connection_notes.md` | Exact connection notes showing how smart key hooks extend `anyExistingKeyLevelTouched`, `bullKeyReaction`, and `bearKeyReaction`. | Created. |
 | `03_SCRIPT_BLOCKS/99_final_assembly_notes.md` | Assembly order, dependencies, and candidate checklist. | Created. |
 | `03_MASTER_CANDIDATES/README.md` | Candidate workflow rulebook. | Created. |
 | `08_PATCHES/patch-02-smart-key-level-engine-plan.md` | Written implementation plan for strongest historical key-level and liquidity engine. | Planning document created. |
@@ -92,7 +95,9 @@ Purpose of this modular plan:
 02_SMC_CORE
    ↓ provides structure, OB/FVG, sweep/reclaim
 03_KEY_LEVEL_ENGINE / 03_SCRIPT_BLOCKS/06_smart_key_level_engine
-   ↓ provides key-level touch/reaction and liquidity levels
+   ↓ provides smartAnyKeyTouched, smartBullKeyReaction, smartBearKeyReaction,
+     smartBullLiquidityTouched, smartBearLiquidityTouched,
+     smartBuyLiquidityTarget, smartSellLiquidityTarget
 04_SATS_ENGINE
    ↓ provides trend quality, TQI, ER, adaptive trend direction
 05_ENTRY_RULES / 03_SCRIPT_BLOCKS/07_entry_confluence_engine
@@ -118,8 +123,9 @@ The latest protected working base remains:
 Rules:
 - Never overwrite the base working version directly.
 - Build patches first.
-- Test in TradingView.
-- Merge only when the patch compiles and does not break existing conditions.
+- Convert validated patches into modular blocks.
+- Assemble candidates only after each block is checked.
+- Test in TradingView before promoting any candidate.
 
 ## Current active feature plan
 
@@ -146,7 +152,38 @@ Observed result from Ravi:
 - Smart Resistance / EQH line displayed.
 - The isolated patch appears visually correct on TradingView.
 
-## Patch 03 merge objective
+## Block 06 status
+
+Created from Patch 02:
+
+```text
+03_SCRIPT_BLOCKS/06_smart_key_level_engine.pine
+```
+
+Purpose:
+- Not standalone.
+- No `//@version` line.
+- No `indicator()` declaration.
+- Uses unique `smart` / `sk` prefixes.
+- Exposes safe hooks for later master integration:
+
+```pine
+smartAnyKeyTouched
+smartBullKeyReaction
+smartBearKeyReaction
+smartBullLiquidityTouched
+smartBearLiquidityTouched
+smartBuyLiquidityTarget
+smartSellLiquidityTarget
+```
+
+Connection note:
+
+```text
+03_SCRIPT_BLOCKS/07_entry_confluence_engine_connection_notes.md
+```
+
+## Patch 03 / v1.5 merge objective
 
 Use this file as the merge map:
 
@@ -154,7 +191,7 @@ Use this file as the merge map:
 08_PATCHES/patch-03-master-v1.5-integration-map.md
 ```
 
-Target candidate file:
+Future target candidate file:
 
 ```text
 03_MASTER_CANDIDATES/master-smc-sats-ravi-custom-01-v1.5-smart-key-liquidity-candidate.pine
@@ -163,11 +200,11 @@ Target candidate file:
 Important:
 - Do not paste GitHub webpage HTML into TradingView.
 - Open the `.pine` file, tap/click `Raw`, then copy the raw Pine text.
-- The first line must be `//@version=6`.
+- The first line of a complete candidate must be `//@version=6`.
 
 ## Suggested next enhancement ideas
 
-After Patch 03 / v1.5 compiles and visually behaves correctly:
+After v1.5 compiles and visually behaves correctly:
 
 1. Add previous day/week/month highs and lows into the smart score.
 2. Add HTF smart levels from 15M and 1H using `request.security`.
@@ -183,6 +220,7 @@ After Patch 03 / v1.5 compiles and visually behaves correctly:
 - Declare variables before referencing them.
 - Avoid huge direct merges.
 - Keep each patch small and testable.
+- Isolated scripts may have `//@version` and `indicator()`, but modular blocks must not.
 
 ## Project memory loop
 
@@ -208,3 +246,10 @@ requirements → isolated patch → script block → master candidate → Tradin
 ```
 
 This means future work should not directly merge large patches into v1.4. Instead, capture each engine as a separate block inside `03_SCRIPT_BLOCKS/`, then assemble one clean master candidate.
+
+## Latest session update
+
+- Created `03_SCRIPT_BLOCKS/06_smart_key_level_engine.pine`.
+- Created `03_SCRIPT_BLOCKS/07_entry_confluence_engine_connection_notes.md`.
+- Updated this network map to include both files.
+- Next recommended action: assemble the first controlled v1.5 candidate by inserting Block 06 into the v1.4 master and extending the existing key-level reaction logic exactly as documented in the connection notes.

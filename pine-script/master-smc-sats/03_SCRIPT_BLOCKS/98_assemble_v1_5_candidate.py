@@ -60,6 +60,17 @@ def must_replace(text: str, old: str, new: str, label: str) -> str:
     return text.replace(old, new, 1)
 
 
+def has_active_directive_or_indicator(block: str) -> bool:
+    """Return True only for executable top-level Pine headers, not comments mentioning them."""
+    for raw_line in block.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("//"):
+            continue
+        if line.startswith("//@version") or line.startswith("indicator("):
+            return True
+    return False
+
+
 def main() -> None:
     if not BASE_PATH.exists():
         raise FileNotFoundError(f"Base file not found: {BASE_PATH}")
@@ -73,19 +84,16 @@ def main() -> None:
         raise RuntimeError("Base file does not start with //@version=6")
     if "indicator(" not in base[:1000]:
         raise RuntimeError("Base file does not appear to contain a Pine indicator declaration near the top")
-    if "//@version" in smart_block or "indicator(" in smart_block:
-        raise RuntimeError("Smart block must not contain //@version or indicator(); it is a modular block only")
+    if has_active_directive_or_indicator(smart_block):
+        raise RuntimeError("Smart block must not contain an executable //@version or indicator() declaration")
 
     candidate = base
 
-    # Add candidate note immediately after the indicator declaration block.
     first_section = "// ══════════════════════════════════════════════════════════════════════════════\n// GROUPS"
-    if first_section in candidate:
-        candidate = candidate.replace(first_section, HEADER_NOTE + "\n" + first_section, 1)
-    else:
+    if first_section not in candidate:
         raise RuntimeError("Could not find GROUPS section marker for candidate note insertion")
+    candidate = candidate.replace(first_section, HEADER_NOTE + "\n" + first_section, 1)
 
-    # Insert smart key-level block before existing zone/key-level confluence logic.
     if INSERT_MARKER not in candidate:
         raise RuntimeError("Could not find ZONE + KEY LEVEL CONFLUENCE marker")
     candidate = candidate.replace(
@@ -94,15 +102,11 @@ def main() -> None:
         1,
     )
 
-    # Connect smart hooks to existing v1.4 key-level logic.
     candidate = must_replace(candidate, OLD_ANY_TOUCH, NEW_ANY_TOUCH, "anyExistingKeyLevelTouched")
     candidate = must_replace(candidate, OLD_BULL_END, NEW_BULL_END, "bullKeyReaction smart OR")
     candidate = must_replace(candidate, OLD_BEAR_END, NEW_BEAR_END, "bearKeyReaction smart OR")
-
-    # Update visible end tag only.
     candidate = candidate.replace(OLD_END_TAG, NEW_END_TAG, 1)
 
-    # Safety checks.
     required_hooks = [
         "smartAnyKeyTouched",
         "smartBullKeyReaction",
@@ -117,7 +121,9 @@ def main() -> None:
     if candidate.count("//@version=6") != 1:
         raise RuntimeError("Candidate must contain exactly one //@version=6 line")
     if candidate.count("indicator(") != 1:
-        raise RuntimeError("Candidate must contain exactly one indicator() declaration")
+        raise RuntimeError("Candidate must contain exactly one executable indicator() declaration")
+    if "<!DOCTYPE html>" in candidate or "<html" in candidate:
+        raise RuntimeError("Candidate appears to contain HTML, not raw Pine text")
 
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     OUT_PATH.write_text(candidate, encoding="utf-8")

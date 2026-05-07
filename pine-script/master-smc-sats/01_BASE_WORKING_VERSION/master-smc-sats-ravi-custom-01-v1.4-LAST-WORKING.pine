@@ -1,0 +1,1456 @@
+//@version=6
+// ══════════════════════════════════════════════════════════════════════════════
+// MASTER SMC + SATS SNIPER SYSTEM [Ravi Custom 01]
+// Rebuild Version: v1.3
+// Built from:
+// 1) Flux Charts style Market Structure / OB / FVG / Sweep logic
+// 2) WillyAlgoTrader SATS adaptive trend-quality logic
+// 3) Ravi Custom sniper-entry confluence rules
+//
+// Core rule:
+// No random entries. Entry logic must require:
+// - Existing key-level touch / reaction
+// - HTF OB/FVG context
+// - Liquidity sweep / reclaim confirmation
+// - Execution OB/FVG or structure confirmation
+// - SATS trend-quality confirmation with TQI / ER filters
+// ══════════════════════════════════════════════════════════════════════════════
+
+indicator(
+     title = "Master SMC + SATS Sniper System [Ravi Custom 01]",
+     shorttitle = "SMC_SATS",
+     overlay = true,
+     max_boxes_count = 500,
+     max_labels_count = 500,
+     max_lines_count = 500,
+     max_bars_back = 5000)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// GROUPS
+// ══════════════════════════════════════════════════════════════════════════════
+GRP_MASTER = "🎯 Master Sniper Presets"
+GRP_SMC    = "🏦 SMC Engine"
+GRP_SATS   = "🧠 SATS Trend Quality Engine"
+GRP_RISK   = "🎯 Risk / TP / SL"
+GRP_VIS    = "🎨 Visuals"
+GRP_HTFLVL = "🧭 HTF Key Levels"
+GRP_ALERT  = "🔔 Alerts"
+GRP_COL    = "🎨 Colors"
+
+// ══════════════════════════════════════════════════════════════════════════════
+// COLORS
+// ══════════════════════════════════════════════════════════════════════════════
+BULL_DEFAULT = #089981
+BEAR_DEFAULT = #f23645
+NEUT_DEFAULT = #b8b8b8
+ORANGE       = #f97316
+YELLOW       = #fbbf24
+HIT_COLOR    = #40E0D0
+
+bullColor = input.color(BULL_DEFAULT, "Bull", inline = "c1", group = GRP_COL)
+bearColor = input.color(BEAR_DEFAULT, "Bear", inline = "c1", group = GRP_COL)
+neutColor = input.color(NEUT_DEFAULT, "Neutral", inline = "c1", group = GRP_COL)
+slColor   = input.color(#FF1744, "SL", inline = "c2", group = GRP_COL)
+tpColor   = input.color(#00E676, "TP", inline = "c2", group = GRP_COL)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// MASTER PRESETS
+// ══════════════════════════════════════════════════════════════════════════════
+masterPreset = input.string(
+     "Custom 01 - XAUUSD Sniper Scalping",
+     "Master Preset",
+     options = [
+         "Auto",
+         "Custom 01 - XAUUSD Sniper Scalping",
+         "Custom 02 - BTCUSD Scalping",
+         "Custom 03 - NAS100 Scalping",
+         "Scalping",
+         "Day Trade",
+         "Swing",
+         "Manual Custom"
+     ],
+     group = GRP_MASTER)
+
+manualMinTqi       = input.float(0.60, "Manual Min TQI", minval = 0.0, maxval = 1.0, step = 0.05, group = GRP_MASTER)
+manualUltraTqi     = input.float(0.70, "Manual Ultra TQI", minval = 0.0, maxval = 1.0, step = 0.05, group = GRP_MASTER)
+manualMinEr        = input.float(0.35, "Manual Min ER", minval = 0.0, maxval = 1.0, step = 0.05, group = GRP_MASTER)
+manualKillzoneOnly = input.bool(true, "Manual: Killzone Only", group = GRP_MASTER)
+manualSweepReq     = input.bool(true, "Manual: Sweep Mandatory", group = GRP_MASTER)
+manualBlockLowVol  = input.bool(true, "Manual: Block LOW / VERY LOW Volume", group = GRP_MASTER)
+manualBlockLowAtr  = input.bool(true, "Manual: Block LOW Volatility", group = GRP_MASTER)
+manualSatsLookback = input.int(5, "Manual: SATS Confirmation Lookback", minval = 0, maxval = 50, group = GRP_MASTER)
+
+// Setup / Opportunity controls
+setupSweepLookback     = input.int(12, "Setup Sweep Valid For X Bars", minval = 1, maxval = 100, group = GRP_MASTER)
+setupCooldownBars      = input.int(25, "Setup Label Cooldown Bars", minval = 1, maxval = 100, group = GRP_MASTER)
+showCounterTrendSetups = input.bool(true, "Show Counter-Trend Setup Warnings", group = GRP_MASTER)
+enableOpportunityMode  = input.bool(true, "Enable Opportunity Entries", group = GRP_MASTER, tooltip = "Shows earlier/lower-confidence entries. Sniper entries remain strict.")
+setupRequiresQuality   = input.bool(true, "Setup Warnings Require Min TQI/ER", group = GRP_MASTER, tooltip = "Reduces noisy setup labels. Setup warning appears only when basic SATS quality is acceptable.")
+setupMinTqi            = input.float(0.45, "Setup Min TQI", minval = 0.0, maxval = 1.0, step = 0.05, group = GRP_MASTER)
+setupMinEr             = input.float(0.18, "Setup Min ER", minval = 0.0, maxval = 1.0, step = 0.05, group = GRP_MASTER)
+opportunityMinTqi      = input.float(0.42, "Opportunity Min TQI", minval = 0.0, maxval = 1.0, step = 0.05, group = GRP_MASTER)
+opportunityMinEr       = input.float(0.15, "Opportunity Min ER", minval = 0.0, maxval = 1.0, step = 0.05, group = GRP_MASTER)
+opportunityUsesKZ      = input.bool(false, "Opportunity Requires Killzone", group = GRP_MASTER)
+opportunityUsesVolume  = input.bool(false, "Opportunity Blocks Low Volume", group = GRP_MASTER)
+
+zoneRequirement = input.string("OB or FVG", "Execution Zone Required", options = ["OB or FVG", "OB only", "FVG only", "OB + FVG", "No zone"], group = GRP_MASTER)
+
+// HTF POI context — main anti-random-entry filter.
+requireHtfPoiContext = input.bool(true, "Require HTF OB/FVG Context", group = GRP_MASTER, tooltip = "When enabled, setup/opportunity/sniper entries require directional 15M/1H OB or FVG context. This prevents random entries away from HTF POIs.")
+htfPoiMode = input.string("15M or 1H", "HTF POI Source", options = ["15M only", "1H only", "15M or 1H", "15M + 1H"], group = GRP_MASTER)
+htfPoiType = input.string("OB or FVG", "HTF POI Type", options = ["OB or FVG", "OB only", "FVG only", "OB + FVG"], group = GRP_MASTER)
+htfPoiOverridesBias = input.bool(true, "HTF POI Can Override Bias for Setup", group = GRP_MASTER, tooltip = "Allows local counter-trend setups only when they occur inside directional HTF OB/FVG context. Sniper still needs stronger confirmation.")
+requireExecutionZone = input.bool(true, "Require Execution OB/FVG", group = GRP_MASTER, tooltip = "Requires current timeframe OB/FVG touch in addition to HTF POI context.")
+requireLiquidityConfirmation = input.bool(true, "Require Liquidity Sweep/Reclaim", group = GRP_MASTER, tooltip = "Requires current/HTF swing or PD/PW/PM liquidity sweep and reclaim before setup or entry.")
+
+float effectiveMinTqi = switch masterPreset
+    "Custom 01 - XAUUSD Sniper Scalping" => 0.60
+    "Custom 02 - BTCUSD Scalping"        => 0.65
+    "Custom 03 - NAS100 Scalping"        => 0.65
+    "Scalping"                           => 0.55
+    "Day Trade"                          => 0.55
+    "Swing"                              => 0.50
+    "Manual Custom"                      => manualMinTqi
+    => manualMinTqi
+
+float effectiveUltraTqi = switch masterPreset
+    "Custom 01 - XAUUSD Sniper Scalping" => 0.70
+    "Custom 02 - BTCUSD Scalping"        => 0.75
+    "Custom 03 - NAS100 Scalping"        => 0.75
+    "Scalping"                           => 0.70
+    "Day Trade"                          => 0.68
+    "Swing"                              => 0.65
+    "Manual Custom"                      => manualUltraTqi
+    => manualUltraTqi
+
+float effectiveMinEr = switch masterPreset
+    "Custom 01 - XAUUSD Sniper Scalping" => 0.35
+    "Custom 02 - BTCUSD Scalping"        => 0.40
+    "Custom 03 - NAS100 Scalping"        => 0.40
+    "Scalping"                           => 0.35
+    "Day Trade"                          => 0.30
+    "Swing"                              => 0.30
+    "Manual Custom"                      => manualMinEr
+    => manualMinEr
+
+bool effectiveKillzoneOnly = switch masterPreset
+    "Custom 01 - XAUUSD Sniper Scalping" => true
+    "Custom 02 - BTCUSD Scalping"        => false
+    "Custom 03 - NAS100 Scalping"        => true
+    "Scalping"                           => true
+    "Day Trade"                          => true
+    "Swing"                              => false
+    "Manual Custom"                      => manualKillzoneOnly
+    => manualKillzoneOnly
+
+bool effectiveSweepRequired = switch masterPreset
+    "Swing"         => false
+    "Manual Custom" => manualSweepReq
+    => true
+
+bool effectiveBlockLowVol = switch masterPreset
+    "Manual Custom" => manualBlockLowVol
+    => true
+
+bool effectiveBlockLowAtr = switch masterPreset
+    "Swing"         => false
+    "Manual Custom" => manualBlockLowAtr
+    => true
+
+int effectiveSatsLookback = switch masterPreset
+    "Custom 01 - XAUUSD Sniper Scalping" => 5
+    "Custom 02 - BTCUSD Scalping"        => 5
+    "Custom 03 - NAS100 Scalping"        => 5
+    "Scalping"                           => 5
+    "Day Trade"                          => 8
+    "Swing"                              => 12
+    "Manual Custom"                      => manualSatsLookback
+    => manualSatsLookback
+
+// ══════════════════════════════════════════════════════════════════════════════
+// SMC INPUTS
+// ══════════════════════════════════════════════════════════════════════════════
+tf1Enabled = input.bool(true,  "1M",  inline = "tf1", group = GRP_SMC)
+tf1        = input.timeframe("1", "", inline = "tf1", group = GRP_SMC)
+tf1Weight  = input.int(0, "Weight", inline = "tf1", minval = 0, maxval = 10, group = GRP_SMC)
+
+tf2Enabled = input.bool(true,  "5M",  inline = "tf2", group = GRP_SMC)
+tf2        = input.timeframe("5", "", inline = "tf2", group = GRP_SMC)
+tf2Weight  = input.int(1, "Weight", inline = "tf2", minval = 0, maxval = 10, group = GRP_SMC)
+
+tf3Enabled = input.bool(true,  "15M", inline = "tf3", group = GRP_SMC)
+tf3        = input.timeframe("15", "", inline = "tf3", group = GRP_SMC)
+tf3Weight  = input.int(3, "Weight", inline = "tf3", minval = 0, maxval = 10, group = GRP_SMC)
+
+tf4Enabled = input.bool(true,  "1H", inline = "tf4", group = GRP_SMC)
+tf4        = input.timeframe("60", "", inline = "tf4", group = GRP_SMC)
+tf4Weight  = input.int(3, "Weight", inline = "tf4", minval = 0, maxval = 10, group = GRP_SMC)
+
+tf5Enabled = input.bool(true,  "4H", inline = "tf5", group = GRP_SMC)
+tf5        = input.timeframe("240", "", inline = "tf5", group = GRP_SMC)
+tf5Weight  = input.int(1, "Weight", inline = "tf5", minval = 0, maxval = 10, group = GRP_SMC)
+
+emaLength    = input.int(9, "EMA Length", minval = 1, group = GRP_SMC)
+swingLength  = input.int(5, "Swing Length", minval = 1, group = GRP_SMC)
+obLookback   = input.int(6, "OB: Show Last", minval = 1, maxval = 20, group = GRP_SMC)
+fvgLookback  = input.int(6, "FVG: Show Last", minval = 1, maxval = 20, group = GRP_SMC)
+atrAvgLength = input.int(20, "Volatility Lookback", minval = 1, group = GRP_SMC)
+
+biasUseStruct = input.bool(true, "Bias uses Structure", group = GRP_SMC)
+biasUseOB     = input.bool(true, "Bias uses OB", group = GRP_SMC)
+biasUseFVG    = input.bool(true, "Bias uses FVG", group = GRP_SMC)
+biasUseEMA    = input.bool(false, "Bias uses EMA", group = GRP_SMC)
+biasUseSwing  = input.bool(true, "Bias uses Swing Range", group = GRP_SMC)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// VISUAL INPUTS
+// ══════════════════════════════════════════════════════════════════════════════
+showOB             = input.bool(true, "Show Order Blocks", group = GRP_VIS)
+showFVG            = input.bool(true, "Show FVGs", group = GRP_VIS)
+showSwingLabels    = input.bool(false, "Show Swing HH/HL/LH/LL Labels", group = GRP_VIS)
+showSwingLines     = input.bool(false, "Show Swing High/Low Lines", group = GRP_VIS)
+plotPDHL           = input.bool(true, "Plot Previous Day High/Low", group = GRP_VIS)
+plotPWHL           = input.bool(false, "Plot Previous Week High/Low", group = GRP_VIS)
+plotPMHL           = input.bool(false, "Plot Previous Month High/Low", group = GRP_VIS)
+showEMA            = input.bool(false, "Show EMA", group = GRP_VIS)
+showSatsLine       = input.bool(true, "Show SATS Adaptive SuperTrend", group = GRP_VIS)
+visualMode         = input.string("Clean", "Visual Mode", options = ["Clean", "Normal", "Debug"], group = GRP_VIS, tooltip = "Clean = only useful visuals. Normal = setup/opportunity labels. Debug = all diagnostics.")
+showSetupWarnings  = input.bool(true, "Show Setup Warnings", group = GRP_VIS)
+showSniperEntries  = input.bool(true, "Show Entry Labels", group = GRP_VIS)
+showUltraEntries   = input.bool(true, "Show Ultra Sniper Entries", group = GRP_VIS)
+showRiskLines      = input.bool(true, "Show Entry / SL / TP Lines", group = GRP_VIS)
+showMiniStatus     = input.bool(true, "Show Mini Status Label", group = GRP_VIS)
+
+obExtend     = input.int(20, "OB Extend", minval = 1, group = GRP_VIS)
+fvgExtend    = input.int(20, "FVG Extend", minval = 1, group = GRP_VIS)
+levelExtend  = input.int(30, "HTF Level Extend", minval = 1, group = GRP_VIS)
+labelOffset  = input.int(12, "Risk Label Offset", minval = 5, maxval = 100, group = GRP_VIS)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// HTF KEY LEVEL VISUALS + KEY-LEVEL ENTRY GUARD
+// ══════════════════════════════════════════════════════════════════════════════
+showHtfKeyLevels = input.bool(true, "Show HTF Key Levels", group = GRP_HTFLVL)
+htfKeyTf1        = input.timeframe("15", "HTF Key Level 1", group = GRP_HTFLVL)
+htfKeyTf2        = input.timeframe("60", "HTF Key Level 2", group = GRP_HTFLVL)
+htfKeyColor1     = input.color(#2962FF, "HTF 1 Color", group = GRP_HTFLVL)
+htfKeyColor2     = input.color(#FF9800, "HTF 2 Color", group = GRP_HTFLVL)
+showHtfSwingHL   = input.bool(true, "Show HTF Swing High/Low", group = GRP_HTFLVL)
+showHtfPoiLevels = input.bool(true, "Show HTF OB/FVG Boundary Levels", group = GRP_HTFLVL)
+showHtfKeyLabels = input.bool(true, "Show HTF Key Level Labels", group = GRP_HTFLVL)
+requireKeyLevelTouch = input.bool(true, "Require Existing Key Level Touch Before Entry", group = GRP_HTFLVL, tooltip = "No setup/opportunity/sniper signal unless price touches or reacts from a current TF key level or one of the two selected HTF key levels.")
+keyLevelTouchAtrBuffer = input.float(0.20, "Key Level Touch Buffer xATR", minval = 0.0, maxval = 2.0, step = 0.05, group = GRP_HTFLVL)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// TYPES
+// ══════════════════════════════════════════════════════════════════════════════
+type ZoneBlock
+    int   dir
+    float top
+    float bottom
+    int   barIdx
+
+type SwingData
+    float prevH
+    float currH
+    float prevL
+    float currL
+
+type PivotData
+    float lastPH
+    int   lastPHBar
+    float lastPL
+    int   lastPLBar
+
+type CandleSearch
+    float price
+    float otherPrice
+    int   barIdx
+    int   barsBack
+
+type ZoneResult
+    int   dir
+    float top
+    float bottom
+    int   barIdx
+    bool  isNew
+
+type SwingLabel
+    int   x
+    float y
+    string txt
+    bool  isHigh
+    color clr
+    color textClr
+
+// ══════════════════════════════════════════════════════════════════════════════
+// UTILITY FUNCTIONS
+// ══════════════════════════════════════════════════════════════════════════════
+safeDiv(float num, float den, float fallback = 0.0) =>
+    den != 0 and not na(num) and not na(den) ? num / den : fallback
+
+clamp(float v, float lo, float hi) =>
+    math.max(lo, math.min(hi, v))
+
+clampInt(int v, int lo, int hi) =>
+    math.max(lo, math.min(hi, v))
+
+mapClamp(float v, float inLo, float inHi, float outLo, float outHi) =>
+    float t = clamp(safeDiv(v - inLo, inHi - inLo, 0.0), 0.0, 1.0)
+    outLo + t * (outHi - outLo)
+
+mapClampInv(float v, float inLo, float inHi, float outHigh, float outLow) =>
+    float t = clamp(safeDiv(v - inLo, inHi - inLo, 0.0), 0.0, 1.0)
+    outHigh - t * (outHigh - outLow)
+
+pct(value, base) => safeDiv(value, base, 0.0) * 100
+isBreakAbove(level) => not na(level) and close > level and close[1] <= level
+isBreakBelow(level) => not na(level) and close < level and close[1] >= level
+dirScore(dir) => dir > 0 ? 1 : dir < 0 ? -1 : 0
+
+// ══════════════════════════════════════════════════════════════════════════════
+// CORE SMC CALCULATIONS
+// ══════════════════════════════════════════════════════════════════════════════
+emaValue  = ta.ema(close, emaLength)
+pivotHigh = ta.pivothigh(high, swingLength, swingLength)
+pivotLow  = ta.pivotlow(low, swingLength, swingLength)
+_green    = close > open or close > close[1]
+_red      = close < open or close < close[1]
+
+bullFVG = low[1] > high[3] and _green[2] and low[1] < high[2] and low[2] < high[3]
+bearFVG = high[1] < low[3] and _red[2] and high[1] > low[2] and high[2] > low[3]
+
+calcTrend() =>
+    trendDist = close - emaValue
+    dir = close > emaValue ? 1 : -1
+    [dir, trendDist]
+
+calcSwingHL() =>
+    var SwingData swing = SwingData.new()
+    var bool lowBroken = false
+    var bool highBroken = false
+    newSwingH = not na(pivotHigh)
+    newSwingL = not na(pivotLow)
+    if newSwingH
+        swing.prevH := swing.currH
+        swing.currH := pivotHigh
+        highBroken := false
+    if newSwingL
+        swing.prevL := swing.currL
+        swing.currL := pivotLow
+        lowBroken := false
+    if not na(swing.currL) and low < swing.currL
+        lowBroken := true
+    if not na(swing.currH) and high > swing.currH
+        highBroken := true
+    reclaimedLow  = lowBroken and not na(swing.currL) and close > swing.currL
+    reclaimedHigh = highBroken and not na(swing.currH) and close < swing.currH
+    var int swingBias = 0
+    if newSwingH
+        swingBias := 1
+    if newSwingL
+        swingBias := -1
+    [swing.currH, swing.currL, swingBias, newSwingH, newSwingL, swing.prevH, swing.prevL, reclaimedLow, reclaimedHigh]
+
+calcStructure() =>
+    var SwingData swing = SwingData.new()
+    var string struct1 = "--"
+    var string struct2 = "--"
+    var string struct3 = "--"
+    var int highType = 0
+    var int lowType = 0
+    if not na(pivotHigh)
+        swing.prevH := swing.currH
+        swing.currH := pivotHigh
+        if not na(swing.prevH)
+            highType := swing.currH > swing.prevH ? 1 : -1
+            struct3 := struct2
+            struct2 := struct1
+            struct1 := highType > 0 ? "HH" : "LH"
+    if not na(pivotLow)
+        swing.prevL := swing.currL
+        swing.currL := pivotLow
+        if not na(swing.prevL)
+            lowType := swing.currL > swing.prevL ? 1 : -1
+            struct3 := struct2
+            struct2 := struct1
+            struct1 := lowType > 0 ? "HL" : "LL"
+    rtHighType = highType
+    rtLowType = lowType
+    rtStruct1 = struct1
+    rtStruct2 = struct2
+    rtStruct3 = struct3
+    if not na(swing.prevL) and close < swing.prevL
+        rtLowType := -1
+        rtStruct3 := struct2
+        rtStruct2 := struct1
+        rtStruct1 := "LL"
+    if not na(swing.prevH) and close > swing.prevH
+        rtHighType := 1
+        rtStruct3 := struct2
+        rtStruct2 := struct1
+        rtStruct1 := "HH"
+    structureBias = 0
+    if rtHighType == 1 and rtLowType == 1
+        structureBias := 1
+    else if rtHighType == -1 and rtLowType == -1
+        structureBias := -1
+    [rtHighType, rtLowType, structureBias, rtStruct1, rtStruct2, rtStruct3]
+
+findLowestCandle(int barsBack) =>
+    search = CandleSearch.new(low, high, bar_index, barsBack)
+    for i = 0 to math.max(0, math.min(barsBack, 50))
+        if low[i] < search.price
+            search.price := low[i]
+            search.otherPrice := high[i]
+            search.barIdx := bar_index - i
+    search
+
+findHighestCandle(int barsBack) =>
+    search = CandleSearch.new(high, low, bar_index, barsBack)
+    for i = 0 to math.max(0, math.min(barsBack, 50))
+        if high[i] > search.price
+            search.price := high[i]
+            search.otherPrice := low[i]
+            search.barIdx := bar_index - i
+    search
+
+limitArraySize(array<ZoneBlock> arr, int maxSize) =>
+    if arr.size() > maxSize
+        arr.pop()
+
+hasOverlappingOB(int dir, float top, float bottom, array<ZoneBlock> obs) =>
+    overlaps = false
+    for ob in obs
+        if ob.dir == dir and top >= ob.bottom and bottom <= ob.top
+            overlaps := true
+            break
+    overlaps
+
+mitigateOBs(array<ZoneBlock> obs) =>
+    obCount = obs.size()
+    if obCount > 0
+        for i = obCount - 1 to 0
+            ob = obs.get(i)
+            if ob.dir == 1 and close < ob.bottom
+                obs.remove(i)
+            else if ob.dir == -1 and close > ob.top
+                obs.remove(i)
+
+mitigateFVGs(array<ZoneBlock> fvgs) =>
+    fvgCount = fvgs.size()
+    if fvgCount > 0
+        for i = fvgCount - 1 to 0
+            fvg = fvgs.get(i)
+            if fvg.dir == 1 and low < fvg.bottom
+                fvgs.remove(i)
+            else if fvg.dir == -1 and high > fvg.top
+                fvgs.remove(i)
+
+findNearestZone(array<ZoneBlock> zones) =>
+    nearestBullDist = 100000.0
+    nearestBearDist = 100000.0
+    zoneCount = zones.size()
+    if zoneCount > 0
+        for i = 0 to zoneCount - 1
+            zone = zones.get(i)
+            if zone.dir == 1
+                dist = zone.top - close
+                if math.abs(dist) < math.abs(nearestBullDist)
+                    nearestBullDist := dist
+            else
+                dist = zone.bottom - close
+                if math.abs(dist) < math.abs(nearestBearDist)
+                    nearestBearDist := dist
+    nearestDir = 0
+    nearestDist = 0.0
+    if math.abs(nearestBullDist) < math.abs(nearestBearDist) and math.abs(nearestBullDist) < 100000.0
+        nearestDir := 1
+        nearestDist := nearestBullDist
+    else if math.abs(nearestBearDist) < 100000.0
+        nearestDir := -1
+        nearestDist := nearestBearDist
+    [nearestDir, nearestDist]
+
+trackPivotBreaks(PivotData pivot) =>
+    bullBreak = false
+    bearBreak = false
+    bullBar = 0
+    bearBar = 0
+    if not na(pivotHigh)
+        pivot.lastPH := pivotHigh
+        pivot.lastPHBar := bar_index - swingLength
+    if not na(pivotLow)
+        pivot.lastPL := pivotLow
+        pivot.lastPLBar := bar_index - swingLength
+    if isBreakAbove(pivot.lastPH) and not na(pivot.lastPHBar)
+        bullBreak := true
+        bullBar := pivot.lastPHBar
+        pivot.lastPH := na
+        pivot.lastPHBar := na
+    if isBreakBelow(pivot.lastPL) and not na(pivot.lastPLBar)
+        bearBreak := true
+        bearBar := pivot.lastPLBar
+        pivot.lastPL := na
+        pivot.lastPLBar := na
+    [bullBreak, bullBar, bearBreak, bearBar]
+
+detectOBSimple(int dir, int pivotBar, array<ZoneBlock> obs, int maxOBs) =>
+    barsBack = bar_index - pivotBar - 1
+    search = dir > 0 ? findLowestCandle(barsBack) : findHighestCandle(barsBack)
+    top = dir > 0 ? search.otherPrice : search.price
+    bottom = dir > 0 ? search.price : search.otherPrice
+    if not hasOverlappingOB(dir, top, bottom, obs)
+        obs.unshift(ZoneBlock.new(dir, top, bottom, search.barIdx))
+        limitArraySize(obs, maxOBs)
+
+detectOB(int dir, int pivotBar, array<ZoneBlock> obs, int maxOBs, ZoneResult result) =>
+    barsBack = bar_index - pivotBar - 1
+    search = dir > 0 ? findLowestCandle(barsBack) : findHighestCandle(barsBack)
+    newTop = dir > 0 ? search.otherPrice : search.price
+    newBottom = dir > 0 ? search.price : search.otherPrice
+    if not hasOverlappingOB(dir, newTop, newBottom, obs)
+        result.dir := dir
+        result.top := newTop
+        result.bottom := newBottom
+        result.barIdx := search.barIdx
+        result.isNew := true
+        obs.unshift(ZoneBlock.new(dir, newTop, newBottom, search.barIdx))
+        limitArraySize(obs, maxOBs)
+
+calcOrderBlock(maxOBs) =>
+    var PivotData pivot = PivotData.new()
+    var array<ZoneBlock> obs = array.new<ZoneBlock>()
+    var ZoneResult result = ZoneResult.new()
+    [bullBreak, bullBar, bearBreak, bearBar] = trackPivotBreaks(pivot)
+    result.isNew := false
+    if bullBreak
+        detectOB(1, bullBar, obs, maxOBs, result)
+    if bearBreak
+        detectOB(-1, bearBar, obs, maxOBs, result)
+    mitigateOBs(obs)
+    [nearestDir, nearestDist] = findNearestZone(obs)
+    [result.dir, result.top, result.bottom, result.isNew, nearestDir, nearestDist]
+
+detectFVGSignal() =>
+    fvgDir = 0
+    fvgTop = 0.0
+    fvgBottom = 0.0
+    fvgBar = 0
+    if bullFVG
+        fvgDir := 1
+        fvgTop := low[1]
+        fvgBottom := high[3]
+        fvgBar := bar_index - 3
+    if bearFVG
+        fvgDir := -1
+        fvgTop := low[3]
+        fvgBottom := high[1]
+        fvgBar := bar_index - 3
+    [fvgDir, fvgTop, fvgBottom, fvgBar]
+
+calcFVG(maxFVGs) =>
+    var array<ZoneBlock> fvgs = array.new<ZoneBlock>()
+    [fvgDir, fvgTop, fvgBottom, fvgBar] = detectFVGSignal()
+    if fvgDir != 0
+        fvgs.unshift(ZoneBlock.new(fvgDir, fvgTop, fvgBottom, fvgBar))
+        limitArraySize(fvgs, maxFVGs)
+    mitigateFVGs(fvgs)
+    [nearestDir, nearestDist] = findNearestZone(fvgs)
+    [fvgDir, fvgTop, fvgBottom, fvgDir != 0, nearestDir, nearestDist]
+
+calcAll() =>
+    [trendDir, trendDist] = calcTrend()
+    [swingH, swingL, _swingBias, _newSwingH, _newSwingL, _prevSwingH, _prevSwingL, reclaimLow, reclaimHigh] = calcSwingHL()
+    [_highType, _lowType, structBias, struct1, struct2, struct3] = calcStructure()
+    [_obDir, _obTop, _obBottom, _newOB, obNearDir, obNearDist] = calcOrderBlock(obLookback)
+    [_fvgDir, _fvgTop, _fvgBottom, _newFVG, fvgNearDir, fvgNearDist] = calcFVG(fvgLookback)
+    [trendDir, trendDist, swingH, swingL, structBias, struct1, struct2, struct3, obNearDir, obNearDist, fvgNearDir, fvgNearDist, reclaimLow, reclaimHigh]
+
+tfActive(enabled, tf) => enabled and timeframe.in_seconds() <= timeframe.in_seconds(tf)
+
+// MTF SMC data
+[t1_trendDir, t1_trendDist, t1_swingH, t1_swingL, t1_structBias, t1_struct1, t1_struct2, t1_struct3, t1_obNearDir, t1_obNearDist, t1_fvgNearDir, t1_fvgNearDist, t1_reclaimLow, t1_reclaimHigh] = request.security(syminfo.tickerid, tfActive(tf1Enabled, tf1) ? tf1 : na, calcAll())
+[t2_trendDir, t2_trendDist, t2_swingH, t2_swingL, t2_structBias, t2_struct1, t2_struct2, t2_struct3, t2_obNearDir, t2_obNearDist, t2_fvgNearDir, t2_fvgNearDist, t2_reclaimLow, t2_reclaimHigh] = request.security(syminfo.tickerid, tfActive(tf2Enabled, tf2) ? tf2 : na, calcAll())
+[t3_trendDir, t3_trendDist, t3_swingH, t3_swingL, t3_structBias, t3_struct1, t3_struct2, t3_struct3, t3_obNearDir, t3_obNearDist, t3_fvgNearDir, t3_fvgNearDist, t3_reclaimLow, t3_reclaimHigh] = request.security(syminfo.tickerid, tfActive(tf3Enabled, tf3) ? tf3 : na, calcAll())
+[t4_trendDir, t4_trendDist, t4_swingH, t4_swingL, t4_structBias, t4_struct1, t4_struct2, t4_struct3, t4_obNearDir, t4_obNearDist, t4_fvgNearDir, t4_fvgNearDist, t4_reclaimLow, t4_reclaimHigh] = request.security(syminfo.tickerid, tfActive(tf4Enabled, tf4) ? tf4 : na, calcAll())
+[t5_trendDir, t5_trendDist, t5_swingH, t5_swingL, t5_structBias, t5_struct1, t5_struct2, t5_struct3, t5_obNearDir, t5_obNearDist, t5_fvgNearDir, t5_fvgNearDist, t5_reclaimLow, t5_reclaimHigh] = request.security(syminfo.tickerid, tfActive(tf5Enabled, tf5) ? tf5 : na, calcAll())
+
+// User-selectable HTF key level sources. Visible on every chart timeframe.
+[k1_trendDir, k1_trendDist, k1_swingH, k1_swingL, k1_structBias, k1_struct1, k1_struct2, k1_struct3, k1_obNearDir, k1_obNearDist, k1_fvgNearDir, k1_fvgNearDist, k1_reclaimLow, k1_reclaimHigh] = request.security(syminfo.tickerid, htfKeyTf1, calcAll())
+[k2_trendDir, k2_trendDist, k2_swingH, k2_swingL, k2_structBias, k2_struct1, k2_struct2, k2_struct3, k2_obNearDir, k2_obNearDist, k2_fvgNearDir, k2_fvgNearDist, k2_reclaimLow, k2_reclaimHigh] = request.security(syminfo.tickerid, htfKeyTf2, calcAll())
+
+swingBiasDir(swingH, swingL) =>
+    swingRange = math.max(swingH - swingL, syminfo.mintick)
+    swingPct = (close - swingL) / swingRange * 100
+    swingPct < 0 ? -1 : swingPct > 100 ? 1 : swingPct < 30 ? 1 : swingPct > 70 ? -1 : 0
+
+calcBiasForTf(structBias, obDir, fvgDir, trendDir, swingDir, weight) =>
+    score = 0
+    if biasUseStruct
+        score += dirScore(structBias)
+    if biasUseOB
+        score += dirScore(obDir)
+    if biasUseFVG
+        score += dirScore(fvgDir)
+    if biasUseEMA
+        score += dirScore(trendDir)
+    if biasUseSwing
+        score += swingDir
+    score * weight
+
+biasFactorCount() =>
+    count = 0
+    if biasUseStruct
+        count += 1
+    if biasUseOB
+        count += 1
+    if biasUseFVG
+        count += 1
+    if biasUseEMA
+        count += 1
+    if biasUseSwing
+        count += 1
+    count
+
+factorCount = biasFactorCount()
+maxScore = 0
+biasPoints = 0
+
+tfWeights = array.from(tf1Weight, tf2Weight, tf3Weight, tf4Weight, tf5Weight)
+tfActives = array.from(tfActive(tf1Enabled, tf1), tfActive(tf2Enabled, tf2), tfActive(tf3Enabled, tf3), tfActive(tf4Enabled, tf4), tfActive(tf5Enabled, tf5))
+structBiases = array.from(t1_structBias, t2_structBias, t3_structBias, t4_structBias, t5_structBias)
+obDirs = array.from(t1_obNearDir, t2_obNearDir, t3_obNearDir, t4_obNearDir, t5_obNearDir)
+fvgDirs = array.from(t1_fvgNearDir, t2_fvgNearDir, t3_fvgNearDir, t4_fvgNearDir, t5_fvgNearDir)
+trendDirs = array.from(t1_trendDir, t2_trendDir, t3_trendDir, t4_trendDir, t5_trendDir)
+swingDirs = array.from(swingBiasDir(t1_swingH, t1_swingL), swingBiasDir(t2_swingH, t2_swingL), swingBiasDir(t3_swingH, t3_swingL), swingBiasDir(t4_swingH, t4_swingL), swingBiasDir(t5_swingH, t5_swingL))
+
+for i = 0 to 4
+    weight = tfWeights.get(i)
+    if tfActives.get(i) and weight > 0
+        maxScore += weight * factorCount
+        biasPoints += calcBiasForTf(structBiases.get(i), obDirs.get(i), fvgDirs.get(i), trendDirs.get(i), swingDirs.get(i), weight)
+
+biasPct = maxScore > 0 ? (biasPoints / maxScore) * 100 : 0
+htfBullishBias = biasPct > 20 and t3_structBias >= 0 and t4_structBias >= 0
+htfBearishBias = biasPct < -20 and t3_structBias <= 0 and t4_structBias <= 0
+strongHtfBull = biasPct > 50 and t3_structBias == 1 and t4_structBias == 1
+strongHtfBear = biasPct < -50 and t3_structBias == -1 and t4_structBias == -1
+
+// Current TF SMC data
+[currSwingH, currSwingL, _currSwingBias, currNewSwingH, currNewSwingL, currPrevSwingH, currPrevSwingL, currReclaimLow, currReclaimHigh] = calcSwingHL()
+[currHighType, currLowType, currStructBias, currStruct1, currStruct2, currStruct3] = calcStructure()
+[currObDir, currObTop, currObBottom, currNewOB, currObNearDir, currObNearDist] = calcOrderBlock(obLookback)
+[currFvgDir, currFvgTop, currFvgBottom, currNewFVG, currFvgNearDir, currFvgNearDist] = calcFVG(fvgLookback)
+
+// Dedicated current TF OB/FVG arrays for visualization
+var array<ZoneBlock> currTfOBs = array.new<ZoneBlock>()
+var PivotData currTfPivot = PivotData.new()
+[currBullBreak, currBullBar, currBearBreak, currBearBar] = trackPivotBreaks(currTfPivot)
+if currBullBreak
+    detectOBSimple(1, currBullBar, currTfOBs, obLookback)
+if currBearBreak
+    detectOBSimple(-1, currBearBar, currTfOBs, obLookback)
+mitigateOBs(currTfOBs)
+
+var array<ZoneBlock> currTfFvgs = array.new<ZoneBlock>()
+[currFvgSigDir, currFvgSigTop, currFvgSigBottom, currFvgSigBar] = detectFVGSignal()
+if currFvgSigDir != 0
+    currTfFvgs.unshift(ZoneBlock.new(currFvgSigDir, currFvgSigTop, currFvgSigBottom, currFvgSigBar))
+    limitArraySize(currTfFvgs, fvgLookback)
+mitigateFVGs(currTfFvgs)
+
+// Current swing labels storage
+var array<SwingLabel> swingLabels = array.new<SwingLabel>()
+if currNewSwingH
+    labelTextH = "HH"
+    labelBgH = color.new(bullColor, 80)
+    labelTextColH = bullColor
+    if not na(currPrevSwingH) and currSwingH < currPrevSwingH
+        labelTextH := "LH"
+        labelBgH := color.new(bearColor, 80)
+        labelTextColH := bearColor
+    swingLabels.push(SwingLabel.new(bar_index - swingLength, currSwingH, labelTextH, true, labelBgH, labelTextColH))
+    if swingLabels.size() > 100
+        swingLabels.shift()
+
+if currNewSwingL
+    labelTextL = "HL"
+    labelBgL = color.new(bullColor, 80)
+    labelTextColL = bullColor
+    if not na(currPrevSwingL) and currSwingL < currPrevSwingL
+        labelTextL := "LL"
+        labelBgL := color.new(bearColor, 80)
+        labelTextColL := bearColor
+    swingLabels.push(SwingLabel.new(bar_index - swingLength, currSwingL, labelTextL, false, labelBgL, labelTextColL))
+    if swingLabels.size() > 100
+        swingLabels.shift()
+
+// ══════════════════════════════════════════════════════════════════════════════
+// SESSION / KILLZONE LOGIC — NY time
+// ══════════════════════════════════════════════════════════════════════════════
+getKillzone(hr, mins) =>
+    kzName = "NO KILLZONE"
+    currentMins = hr * 60 + mins
+    asianKzStart = 20 * 60
+    londonKzStart = 2 * 60
+    londonKzEnd = 5 * 60
+    nyAmKzStart = 9 * 60 + 30
+    nyAmKzEnd = 11 * 60
+    nyLunchStart = 12 * 60
+    nyLunchEnd = 13 * 60
+    nyPmKzStart = 13 * 60 + 30
+    nyPmKzEnd = 16 * 60
+    if currentMins >= asianKzStart or currentMins < 0
+        kzName := "ASIAN KZ"
+    else if currentMins >= londonKzStart and currentMins < londonKzEnd
+        kzName := "LONDON KZ"
+    else if currentMins >= nyAmKzStart and currentMins < nyAmKzEnd
+        kzName := "NY AM KZ"
+    else if currentMins >= nyLunchStart and currentMins < nyLunchEnd
+        kzName := "NY LUNCH"
+    else if currentMins >= nyPmKzStart and currentMins < nyPmKzEnd
+        kzName := "NY PM KZ"
+    kzName
+
+barHour = hour(time, "America/New_York")
+barMinute = minute(time, "America/New_York")
+killzoneName = getKillzone(barHour, barMinute)
+allowLondon = input.bool(true, "Allow London KZ", group = GRP_MASTER)
+allowNyAm   = input.bool(true, "Allow NY AM KZ", group = GRP_MASTER)
+allowNyPm   = input.bool(true, "Allow NY PM KZ", group = GRP_MASTER)
+allowAsian  = input.bool(false, "Allow Asian KZ", group = GRP_MASTER)
+allowLunch  = input.bool(false, "Allow NY Lunch", group = GRP_MASTER)
+allowNoKz   = input.bool(false, "Allow NO KILLZONE", group = GRP_MASTER, tooltip = "If Killzone Only is enabled but current candle is outside all defined killzones, enable this to prevent blocking.")
+
+killzoneAllowedRaw =
+     (killzoneName == "LONDON KZ" and allowLondon) or
+     (killzoneName == "NY AM KZ" and allowNyAm) or
+     (killzoneName == "NY PM KZ" and allowNyPm) or
+     (killzoneName == "ASIAN KZ" and allowAsian) or
+     (killzoneName == "NY LUNCH" and allowLunch) or
+     (killzoneName == "NO KILLZONE" and allowNoKz)
+killzoneAllowed = not effectiveKillzoneOnly or killzoneAllowedRaw
+
+// ══════════════════════════════════════════════════════════════════════════════
+// VOLUME / VOLATILITY FILTERS
+// ══════════════════════════════════════════════════════════════════════════════
+volumeLength = 20
+avgVolume = ta.sma(volume, volumeLength)
+volumePct = pct(volume, avgVolume)
+volumeState = volumePct > 200 ? "EXTREME" : volumePct > 120 ? "HIGH" : volumePct > 80 ? "NORMAL" : volumePct > 50 ? "LOW" : "VERY LOW"
+volumeAllowed = not effectiveBlockLowVol or (volumeState != "LOW" and volumeState != "VERY LOW")
+
+atrLengthSmc = 3
+currentATR = ta.atr(atrLengthSmc)
+avgATR = ta.sma(currentATR, atrAvgLength)
+atrPct = pct(currentATR, avgATR)
+volatilityState = atrPct > 130 ? "HIGH" : atrPct > 70 ? "NORMAL" : "LOW"
+
+// ══════════════════════════════════════════════════════════════════════════════
+// HTF LEVELS / LIQUIDITY SWEEPS
+// ══════════════════════════════════════════════════════════════════════════════
+[pdHigh, pdLow] = request.security(syminfo.tickerid, "D", [high[1], low[1]], lookahead = barmerge.lookahead_on)
+[pwHigh, pwLow] = request.security(syminfo.tickerid, "W", [high[1], low[1]], lookahead = barmerge.lookahead_on)
+[pmHigh, pmLow] = request.security(syminfo.tickerid, "M", [high[1], low[1]], lookahead = barmerge.lookahead_on)
+
+trackHTFLevel(levelHigh, levelLow, tf) =>
+    var bool lowBroken = false
+    var bool highBroken = false
+    if timeframe.change(tf)
+        lowBroken := false
+        highBroken := false
+    if low < levelLow
+        lowBroken := true
+    if high > levelHigh
+        highBroken := true
+    reclaimLow = lowBroken and close > levelLow
+    reclaimHigh = highBroken and close < levelHigh
+    [reclaimLow, reclaimHigh]
+
+[pdReclaimLow, pdReclaimHigh] = trackHTFLevel(pdHigh, pdLow, "D")
+[pwReclaimLow, pwReclaimHigh] = trackHTFLevel(pwHigh, pwLow, "W")
+[pmReclaimLow, pmReclaimHigh] = trackHTFLevel(pmHigh, pmLow, "M")
+
+rawBullishSweep = currReclaimLow or t3_reclaimLow or t4_reclaimLow or k1_reclaimLow or k2_reclaimLow or pdReclaimLow or pwReclaimLow or pmReclaimLow
+rawBearishSweep = currReclaimHigh or t3_reclaimHigh or t4_reclaimHigh or k1_reclaimHigh or k2_reclaimHigh or pdReclaimHigh or pwReclaimHigh or pmReclaimHigh
+bullishSweepEvent = rawBullishSweep and not rawBullishSweep[1]
+bearishSweepEvent = rawBearishSweep and not rawBearishSweep[1]
+barsSinceBullSweep = ta.barssince(bullishSweepEvent)
+barsSinceBearSweep = ta.barssince(bearishSweepEvent)
+bullishSweepDetected = rawBullishSweep or (not na(barsSinceBullSweep) and barsSinceBullSweep <= setupSweepLookback)
+bearishSweepDetected = rawBearishSweep or (not na(barsSinceBearSweep) and barsSinceBearSweep <= setupSweepLookback)
+sweepOkBuy = (not effectiveSweepRequired and not requireLiquidityConfirmation) or bullishSweepDetected
+sweepOkSell = (not effectiveSweepRequired and not requireLiquidityConfirmation) or bearishSweepDetected
+
+// ══════════════════════════════════════════════════════════════════════════════
+// SATS CORE LOGIC
+// ══════════════════════════════════════════════════════════════════════════════
+satsPreset = input.string("Auto", "SATS Preset", options = ["Auto", "Custom", "Scalping", "Default", "Swing", "Crypto 24/7"], group = GRP_SATS)
+atrLenInput = input.int(13, "ATR Length", minval = 5, maxval = 100, group = GRP_SATS)
+baseMultInput = input.float(2.0, "Base Band Width xATR", minval = 0.5, maxval = 5.0, step = 0.1, group = GRP_SATS)
+sourceInput = input.source(close, "Source", group = GRP_SATS)
+useAdaptiveInput = input.bool(true, "Enable ER Adaptive Bands", group = GRP_SATS)
+erLengthInput = input.int(20, "Efficiency Window", minval = 5, maxval = 100, group = GRP_SATS)
+adaptStrengthInput = input.float(0.5, "Adaptation Strength", minval = 0.0, maxval = 1.0, step = 0.05, group = GRP_SATS)
+atrBaselineLenInput = input.int(100, "ATR Baseline Length", minval = 20, maxval = 500, group = GRP_SATS)
+useTqiInput = input.bool(true, "Enable TQI", group = GRP_SATS)
+qualityStrengthInput = input.float(0.4, "Quality Influence", minval = 0.0, maxval = 1.0, step = 0.05, group = GRP_SATS)
+qualityCurveInput = input.float(1.5, "Quality Curve Power", minval = 1.0, maxval = 3.0, step = 0.1, group = GRP_SATS)
+multSmoothInput = input.bool(true, "Smooth Multipliers", group = GRP_SATS)
+useAsymBandsInput = input.bool(true, "Asymmetric Bands", group = GRP_SATS)
+asymStrengthInput = input.float(0.5, "Asymmetry Strength", minval = 0.0, maxval = 1.0, step = 0.05, group = GRP_SATS)
+useEffAtrInput = input.bool(true, "Efficiency Weighted ATR", group = GRP_SATS)
+useCharFlipInput = input.bool(true, "Character Flip Detection", group = GRP_SATS)
+charFlipMinAgeInput = input.int(5, "Char Flip Min Trend Age", minval = 1, maxval = 50, group = GRP_SATS)
+charFlipHighInput = input.float(0.55, "Char Flip High TQI", minval = 0.3, maxval = 0.9, step = 0.05, group = GRP_SATS)
+charFlipLowInput = input.float(0.25, "Char Flip Low TQI", minval = 0.0, maxval = 0.5, step = 0.05, group = GRP_SATS)
+
+tqiWeightErInput = input.float(0.35, "TQI Weight Efficiency", minval = 0.0, maxval = 1.0, step = 0.05, group = GRP_SATS)
+tqiWeightVolInput = input.float(0.20, "TQI Weight Volatility", minval = 0.0, maxval = 1.0, step = 0.05, group = GRP_SATS)
+tqiWeightStructInput = input.float(0.25, "TQI Weight Structure", minval = 0.0, maxval = 1.0, step = 0.05, group = GRP_SATS)
+tqiWeightMomInput = input.float(0.20, "TQI Weight Momentum", minval = 0.0, maxval = 1.0, step = 0.05, group = GRP_SATS)
+tqiStructLenInput = input.int(20, "TQI Structure Window", minval = 5, maxval = 100, group = GRP_SATS)
+tqiMomLenInput = input.int(10, "TQI Momentum Window", minval = 3, maxval = 50, group = GRP_SATS)
+
+int tfMinutes = timeframe.in_seconds(timeframe.period) / 60
+string resolvedSatsPreset = satsPreset
+if satsPreset == "Auto"
+    resolvedSatsPreset := tfMinutes <= 5 ? "Scalping" : (tfMinutes <= 240 ? "Default" : "Swing")
+
+int effectiveAtrLen = switch resolvedSatsPreset
+    "Scalping" => 10
+    "Default" => 14
+    "Swing" => 21
+    "Crypto 24/7" => 14
+    "Custom" => atrLenInput
+    => atrLenInput
+
+float effectiveBaseMult = switch resolvedSatsPreset
+    "Scalping" => 1.5
+    "Default" => 2.0
+    "Swing" => 2.5
+    "Crypto 24/7" => 2.8
+    "Custom" => baseMultInput
+    => baseMultInput
+
+int effectiveErLen = switch resolvedSatsPreset
+    "Scalping" => 14
+    "Default" => 20
+    "Swing" => 30
+    "Crypto 24/7" => 20
+    "Custom" => erLengthInput
+    => erLengthInput
+
+calcEfficiencyRatio(float src, int len) =>
+    float change = math.abs(src - src[len])
+    float volatility = math.sum(math.abs(src - src[1]), len)
+    safeDiv(change, volatility, 0.0)
+
+calcVolumeZ(int len) =>
+    float vMean = ta.sma(volume, len)
+    float vStd = ta.stdev(volume, len)
+    safeDiv(volume - vMean, vStd, 0.0)
+
+rawAtr = nz(ta.atr(effectiveAtrLen), 0.0)
+atrBaseline = nz(ta.sma(rawAtr, atrBaselineLenInput), rawAtr)
+volRatio = safeDiv(rawAtr, atrBaseline, 1.0)
+erValue = calcEfficiencyRatio(close, effectiveErLen)
+effAtr = useEffAtrInput ? rawAtr * (0.5 + 0.5 * erValue) : rawAtr
+atrValue = effAtr
+
+float tqiEr = clamp(erValue, 0.0, 1.0)
+bool hasVolume = nz(volume, 0) > 0
+float volZCalc = calcVolumeZ(20)
+float volZRaw = hasVolume ? volZCalc : na
+float tqiVol = hasVolume ? mapClamp(volZRaw, -1.0, 2.0, 0.0, 1.0) : mapClamp(volRatio, 0.6, 1.8, 0.0, 1.0)
+float structHi = ta.highest(high, tqiStructLenInput)
+float structLo = ta.lowest(low, tqiStructLenInput)
+float structRange = structHi - structLo
+float pricePos = safeDiv(close - structLo, structRange, 0.5)
+float tqiStruct = clamp(math.abs(pricePos - 0.5) * 2.0, 0.0, 1.0)
+float windowChange = close - close[tqiMomLenInput]
+int alignedBars = 0
+for i = 0 to tqiMomLenInput - 1
+    float barChange = close[i] - close[i + 1]
+    if (windowChange > 0 and barChange > 0) or (windowChange < 0 and barChange < 0)
+        alignedBars += 1
+float tqiMom = float(alignedBars) / float(tqiMomLenInput)
+float tqiWeightSum = tqiWeightErInput + tqiWeightVolInput + tqiWeightStructInput + tqiWeightMomInput
+float tqiWeightDenom = tqiWeightSum > 0 ? tqiWeightSum : 1.0
+float tqiRaw = useTqiInput ? (tqiEr * tqiWeightErInput + tqiVol * tqiWeightVolInput + tqiStruct * tqiWeightStructInput + tqiMom * tqiWeightMomInput) / tqiWeightDenom : 0.5
+float tqi = clamp(tqiRaw, 0.0, 1.0)
+
+legacyAdaptFactor = useAdaptiveInput ? (1.0 + adaptStrengthInput * (0.5 - erValue)) : 1.0
+qualityDeviation = useTqiInput ? math.pow(1.0 - tqi, qualityCurveInput) : 0.5
+tqiMult = 1.0 - qualityStrengthInput + qualityStrengthInput * (0.6 + 0.8 * qualityDeviation)
+symMult = effectiveBaseMult * legacyAdaptFactor * tqiMult
+
+activeMultRaw = symMult
+passiveMultRaw = symMult
+if useTqiInput and useAsymBandsInput
+    asymTighten = 1.0 - asymStrengthInput * tqi * 0.3
+    asymWiden = 1.0 + asymStrengthInput * tqi * 0.4
+    activeMultRaw := symMult * asymTighten
+    passiveMultRaw := symMult * asymWiden
+
+var float activeMultSm = na
+var float passiveMultSm = na
+activeMultSm := na(activeMultSm[1]) ? activeMultRaw : (multSmoothInput ? activeMultSm[1] * 0.85 + activeMultRaw * 0.15 : activeMultRaw)
+passiveMultSm := na(passiveMultSm[1]) ? passiveMultRaw : (multSmoothInput ? passiveMultSm[1] * 0.85 + passiveMultRaw * 0.15 : passiveMultRaw)
+
+var float lowerBand = na
+var float upperBand = na
+var int stTrend = 1
+int prevTrend = na(stTrend[1]) ? 1 : stTrend[1]
+lowerMult = prevTrend == 1 ? activeMultSm : passiveMultSm
+upperMult = prevTrend == 1 ? passiveMultSm : activeMultSm
+lowerBandRaw = sourceInput - lowerMult * atrValue
+upperBandRaw = sourceInput + upperMult * atrValue
+lowerBand := na(lowerBand[1]) ? lowerBandRaw : (close[1] > lowerBand[1] ? math.max(lowerBandRaw, lowerBand[1]) : lowerBandRaw)
+upperBand := na(upperBand[1]) ? upperBandRaw : (close[1] < upperBand[1] ? math.min(upperBandRaw, upperBand[1]) : upperBandRaw)
+
+priceFlipUp = prevTrend == -1 and close > upperBand[1]
+priceFlipDown = prevTrend == 1 and close < lowerBand[1]
+var int trendStartBar = 0
+trendAge = bar_index - trendStartBar
+prevTqi = nz(tqi[1], 0.5)
+charFlipCondBase = useCharFlipInput and useTqiInput and prevTqi > charFlipHighInput and tqi < charFlipLowInput and trendAge >= charFlipMinAgeInput
+charFlipDown = charFlipCondBase and prevTrend == 1 and close < sourceInput
+charFlipUp = charFlipCondBase and prevTrend == -1 and close > sourceInput
+finalFlipUp = priceFlipUp or charFlipUp
+finalFlipDown = priceFlipDown or charFlipDown
+stTrend := na(stTrend[1]) ? 1 : (finalFlipUp ? 1 : (finalFlipDown ? -1 : prevTrend))
+if stTrend != prevTrend
+    trendStartBar := bar_index
+stLine = stTrend == 1 ? lowerBand : upperBand
+flipUp = stTrend == 1 and stTrend[1] == -1
+flipDown = stTrend == -1 and stTrend[1] == 1
+barsSinceBullFlip = ta.barssince(flipUp)
+barsSinceBearFlip = ta.barssince(flipDown)
+satsBullishConfirm = stTrend == 1 and (barsSinceBullFlip <= effectiveSatsLookback or tqi >= effectiveMinTqi)
+satsBearishConfirm = stTrend == -1 and (barsSinceBearFlip <= effectiveSatsLookback or tqi >= effectiveMinTqi)
+
+volatilityAllowed = not effectiveBlockLowAtr or volatilityState != "LOW"
+volatilityAllowed := volatilityAllowed and (volatilityState != "HIGH" or tqi >= effectiveUltraTqi - 0.05)
+qualityAllowed = tqi >= effectiveMinTqi and erValue >= effectiveMinEr
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ZONE + KEY LEVEL CONFLUENCE
+// ══════════════════════════════════════════════════════════════════════════════
+priceInsideBullOB = currObNearDir == 1 and currObNearDist >= 0
+priceInsideBearOB = currObNearDir == -1 and currObNearDist <= 0
+priceInsideBullFVG = currFvgNearDir == 1 and currFvgNearDist >= 0
+priceInsideBearFVG = currFvgNearDir == -1 and currFvgNearDist <= 0
+
+// Existing key-level touch / reaction filter. Prevents open-space entries.
+touchBuffer = atrValue * keyLevelTouchAtrBuffer
+nearLevel(float lvl) =>
+    not na(lvl) and low <= lvl + touchBuffer and high >= lvl - touchBuffer
+
+// HTF selectable OB/FVG boundary approximation from Flux nearest-distance output.
+k1ObLevel  = k1_obNearDir != 0 ? close + k1_obNearDist : na
+k1FvgLevel = k1_fvgNearDir != 0 ? close + k1_fvgNearDist : na
+k2ObLevel  = k2_obNearDir != 0 ? close + k2_obNearDist : na
+k2FvgLevel = k2_fvgNearDir != 0 ? close + k2_fvgNearDist : na
+
+currentSwingKeyTouched = nearLevel(currSwingH) or nearLevel(currSwingL)
+currentPdPwPmTouched   = nearLevel(pdHigh) or nearLevel(pdLow) or nearLevel(pwHigh) or nearLevel(pwLow) or nearLevel(pmHigh) or nearLevel(pmLow)
+currentPoiTouched      = priceInsideBullOB or priceInsideBearOB or priceInsideBullFVG or priceInsideBearFVG
+htfKey1Touched         = nearLevel(k1_swingH) or nearLevel(k1_swingL) or nearLevel(k1ObLevel) or nearLevel(k1FvgLevel)
+htfKey2Touched         = nearLevel(k2_swingH) or nearLevel(k2_swingL) or nearLevel(k2ObLevel) or nearLevel(k2FvgLevel)
+anyExistingKeyLevelTouched = currentSwingKeyTouched or currentPdPwPmTouched or currentPoiTouched or htfKey1Touched or htfKey2Touched
+keyLevelTouchOk = not requireKeyLevelTouch or anyExistingKeyLevelTouched
+
+bullKeyReaction = keyLevelTouchOk and (
+     priceInsideBullOB or priceInsideBullFVG or
+     nearLevel(currSwingL) or nearLevel(pdLow) or nearLevel(pwLow) or nearLevel(pmLow) or
+     nearLevel(k1_swingL) or nearLevel(k2_swingL) or
+     (k1_obNearDir == 1 and nearLevel(k1ObLevel)) or
+     (k1_fvgNearDir == 1 and nearLevel(k1FvgLevel)) or
+     (k2_obNearDir == 1 and nearLevel(k2ObLevel)) or
+     (k2_fvgNearDir == 1 and nearLevel(k2FvgLevel)))
+
+bearKeyReaction = keyLevelTouchOk and (
+     priceInsideBearOB or priceInsideBearFVG or
+     nearLevel(currSwingH) or nearLevel(pdHigh) or nearLevel(pwHigh) or nearLevel(pmHigh) or
+     nearLevel(k1_swingH) or nearLevel(k2_swingH) or
+     (k1_obNearDir == -1 and nearLevel(k1ObLevel)) or
+     (k1_fvgNearDir == -1 and nearLevel(k1FvgLevel)) or
+     (k2_obNearDir == -1 and nearLevel(k2ObLevel)) or
+     (k2_fvgNearDir == -1 and nearLevel(k2FvgLevel)))
+
+executionBullZoneOk = switch zoneRequirement
+    "OB only" => priceInsideBullOB
+    "FVG only" => priceInsideBullFVG
+    "OB + FVG" => priceInsideBullOB and priceInsideBullFVG
+    "No zone" => true
+    => priceInsideBullOB or priceInsideBullFVG
+
+executionBearZoneOk = switch zoneRequirement
+    "OB only" => priceInsideBearOB
+    "FVG only" => priceInsideBearFVG
+    "OB + FVG" => priceInsideBearOB and priceInsideBearFVG
+    "No zone" => true
+    => priceInsideBearOB or priceInsideBearFVG
+
+// HTF OB/FVG context from 15M and 1H bias TFs.
+htf15BullOB  = t3_obNearDir == 1 and t3_obNearDist >= 0
+htf15BearOB  = t3_obNearDir == -1 and t3_obNearDist <= 0
+htf15BullFVG = t3_fvgNearDir == 1 and t3_fvgNearDist >= 0
+htf15BearFVG = t3_fvgNearDir == -1 and t3_fvgNearDist <= 0
+htf1hBullOB  = t4_obNearDir == 1 and t4_obNearDist >= 0
+htf1hBearOB  = t4_obNearDir == -1 and t4_obNearDist <= 0
+htf1hBullFVG = t4_fvgNearDir == 1 and t4_fvgNearDist >= 0
+htf1hBearFVG = t4_fvgNearDir == -1 and t4_fvgNearDist <= 0
+
+htf15BullPoi = switch htfPoiType
+    "OB only" => htf15BullOB
+    "FVG only" => htf15BullFVG
+    "OB + FVG" => htf15BullOB and htf15BullFVG
+    => htf15BullOB or htf15BullFVG
+htf15BearPoi = switch htfPoiType
+    "OB only" => htf15BearOB
+    "FVG only" => htf15BearFVG
+    "OB + FVG" => htf15BearOB and htf15BearFVG
+    => htf15BearOB or htf15BearFVG
+htf1hBullPoi = switch htfPoiType
+    "OB only" => htf1hBullOB
+    "FVG only" => htf1hBullFVG
+    "OB + FVG" => htf1hBullOB and htf1hBullFVG
+    => htf1hBullOB or htf1hBullFVG
+htf1hBearPoi = switch htfPoiType
+    "OB only" => htf1hBearOB
+    "FVG only" => htf1hBearFVG
+    "OB + FVG" => htf1hBearOB and htf1hBearFVG
+    => htf1hBearOB or htf1hBearFVG
+
+htfBullPoiContext = switch htfPoiMode
+    "15M only" => htf15BullPoi
+    "1H only" => htf1hBullPoi
+    "15M + 1H" => htf15BullPoi and htf1hBullPoi
+    => htf15BullPoi or htf1hBullPoi
+htfBearPoiContext = switch htfPoiMode
+    "15M only" => htf15BearPoi
+    "1H only" => htf1hBearPoi
+    "15M + 1H" => htf15BearPoi and htf1hBearPoi
+    => htf15BearPoi or htf1hBearPoi
+
+htfBullContextOk = not requireHtfPoiContext or htfBullPoiContext
+htfBearContextOk = not requireHtfPoiContext or htfBearPoiContext
+bullZoneOk = (not requireExecutionZone or executionBullZoneOk) and htfBullContextOk
+bearZoneOk = (not requireExecutionZone or executionBearZoneOk) and htfBearContextOk
+
+bullishStructureConfirm = currStructBias == 1 or currHighType == 1
+bearishStructureConfirm = currStructBias == -1 or currLowType == -1
+
+bullContextBiasOk = htfBullishBias or (htfPoiOverridesBias and htfBullPoiContext)
+bearContextBiasOk = htfBearishBias or (htfPoiOverridesBias and htfBearPoiContext)
+
+setupQualityOk = not setupRequiresQuality or (tqi >= setupMinTqi and erValue >= setupMinEr)
+cleanMode = visualMode == "Clean"
+normalMode = visualMode == "Normal"
+debugMode = visualMode == "Debug"
+
+bullTrendSetup = htfBullishBias and sweepOkBuy and bullZoneOk and bullKeyReaction and setupQualityOk
+bearTrendSetup = htfBearishBias and sweepOkSell and bearZoneOk and bearKeyReaction and setupQualityOk
+bullCounterSetup = showCounterTrendSetups and not htfBullishBias and htfBullPoiContext and sweepOkBuy and bullZoneOk and bullKeyReaction and setupQualityOk
+bearCounterSetup = showCounterTrendSetups and not htfBearishBias and htfBearPoiContext and sweepOkSell and bearZoneOk and bearKeyReaction and setupQualityOk
+bullSetupWarning = bullTrendSetup or bullCounterSetup
+bearSetupWarning = bearTrendSetup or bearCounterSetup
+
+bullSniperEntry =
+     bullContextBiasOk and
+     htfBullContextOk and
+     bullKeyReaction and
+     sweepOkBuy and
+     bullishStructureConfirm and
+     bullZoneOk and
+     satsBullishConfirm and
+     qualityAllowed and
+     volumeAllowed and
+     volatilityAllowed and
+     killzoneAllowed and
+     barstate.isconfirmed
+
+bearSniperEntry =
+     bearContextBiasOk and
+     htfBearContextOk and
+     bearKeyReaction and
+     sweepOkSell and
+     bearishStructureConfirm and
+     bearZoneOk and
+     satsBearishConfirm and
+     qualityAllowed and
+     volumeAllowed and
+     volatilityAllowed and
+     killzoneAllowed and
+     barstate.isconfirmed
+
+oppQualityAllowed = tqi >= opportunityMinTqi and erValue >= opportunityMinEr
+oppKzAllowed = not opportunityUsesKZ or killzoneAllowed
+oppVolAllowed = not opportunityUsesVolume or volumeAllowed
+
+bullOpportunityEntry =
+     enableOpportunityMode and
+     bullSetupWarning and
+     bullKeyReaction and
+     bullishStructureConfirm and
+     satsBullishConfirm and
+     oppQualityAllowed and
+     oppKzAllowed and
+     oppVolAllowed and
+     barstate.isconfirmed and
+     not bullSniperEntry
+
+bearOpportunityEntry =
+     enableOpportunityMode and
+     bearSetupWarning and
+     bearKeyReaction and
+     bearishStructureConfirm and
+     satsBearishConfirm and
+     oppQualityAllowed and
+     oppKzAllowed and
+     oppVolAllowed and
+     barstate.isconfirmed and
+     not bearSniperEntry
+
+bullUltraEntry =
+     bullSniperEntry and
+     strongHtfBull and
+     tqi >= effectiveUltraTqi and
+     (pdReclaimLow or pwReclaimLow or pmReclaimLow or k1_reclaimLow or k2_reclaimLow) and
+     priceInsideBullOB and priceInsideBullFVG
+
+bearUltraEntry =
+     bearSniperEntry and
+     strongHtfBear and
+     tqi >= effectiveUltraTqi and
+     (pdReclaimHigh or pwReclaimHigh or pmReclaimHigh or k1_reclaimHigh or k2_reclaimHigh) and
+     priceInsideBearOB and priceInsideBearFVG
+
+// ══════════════════════════════════════════════════════════════════════════════
+// RISK / TP / SL
+// ══════════════════════════════════════════════════════════════════════════════
+slMode = input.string("Hybrid", "SL Mode", options = ["SMC", "SATS ATR", "Hybrid"], group = GRP_RISK)
+tpMode = input.string("Hybrid R + Liquidity", "TP Mode", options = ["Fixed R", "Dynamic R", "Liquidity", "Hybrid R + Liquidity"], group = GRP_RISK)
+slAtrMult = input.float(1.2, "SL ATR Buffer", minval = 0.3, maxval = 5.0, step = 0.1, group = GRP_RISK)
+tp1RInput = input.float(1.0, "TP1 R", minval = 0.2, maxval = 10.0, step = 0.1, group = GRP_RISK)
+tp2RInput = input.float(2.0, "TP2 R", minval = 0.2, maxval = 10.0, step = 0.1, group = GRP_RISK)
+tp3RInput = input.float(3.0, "TP3 R", minval = 0.2, maxval = 10.0, step = 0.1, group = GRP_RISK)
+dynTpMinScale = input.float(0.6, "Dynamic TP Min Scale", minval = 0.2, maxval = 1.0, step = 0.05, group = GRP_RISK)
+dynTpMaxScale = input.float(2.0, "Dynamic TP Max Scale", minval = 1.0, maxval = 4.0, step = 0.1, group = GRP_RISK)
+showRiskForOpportunity = input.bool(false, "Draw TP/SL for Opportunity Entries", group = GRP_RISK, tooltip = "Recommended OFF. Opportunity entries are lower confidence; drawing TP/SL for all of them creates chart noise.")
+
+calcDynTpScale(float tqiVal, float volRatioVal) =>
+    tqiComp = clamp(tqiVal, 0.0, 1.0)
+    volComp = clamp(mapClamp(volRatioVal, 0.5, 2.0, 0.0, 1.0), 0.0, 1.0)
+    rawScale = tqiComp * 0.6 + volComp * 0.4
+    dynTpMinScale + rawScale * (dynTpMaxScale - dynTpMinScale)
+
+dynScale = tpMode == "Dynamic R" or tpMode == "Hybrid R + Liquidity" ? calcDynTpScale(tqi, volRatio) : 1.0
+liveTp1R = tp1RInput * dynScale
+liveTp2R = tp2RInput * dynScale
+liveTp3R = tp3RInput * dynScale
+
+nearestBuyLiq1 = not na(currSwingH) and currSwingH > close ? currSwingH : na
+nearestBuyLiq2 = pdHigh > close ? pdHigh : na
+nearestBuyLiq3 = pwHigh > close ? pwHigh : na
+nearestSellLiq1 = not na(currSwingL) and currSwingL < close ? currSwingL : na
+nearestSellLiq2 = pdLow < close ? pdLow : na
+nearestSellLiq3 = pwLow < close ? pwLow : na
+
+calcBuySL(entry) =>
+    smcSL = math.min(nz(currSwingL, low), nz(pdLow, low)) - slAtrMult * atrValue
+    satsSL = entry - slAtrMult * atrValue
+    slMode == "SMC" ? smcSL : slMode == "SATS ATR" ? satsSL : math.min(smcSL, satsSL)
+
+calcSellSL(entry) =>
+    smcSL = math.max(nz(currSwingH, high), nz(pdHigh, high)) + slAtrMult * atrValue
+    satsSL = entry + slAtrMult * atrValue
+    slMode == "SMC" ? smcSL : slMode == "SATS ATR" ? satsSL : math.max(smcSL, satsSL)
+
+chooseBuyTP(entry, risk, rMult, liqTarget) =>
+    rTarget = entry + risk * rMult
+    tpMode == "Liquidity" and not na(liqTarget) ? liqTarget : tpMode == "Hybrid R + Liquidity" and not na(liqTarget) ? math.min(rTarget, liqTarget) : rTarget
+
+chooseSellTP(entry, risk, rMult, liqTarget) =>
+    rTarget = entry - risk * rMult
+    tpMode == "Liquidity" and not na(liqTarget) ? liqTarget : tpMode == "Hybrid R + Liquidity" and not na(liqTarget) ? math.max(rTarget, liqTarget) : rTarget
+
+var int tradeDir = 0
+var float tradeEntry = na
+var float tradeSL = na
+var float tradeTP1 = na
+var float tradeTP2 = na
+var float tradeTP3 = na
+var int tradeEntryBar = na
+var string tradeType = ""
+
+buyEntrySignal = bullSniperEntry or (showRiskForOpportunity and bullOpportunityEntry)
+sellEntrySignal = bearSniperEntry or (showRiskForOpportunity and bearOpportunityEntry)
+
+if buyEntrySignal
+    tradeDir := 1
+    tradeEntry := close
+    tradeSL := calcBuySL(tradeEntry)
+    risk = tradeEntry - tradeSL
+    tradeTP1 := chooseBuyTP(tradeEntry, risk, liveTp1R, nearestBuyLiq1)
+    tradeTP2 := chooseBuyTP(tradeEntry, risk, liveTp2R, nearestBuyLiq2)
+    tradeTP3 := chooseBuyTP(tradeEntry, risk, liveTp3R, nearestBuyLiq3)
+    tradeEntryBar := bar_index
+    tradeType := bullSniperEntry ? (bullUltraEntry ? "ULTRA BUY" : "SNIPER BUY") : "OPPORTUNITY BUY"
+
+if sellEntrySignal
+    tradeDir := -1
+    tradeEntry := close
+    tradeSL := calcSellSL(tradeEntry)
+    risk = tradeSL - tradeEntry
+    tradeTP1 := chooseSellTP(tradeEntry, risk, liveTp1R, nearestSellLiq1)
+    tradeTP2 := chooseSellTP(tradeEntry, risk, liveTp2R, nearestSellLiq2)
+    tradeTP3 := chooseSellTP(tradeEntry, risk, liveTp3R, nearestSellLiq3)
+    tradeEntryBar := bar_index
+    tradeType := bearSniperEntry ? (bearUltraEntry ? "ULTRA SELL" : "SNIPER SELL") : "OPPORTUNITY SELL"
+
+// ══════════════════════════════════════════════════════════════════════════════
+// PLOTS / VISUALS
+// ══════════════════════════════════════════════════════════════════════════════
+plot(showEMA ? emaValue : na, "EMA", color = ORANGE, linewidth = 2)
+lineTransp = clampInt(int(math.round(mapClampInv(tqi, 0.1, 0.9, 75.0, 0.0))), 0, 100)
+stLineColor = stTrend == 1 ? color.new(bullColor, lineTransp) : color.new(bearColor, lineTransp)
+plot(showSatsLine ? stLine : na, "SATS Adaptive SuperTrend", color = stLineColor, linewidth = 2)
+
+// v1.4: HTF key levels are drawn as clean horizontal objects below.
+// Avoid plot-based HTF key levels because they create messy moving series on lower timeframes.
+
+// v1.4: Clean horizontal HTF key level lines
+var line k1SwingHLine = na
+var line k1SwingLLine = na
+var line k1ObLine = na
+var line k1FvgLine = na
+var line k2SwingHLine = na
+var line k2SwingLLine = na
+var line k2ObLine = na
+var line k2FvgLine = na
+var label k1SwingHLbl = na
+var label k1SwingLLbl = na
+var label k1ObLbl = na
+var label k1FvgLbl = na
+var label k2SwingHLbl = na
+var label k2SwingLLbl = na
+var label k2ObLbl = na
+var label k2FvgLbl = na
+
+makeHtfLine(line oldLine, float lvl, color clr, styleVal, int widthVal) =>
+    line.delete(oldLine)
+    not na(lvl) ? line.new(bar_index - 1, lvl, bar_index + levelExtend, lvl, color = clr, style = styleVal, width = widthVal) : na
+
+makeHtfLabel(label oldLabel, float lvl, string txt, color clr) =>
+    label.delete(oldLabel)
+    showHtfKeyLabels and not na(lvl) ? label.new(bar_index + levelExtend, lvl, txt + " " + str.tostring(lvl, format.mintick), style = label.style_label_left, color = color.new(clr, 80), textcolor = clr, size = size.small) : na
+
+if showHtfKeyLevels and barstate.islast
+    if showHtfSwingHL
+        k1SwingHLine := makeHtfLine(k1SwingHLine, k1_swingH, color.new(htfKeyColor1, 0), line.style_solid, 2)
+        k1SwingLLine := makeHtfLine(k1SwingLLine, k1_swingL, color.new(htfKeyColor1, 0), line.style_solid, 2)
+        k2SwingHLine := makeHtfLine(k2SwingHLine, k2_swingH, color.new(htfKeyColor2, 0), line.style_solid, 2)
+        k2SwingLLine := makeHtfLine(k2SwingLLine, k2_swingL, color.new(htfKeyColor2, 0), line.style_solid, 2)
+        k1SwingHLbl := makeHtfLabel(k1SwingHLbl, k1_swingH, "HTF1 High", htfKeyColor1)
+        k1SwingLLbl := makeHtfLabel(k1SwingLLbl, k1_swingL, "HTF1 Low", htfKeyColor1)
+        k2SwingHLbl := makeHtfLabel(k2SwingHLbl, k2_swingH, "HTF2 High", htfKeyColor2)
+        k2SwingLLbl := makeHtfLabel(k2SwingLLbl, k2_swingL, "HTF2 Low", htfKeyColor2)
+    if showHtfPoiLevels
+        k1ObLine := makeHtfLine(k1ObLine, k1ObLevel, color.new(htfKeyColor1, 25), line.style_dashed, 1)
+        k1FvgLine := makeHtfLine(k1FvgLine, k1FvgLevel, color.new(htfKeyColor1, 45), line.style_dotted, 1)
+        k2ObLine := makeHtfLine(k2ObLine, k2ObLevel, color.new(htfKeyColor2, 25), line.style_dashed, 1)
+        k2FvgLine := makeHtfLine(k2FvgLine, k2FvgLevel, color.new(htfKeyColor2, 45), line.style_dotted, 1)
+        k1ObLbl := makeHtfLabel(k1ObLbl, k1ObLevel, "HTF1 OB", htfKeyColor1)
+        k1FvgLbl := makeHtfLabel(k1FvgLbl, k1FvgLevel, "HTF1 FVG", htfKeyColor1)
+        k2ObLbl := makeHtfLabel(k2ObLbl, k2ObLevel, "HTF2 OB", htfKeyColor2)
+        k2FvgLbl := makeHtfLabel(k2FvgLbl, k2FvgLevel, "HTF2 FVG", htfKeyColor2)
+else if not showHtfKeyLevels and barstate.islast
+    line.delete(k1SwingHLine), line.delete(k1SwingLLine), line.delete(k1ObLine), line.delete(k1FvgLine), line.delete(k2SwingHLine), line.delete(k2SwingLLine), line.delete(k2ObLine), line.delete(k2FvgLine)
+    label.delete(k1SwingHLbl), label.delete(k1SwingLLbl), label.delete(k1ObLbl), label.delete(k1FvgLbl), label.delete(k2SwingHLbl), label.delete(k2SwingLLbl), label.delete(k2ObLbl), label.delete(k2FvgLbl)
+
+// OB boxes
+var array<box> obBoxes = array.new<box>()
+if showOB and barstate.islast
+    for b in obBoxes
+        b.delete()
+    obBoxes.clear()
+    obCount = currTfOBs.size()
+    for i = 0 to obCount - 1
+        ob = currTfOBs.get(i)
+        obColor = ob.dir > 0 ? color.new(bullColor, 82) : color.new(bearColor, 82)
+        obBorder = ob.dir > 0 ? bullColor : bearColor
+        newBox = box.new(left = ob.barIdx, top = ob.top, right = bar_index + obExtend, bottom = ob.bottom, border_color = obBorder, border_width = 1, bgcolor = obColor, text = ob.dir > 0 ? "OB ↑" : "OB ↓", text_color = obBorder, text_halign = text.align_right, text_valign = text.align_center, text_size = size.small)
+        obBoxes.unshift(newBox)
+
+// FVG boxes
+var array<box> fvgBoxes = array.new<box>()
+if showFVG and barstate.islast
+    for b in fvgBoxes
+        b.delete()
+    fvgBoxes.clear()
+    fvgCount = currTfFvgs.size()
+    for i = 0 to fvgCount - 1
+        fvg = currTfFvgs.get(i)
+        fvgBg = fvg.dir > 0 ? color.new(bullColor, 87) : color.new(bearColor, 87)
+        fvgBorder = fvg.dir > 0 ? color.new(bullColor, 60) : color.new(bearColor, 60)
+        fvgTxt = fvg.dir > 0 ? bullColor : bearColor
+        newBox = box.new(left = fvg.barIdx, top = fvg.top, right = bar_index + fvgExtend, bottom = fvg.bottom, bgcolor = fvgBg, border_width = 1, border_style = line.style_dashed, border_color = fvgBorder, text = fvg.dir > 0 ? "FVG ↑" : "FVG ↓", text_color = fvgTxt, text_halign = text.align_right, text_valign = text.align_center, text_size = size.small)
+        fvgBoxes.unshift(newBox)
+
+// Swing labels
+var array<label> swingLabelObjs = array.new<label>()
+if showSwingLabels and barstate.islast
+    for lblObj in swingLabelObjs
+        lblObj.delete()
+    swingLabelObjs.clear()
+    for lbl in swingLabels
+        newLabel = label.new(x = lbl.x, y = lbl.y, text = lbl.txt, yloc = lbl.isHigh ? yloc.abovebar : yloc.belowbar, color = lbl.clr, style = lbl.isHigh ? label.style_label_down : label.style_label_up, textcolor = lbl.textClr, size = size.small)
+        swingLabelObjs.push(newLabel)
+
+// Swing lines
+var line swingHighLine = na
+var line swingLowLine = na
+if showSwingLines and barstate.islast
+    line.delete(swingHighLine)
+    line.delete(swingLowLine)
+    if not na(currSwingH)
+        swingHighLine := line.new(bar_index - swingLength, currSwingH, bar_index + levelExtend, currSwingH, color = color.new(bearColor, 35), style = line.style_dashed)
+    if not na(currSwingL)
+        swingLowLine := line.new(bar_index - swingLength, currSwingL, bar_index + levelExtend, currSwingL, color = color.new(bullColor, 35), style = line.style_dashed)
+
+// PD/PW/PM level lines
+var line pdhLine = na
+var line pdlLine = na
+var line pwhLine = na
+var line pwlLine = na
+var line pmhLine = na
+var line pmlLine = na
+if barstate.islast
+    line.delete(pdhLine), line.delete(pdlLine), line.delete(pwhLine), line.delete(pwlLine), line.delete(pmhLine), line.delete(pmlLine)
+    if plotPDHL
+        pdhLine := line.new(bar_index - 1, pdHigh, bar_index + levelExtend, pdHigh, color = color.new(bearColor, 0), style = line.style_dashed)
+        pdlLine := line.new(bar_index - 1, pdLow, bar_index + levelExtend, pdLow, color = color.new(bullColor, 0), style = line.style_dashed)
+    if plotPWHL
+        pwhLine := line.new(bar_index - 1, pwHigh, bar_index + levelExtend, pwHigh, color = color.new(bearColor, 35), style = line.style_dotted)
+        pwlLine := line.new(bar_index - 1, pwLow, bar_index + levelExtend, pwLow, color = color.new(bullColor, 35), style = line.style_dotted)
+    if plotPMHL
+        pmhLine := line.new(bar_index - 1, pmHigh, bar_index + levelExtend, pmHigh, color = color.new(bearColor, 55), style = line.style_solid)
+        pmlLine := line.new(bar_index - 1, pmLow, bar_index + levelExtend, pmLow, color = color.new(bullColor, 55), style = line.style_solid)
+
+// Setup warnings
+var int lastBullSetupLabelBar = na
+var int lastBearSetupLabelBar = na
+bullSetupLabelOk = showSetupWarnings and not cleanMode and bullSetupWarning and not bullSniperEntry and (na(lastBullSetupLabelBar) or bar_index - lastBullSetupLabelBar >= setupCooldownBars)
+bearSetupLabelOk = showSetupWarnings and not cleanMode and bearSetupWarning and not bearSniperEntry and (na(lastBearSetupLabelBar) or bar_index - lastBearSetupLabelBar >= setupCooldownBars)
+
+if bullSetupLabelOk
+    bullSetupTxt = bullTrendSetup ? "⚠ Bull Setup\nSweep + Key + Zone" : "⚠ CT Bull Setup\nSweep + Key + Zone"
+    label.new(bar_index, low, bullSetupTxt, style = label.style_label_up, color = color.new(bullColor, 15), textcolor = color.white, size = size.small)
+    lastBullSetupLabelBar := bar_index
+if bearSetupLabelOk
+    bearSetupTxt = bearTrendSetup ? "⚠ Bear Setup\nSweep + Key + Zone" : "⚠ CT Bear Setup\nSweep + Key + Zone"
+    label.new(bar_index, high, bearSetupTxt, style = label.style_label_down, color = color.new(bearColor, 15), textcolor = color.white, size = size.small)
+    lastBearSetupLabelBar := bar_index
+
+if showSniperEntries and not cleanMode and bullOpportunityEntry
+    label.new(bar_index, low, "⚡ OPPORTUNITY BUY\nTQI " + str.tostring(tqi, "#.00") + " | ER " + str.tostring(erValue, "#.00"), style = label.style_label_up, color = color.new(bullColor, 35), textcolor = color.white, size = size.small)
+if showSniperEntries and not cleanMode and bearOpportunityEntry
+    label.new(bar_index, high, "⚡ OPPORTUNITY SELL\nTQI " + str.tostring(tqi, "#.00") + " | ER " + str.tostring(erValue, "#.00"), style = label.style_label_down, color = color.new(bearColor, 35), textcolor = color.white, size = size.small)
+
+// Entry labels
+if showSniperEntries and bullSniperEntry and not bullUltraEntry
+    label.new(bar_index, low, "🎯 SNIPER BUY\nTQI " + str.tostring(tqi, "#.00") + " | ER " + str.tostring(erValue, "#.00"), style = label.style_label_up, color = bullColor, textcolor = color.white, size = size.normal)
+if showSniperEntries and bearSniperEntry and not bearUltraEntry
+    label.new(bar_index, high, "🎯 SNIPER SELL\nTQI " + str.tostring(tqi, "#.00") + " | ER " + str.tostring(erValue, "#.00"), style = label.style_label_down, color = bearColor, textcolor = color.white, size = size.normal)
+if showUltraEntries and bullUltraEntry
+    label.new(bar_index, low, "🔥 ULTRA BUY\nHTF + Key + OB/FVG\nTQI " + str.tostring(tqi, "#.00"), style = label.style_label_up, color = color.new(bullColor, 0), textcolor = color.white, size = size.large)
+if showUltraEntries and bearUltraEntry
+    label.new(bar_index, high, "🔥 ULTRA SELL\nHTF + Key + OB/FVG\nTQI " + str.tostring(tqi, "#.00"), style = label.style_label_down, color = color.new(bearColor, 0), textcolor = color.white, size = size.large)
+
+// Risk lines
+var line lineEntry = na
+var line lineSL = na
+var line lineTP1 = na
+var line lineTP2 = na
+var line lineTP3 = na
+var label lbEntry = na
+var label lbSL = na
+var label lbTP1 = na
+var label lbTP2 = na
+var label lbTP3 = na
+
+if showRiskLines and (buyEntrySignal or sellEntrySignal) and not na(tradeSL)
+    line.delete(lineEntry), line.delete(lineSL), line.delete(lineTP1), line.delete(lineTP2), line.delete(lineTP3)
+    label.delete(lbEntry), label.delete(lbSL), label.delete(lbTP1), label.delete(lbTP2), label.delete(lbTP3)
+    lineEnd = bar_index + labelOffset
+    labelPos = bar_index + labelOffset + 2
+    lineEntry := line.new(bar_index, tradeEntry, lineEnd, tradeEntry, color = color.gray, width = 2)
+    lineSL := line.new(bar_index, tradeSL, lineEnd, tradeSL, color = slColor, width = 2)
+    lineTP1 := line.new(bar_index, tradeTP1, lineEnd, tradeTP1, color = tpColor, width = 1, style = line.style_dashed)
+    lineTP2 := line.new(bar_index, tradeTP2, lineEnd, tradeTP2, color = tpColor, width = 1, style = line.style_dashed)
+    lineTP3 := line.new(bar_index, tradeTP3, lineEnd, tradeTP3, color = tpColor, width = 2, style = line.style_dashed)
+    lbEntry := label.new(labelPos, tradeEntry, tradeType + "\nENTRY " + str.tostring(tradeEntry, format.mintick), style = label.style_label_left, color = color.new(color.gray, 60), textcolor = color.white, size = size.small)
+    lbSL := label.new(labelPos, tradeSL, "SL " + str.tostring(tradeSL, format.mintick), style = label.style_label_left, color = color.new(slColor, 60), textcolor = color.white, size = size.small)
+    lbTP1 := label.new(labelPos, tradeTP1, "TP1 " + str.tostring(tradeTP1, format.mintick), style = label.style_label_left, color = color.new(tpColor, 60), textcolor = color.white, size = size.small)
+    lbTP2 := label.new(labelPos, tradeTP2, "TP2 " + str.tostring(tradeTP2, format.mintick), style = label.style_label_left, color = color.new(tpColor, 60), textcolor = color.white, size = size.small)
+    lbTP3 := label.new(labelPos, tradeTP3, "TP3 " + str.tostring(tradeTP3, format.mintick), style = label.style_label_left, color = color.new(tpColor, 60), textcolor = color.white, size = size.small)
+else if showRiskLines and tradeDir != 0 and not na(lineEntry)
+    newEnd = bar_index + labelOffset
+    newPos = bar_index + labelOffset + 2
+    line.set_x2(lineEntry, newEnd), line.set_x2(lineSL, newEnd), line.set_x2(lineTP1, newEnd), line.set_x2(lineTP2, newEnd), line.set_x2(lineTP3, newEnd)
+    label.set_x(lbEntry, newPos), label.set_x(lbSL, newPos), label.set_x(lbTP1, newPos), label.set_x(lbTP2, newPos), label.set_x(lbTP3, newPos)
+
+// Mini status label
+var label statusLabel = na
+if showMiniStatus and barstate.islast
+    label.delete(statusLabel)
+    biasTxt = htfBullishBias ? "Bull" : htfBearishBias ? "Bear" : "Neutral"
+    statusTxt = "Preset: " + masterPreset +
+      "\nBias: " + biasTxt + " (" + str.tostring(biasPct, "#.0") + "%)" +
+      "\nKZ: " + killzoneName + " | " + (killzoneAllowed ? "OK" : "BLOCK") + (effectiveKillzoneOnly and killzoneName == "NO KILLZONE" and not allowNoKz ? " — enable Allow NO KILLZONE" : "") +
+      "\nTQI: " + str.tostring(tqi, "#.00") + " / " + str.tostring(effectiveMinTqi, "#.00") +
+      "\nER: " + str.tostring(erValue, "#.00") + " / " + str.tostring(effectiveMinEr, "#.00") +
+      "\nVol: " + volumeState + " | ATR: " + volatilityState +
+      "\nHTF POI B/S: " + (htfBullPoiContext ? "B✓" : "B×") + " / " + (htfBearPoiContext ? "S✓" : "S×") +
+      "\nExec Zone B/S: " + (executionBullZoneOk ? "B✓" : "B×") + " / " + (executionBearZoneOk ? "S✓" : "S×") +
+      "\nKey Touch: " + (anyExistingKeyLevelTouched ? "YES" : "NO") + " | B/S " + (bullKeyReaction ? "B✓" : "B×") + "/" + (bearKeyReaction ? "S✓" : "S×")
+    statusLabel := label.new(bar_index + 2, close, statusTxt, style = label.style_label_left, color = color.new(color.black, 20), textcolor = color.white, size = size.small)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ALERTS
+// ══════════════════════════════════════════════════════════════════════════════
+enableAlerts = input.bool(true, "Enable Master Alerts", group = GRP_ALERT)
+webhookJson = input.bool(false, "Webhook JSON Format", group = GRP_ALERT)
+alertSetup = input.bool(true, "Alert Setup Warnings", group = GRP_ALERT)
+alertSniper = input.bool(true, "Alert Sniper Entries", group = GRP_ALERT)
+alertOpportunity = input.bool(true, "Alert Opportunity Entries", group = GRP_ALERT)
+
+makeJson(action) =>
+    '{"action":"' + action + '","ticker":"' + syminfo.tickerid + '","tf":"' + timeframe.period + '","preset":"' + masterPreset + '","price":' + str.tostring(close, format.mintick) + ',"sl":' + str.tostring(tradeSL, format.mintick) + ',"tp1":' + str.tostring(tradeTP1, format.mintick) + ',"tp2":' + str.tostring(tradeTP2, format.mintick) + ',"tp3":' + str.tostring(tradeTP3, format.mintick) + ',"tqi":' + str.tostring(tqi, "#.00") + ',"er":' + str.tostring(erValue, "#.00") + ',"bias_pct":' + str.tostring(biasPct, "#.0") + ',"killzone":"' + killzoneName + '","key_touch":"' + (anyExistingKeyLevelTouched ? "yes" : "no") + '"}'
+
+if enableAlerts and alertSetup and bullSetupLabelOk
+    alert(webhookJson ? makeJson("bull_setup") : "⚠ Bullish Setup Forming | " + syminfo.tickerid + " | " + timeframe.period + " | Sweep + Key + Zone | Bias " + str.tostring(biasPct, "#.0") + "%", alert.freq_once_per_bar)
+if enableAlerts and alertSetup and bearSetupLabelOk
+    alert(webhookJson ? makeJson("bear_setup") : "⚠ Bearish Setup Forming | " + syminfo.tickerid + " | " + timeframe.period + " | Sweep + Key + Zone | Bias " + str.tostring(biasPct, "#.0") + "%", alert.freq_once_per_bar)
+
+if enableAlerts and alertOpportunity and bullOpportunityEntry
+    alert(webhookJson ? makeJson("opportunity_buy") : "⚡ OPPORTUNITY BUY | " + syminfo.tickerid + " | TF " + timeframe.period + " | Entry " + str.tostring(tradeEntry, format.mintick) + " | SL " + str.tostring(tradeSL, format.mintick) + " | TP1 " + str.tostring(tradeTP1, format.mintick) + " | TQI " + str.tostring(tqi, "#.00") + " | ER " + str.tostring(erValue, "#.00"), alert.freq_once_per_bar_close)
+if enableAlerts and alertOpportunity and bearOpportunityEntry
+    alert(webhookJson ? makeJson("opportunity_sell") : "⚡ OPPORTUNITY SELL | " + syminfo.tickerid + " | TF " + timeframe.period + " | Entry " + str.tostring(tradeEntry, format.mintick) + " | SL " + str.tostring(tradeSL, format.mintick) + " | TP1 " + str.tostring(tradeTP1, format.mintick) + " | TQI " + str.tostring(tqi, "#.00") + " | ER " + str.tostring(erValue, "#.00"), alert.freq_once_per_bar_close)
+
+if enableAlerts and alertSniper and bullSniperEntry
+    action = bullUltraEntry ? "ultra_buy" : "sniper_buy"
+    msg = (bullUltraEntry ? "🔥 ULTRA BUY" : "🎯 SNIPER BUY") + " | " + syminfo.tickerid + " | TF " + timeframe.period + " | Entry " + str.tostring(tradeEntry, format.mintick) + " | SL " + str.tostring(tradeSL, format.mintick) + " | TP1 " + str.tostring(tradeTP1, format.mintick) + " | TP2 " + str.tostring(tradeTP2, format.mintick) + " | TP3 " + str.tostring(tradeTP3, format.mintick) + " | TQI " + str.tostring(tqi, "#.00") + " | ER " + str.tostring(erValue, "#.00")
+    alert(webhookJson ? makeJson(action) : msg, alert.freq_once_per_bar_close)
+
+if enableAlerts and alertSniper and bearSniperEntry
+    action = bearUltraEntry ? "ultra_sell" : "sniper_sell"
+    msg = (bearUltraEntry ? "🔥 ULTRA SELL" : "🎯 SNIPER SELL") + " | " + syminfo.tickerid + " | TF " + timeframe.period + " | Entry " + str.tostring(tradeEntry, format.mintick) + " | SL " + str.tostring(tradeSL, format.mintick) + " | TP1 " + str.tostring(tradeTP1, format.mintick) + " | TP2 " + str.tostring(tradeTP2, format.mintick) + " | TP3 " + str.tostring(tradeTP3, format.mintick) + " | TQI " + str.tostring(tqi, "#.00") + " | ER " + str.tostring(erValue, "#.00")
+    alert(webhookJson ? makeJson(action) : msg, alert.freq_once_per_bar_close)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// End of Master SMC + SATS Sniper System v1.4
+// ══════════════════════════════════════════════════════════════════════════════

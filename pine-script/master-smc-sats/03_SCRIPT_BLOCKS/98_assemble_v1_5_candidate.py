@@ -60,15 +60,24 @@ def must_replace(text: str, old: str, new: str, label: str) -> str:
     return text.replace(old, new, 1)
 
 
-def has_active_directive_or_indicator(block: str) -> bool:
-    """Return True only for executable top-level Pine headers, not comments mentioning them."""
-    for raw_line in block.splitlines():
+def active_pine_header_counts(text: str) -> tuple[int, int]:
+    """Count executable Pine headers only. Ignore blank lines and comment lines."""
+    version_count = 0
+    indicator_count = 0
+    for raw_line in text.splitlines():
         line = raw_line.strip()
         if not line or line.startswith("//"):
             continue
-        if line.startswith("//@version") or line.startswith("indicator("):
-            return True
-    return False
+        if line.startswith("//@version"):
+            version_count += 1
+        if line.startswith("indicator("):
+            indicator_count += 1
+    return version_count, indicator_count
+
+
+def has_active_directive_or_indicator(block: str) -> bool:
+    version_count, indicator_count = active_pine_header_counts(block)
+    return version_count > 0 or indicator_count > 0
 
 
 def main() -> None:
@@ -118,10 +127,11 @@ def main() -> None:
         if hook not in candidate:
             raise RuntimeError(f"Missing expected smart hook after assembly: {hook}")
 
-    if candidate.count("//@version=6") != 1:
-        raise RuntimeError("Candidate must contain exactly one //@version=6 line")
-    if candidate.count("indicator(") != 1:
-        raise RuntimeError("Candidate must contain exactly one executable indicator() declaration")
+    version_count, indicator_count = active_pine_header_counts(candidate)
+    if version_count != 1:
+        raise RuntimeError(f"Candidate must contain exactly one executable //@version line, found {version_count}")
+    if indicator_count != 1:
+        raise RuntimeError(f"Candidate must contain exactly one executable indicator() declaration, found {indicator_count}")
     if "<!DOCTYPE html>" in candidate or "<html" in candidate:
         raise RuntimeError("Candidate appears to contain HTML, not raw Pine text")
 

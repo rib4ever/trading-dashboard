@@ -1,0 +1,56 @@
+// ══════════════════════════════════════════════════════════════════════════════
+// 12 PREMIUM VISUAL HIERARCHY ENGINE — BLOCK VERSION
+// For: Master SMC + SATS Sniper System [Ravi Custom 01]
+//
+// Purpose:
+// - Visual-only hierarchy controls.
+// - Does not modify entries, alerts, risk, SMC, or SATS logic.
+// - Used by v1.9 assembler to polish Fibonacci / POI / zone visuals.
+//
+// IMPORTANT:
+// - This block is NOT standalone.
+// - No //@version and no indicator() declaration are included here on purpose.
+// - Insert after theme colors exist and before visual-only drawing logic.
+// ══════════════════════════════════════════════════════════════════════════════
+
+GRP_PV = "13 Premium Visual Hierarchy"
+
+pvMode = input.string("Premium", "Premium Visual Mode", options = ["Clean", "Analyst", "Premium", "Debug"], group = GRP_PV, tooltip = "Controls visual hierarchy only. It does not change entries or alerts.")
+pvLabelDensity = input.string("Balanced", "Label Density", options = ["Minimal", "Balanced", "Full"], group = GRP_PV)
+pvZonePriority = input.string("Active + Nearby", "Zone Priority", options = ["Active Only", "Active + Nearby", "All"], group = GRP_PV)
+pvShowHistoricZones = input.bool(false, "Show Historic Zones", group = GRP_PV)
+pvFibDetailLevel = input.string("Band + Key Lines", "Fib Detail Level", options = ["Band Only", "Band + Key Lines", "Full"], group = GRP_PV)
+pvPoiAccentStyle = input.string("Gold", "POI Accent Style", options = ["Gold", "Theme", "Contrast"], group = GRP_PV)
+pvCompactPoiLabel = input.bool(true, "Compact POI Label", group = GRP_PV)
+pvFadeSecondaryZones = input.bool(true, "Fade Secondary Zones", group = GRP_PV)
+pvCleanRightSideLabels = input.bool(true, "Clean Right-Side Labels", group = GRP_PV)
+
+bool pvIsClean = pvMode == "Clean"
+bool pvIsAnalyst = pvMode == "Analyst"
+bool pvIsPremium = pvMode == "Premium"
+bool pvIsDebug = pvMode == "Debug"
+
+bool pvLabelsMinimal = pvLabelDensity == "Minimal" or pvIsClean
+bool pvLabelsFull = pvLabelDensity == "Full" or pvIsDebug
+bool pvShowFibKeyLines = pvFibDetailLevel == "Band + Key Lines" or pvFibDetailLevel == "Full" or pvIsDebug
+bool pvShowFibFullLines = pvFibDetailLevel == "Full" or pvIsDebug
+bool pvShowOnlyActionable = pvIsClean
+bool pvShowDiagnostics = pvIsDebug
+
+color pvPoiGold = #d6b56d
+color pvPoiContrast = themeIsLight ? color.rgb(25, 25, 25) : color.white
+color pvPoiAccent = pvPoiAccentStyle == "Theme" ? themeWarning : pvPoiAccentStyle == "Contrast" ? pvPoiContrast : pvPoiGold
+color pvPoiBg = color.new(pvPoiAccent, pvIsClean ? 86 : pvIsPremium ? 80 : 76)
+color pvPoiBorder = color.new(pvPoiAccent, pvIsClean ? 5 : 0)
+color pvFibBandBg = color.new(themeLiquidity, pvIsClean ? 90 : pvIsPremium ? 86 : 82)
+color pvFibBandBorder = color.new(themeLiquidity, pvIsClean ? 60 : 42)
+color pvMutedLine = color.new(themePanelText, themeIsLight ? 65 : 75)
+color pvGhostZone = color.new(themeBaseNeutral, 92)
+
+int pvFibLineWidthMain = pvIsPremium ? 2 : 1
+int pvPoiBorderWidth = pvIsPremium ? 2 : 1
+int pvLabelSizeTiny = pvIsClean ? size.tiny : size.small
+
+// ══════════════════════════════════════════════════════════════════════════════
+// END 12 PREMIUM VISUAL HIERARCHY ENGINE BLOCK
+// ══════════════════════════════════════════════════════════════════════════════

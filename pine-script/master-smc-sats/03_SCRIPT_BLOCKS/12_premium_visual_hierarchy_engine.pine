@@ -49,7 +49,7 @@ color pvGhostZone = color.new(themeBaseNeutral, 92)
 
 int pvFibLineWidthMain = pvIsPremium ? 2 : 1
 int pvPoiBorderWidth = pvIsPremium ? 2 : 1
-int pvLabelSizeTiny = pvIsClean ? size.tiny : size.small
+pvLabelSizeTiny = pvIsClean ? size.tiny : size.small
 
 // ══════════════════════════════════════════════════════════════════════════════
 // END 12 PREMIUM VISUAL HIERARCHY ENGINE BLOCK

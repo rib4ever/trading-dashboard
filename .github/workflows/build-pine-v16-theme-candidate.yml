@@ -14,18 +14,32 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: pine-v16-theme-candidate-main
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
 
       - name: Build v1.6 theme candidate
         run: python pine-script/master-smc-sats/03_SCRIPT_BLOCKS/98_assemble_v1_6_theme_candidate.py
 
       - name: Commit generated candidate
-        uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          commit_message: Build Pine v1.6 theme candidate
-          file_pattern: pine-script/master-smc-sats/03_MASTER_CANDIDATES/master-smc-sats-ravi-custom-01-v1.6-theme-engine-candidate.pine
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pine-script/master-smc-sats/03_MASTER_CANDIDATES/master-smc-sats-ravi-custom-01-v1.6-theme-engine-candidate.pine
+          if git diff --cached --quiet; then
+            echo "No v1.6 candidate changes to commit."
+            exit 0
+          fi
+          git commit -m "Build Pine v1.6 theme candidate"
+          git pull --rebase --autostash origin main
+          git push origin HEAD:main

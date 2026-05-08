@@ -1,23 +1,6 @@
 #!/usr/bin/env python3
-"""
-Assemble Master SMC + SATS v1.5 Smart Key Liquidity Candidate.
-
-Protected rule: the v1.4 LAST WORKING base is never edited directly.
-This builder creates/refreshes the v1.5 candidate in 03_MASTER_CANDIDATES.
-
-v1.5 integrations:
-- Smart key-level / liquidity engine block.
-- Smart key hooks connected into v1.4 key-reaction logic.
-- Empty-array visual guards for OB/FVG boxes, fixing the 5M array.get runtime error.
-- Mini status panel placement selector: Right of Price, Top Right, Top Left, Bottom Right, Bottom Left.
-
-Important:
-The mini-status replacement uses section boundaries, not a fragile exact long text match.
-The replacement block is a RAW Python string so Pine receives literal \\n sequences, not broken multiline string literals.
-"""
-
+"""Build v1.5 candidate from protected v1.4 base + isolated smart-key block."""
 from __future__ import annotations
-
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -46,40 +29,41 @@ OLD_STATUS_INPUT = 'showMiniStatus     = input.bool(true, "Show Mini Status Labe
 NEW_STATUS_INPUT = '''showMiniStatus     = input.bool(true, "Show Mini Status Panel", group = GRP_VIS)
 miniStatusPosition = input.string("Right of Price", "Mini Status Position", options = ["Right of Price", "Top Right", "Top Left", "Bottom Right", "Bottom Left"], group = GRP_VIS, tooltip = "Right of Price keeps the original floating price-level label. Corner options use a fixed table panel so it does not sit on live price.")'''
 
-OLD_ANY_TOUCH = "anyExistingKeyLevelTouched = currentSwingKeyTouched or currentPdPwPmTouched or currentPoiTouched or htfKey1Touched or htfKey2Touched"
-NEW_ANY_TOUCH = "anyExistingKeyLevelTouched = currentSwingKeyTouched or currentPdPwPmTouched or currentPoiTouched or htfKey1Touched or htfKey2Touched or smartAnyKeyTouched"
-
-OLD_BULL_END = "     (k2_obNearDir == 1 and nearLevel(k2ObLevel)) or\n     (k2_fvgNearDir == 1 and nearLevel(k2FvgLevel)))"
-NEW_BULL_END = "     (k2_obNearDir == 1 and nearLevel(k2ObLevel)) or\n     (k2_fvgNearDir == 1 and nearLevel(k2FvgLevel)) or\n     smartBullKeyReaction)"
-
-OLD_BEAR_END = "     (k2_obNearDir == -1 and nearLevel(k2ObLevel)) or\n     (k2_fvgNearDir == -1 and nearLevel(k2FvgLevel)))"
-NEW_BEAR_END = "     (k2_obNearDir == -1 and nearLevel(k2ObLevel)) or\n     (k2_fvgNearDir == -1 and nearLevel(k2FvgLevel)) or\n     smartBearKeyReaction)"
-
-OLD_OB_VISUAL_LOOP = """    obCount = currTfOBs.size()
+REPLACEMENTS = [
+    ("anyExistingKeyLevelTouched = currentSwingKeyTouched or currentPdPwPmTouched or currentPoiTouched or htfKey1Touched or htfKey2Touched",
+     "anyExistingKeyLevelTouched = currentSwingKeyTouched or currentPdPwPmTouched or currentPoiTouched or htfKey1Touched or htfKey2Touched or smartAnyKeyTouched",
+     "smart any-key hook"),
+    ("     (k2_obNearDir == 1 and nearLevel(k2ObLevel)) or\n     (k2_fvgNearDir == 1 and nearLevel(k2FvgLevel)))",
+     "     (k2_obNearDir == 1 and nearLevel(k2ObLevel)) or\n     (k2_fvgNearDir == 1 and nearLevel(k2FvgLevel)) or\n     smartBullKeyReaction)",
+     "smart bull reaction hook"),
+    ("     (k2_obNearDir == -1 and nearLevel(k2ObLevel)) or\n     (k2_fvgNearDir == -1 and nearLevel(k2FvgLevel)))",
+     "     (k2_obNearDir == -1 and nearLevel(k2ObLevel)) or\n     (k2_fvgNearDir == -1 and nearLevel(k2FvgLevel)) or\n     smartBearKeyReaction)",
+     "smart bear reaction hook"),
+    ('''    obCount = currTfOBs.size()
     for i = 0 to obCount - 1
         ob = currTfOBs.get(i)
         obColor = ob.dir > 0 ? color.new(bullColor, 82) : color.new(bearColor, 82)
         obBorder = ob.dir > 0 ? bullColor : bearColor
         newBox = box.new(left = ob.barIdx, top = ob.top, right = bar_index + obExtend, bottom = ob.bottom, border_color = obBorder, border_width = 1, bgcolor = obColor, text = ob.dir > 0 ? "OB ↑" : "OB ↓", text_color = obBorder, text_halign = text.align_right, text_valign = text.align_center, text_size = size.small)
-        obBoxes.unshift(newBox)"""
-NEW_OB_VISUAL_LOOP = """    obCount = currTfOBs.size()
+        obBoxes.unshift(newBox)''',
+     '''    obCount = currTfOBs.size()
     if obCount > 0
         for i = 0 to obCount - 1
             ob = currTfOBs.get(i)
             obColor = ob.dir > 0 ? color.new(bullColor, 82) : color.new(bearColor, 82)
             obBorder = ob.dir > 0 ? bullColor : bearColor
             newBox = box.new(left = ob.barIdx, top = ob.top, right = bar_index + obExtend, bottom = ob.bottom, border_color = obBorder, border_width = 1, bgcolor = obColor, text = ob.dir > 0 ? "OB ↑" : "OB ↓", text_color = obBorder, text_halign = text.align_right, text_valign = text.align_center, text_size = size.small)
-            obBoxes.unshift(newBox)"""
-
-OLD_FVG_VISUAL_LOOP = """    fvgCount = currTfFvgs.size()
+            obBoxes.unshift(newBox)''',
+     "OB empty-array guard"),
+    ('''    fvgCount = currTfFvgs.size()
     for i = 0 to fvgCount - 1
         fvg = currTfFvgs.get(i)
         fvgBg = fvg.dir > 0 ? color.new(bullColor, 87) : color.new(bearColor, 87)
         fvgBorder = fvg.dir > 0 ? color.new(bullColor, 60) : color.new(bearColor, 60)
         fvgTxt = fvg.dir > 0 ? bullColor : bearColor
         newBox = box.new(left = fvg.barIdx, top = fvg.top, right = bar_index + fvgExtend, bottom = fvg.bottom, bgcolor = fvgBg, border_width = 1, border_style = line.style_dashed, border_color = fvgBorder, text = fvg.dir > 0 ? "FVG ↑" : "FVG ↓", text_color = fvgTxt, text_halign = text.align_right, text_valign = text.align_center, text_size = size.small)
-        fvgBoxes.unshift(newBox)"""
-NEW_FVG_VISUAL_LOOP = """    fvgCount = currTfFvgs.size()
+        fvgBoxes.unshift(newBox)''',
+     '''    fvgCount = currTfFvgs.size()
     if fvgCount > 0
         for i = 0 to fvgCount - 1
             fvg = currTfFvgs.get(i)
@@ -87,7 +71,9 @@ NEW_FVG_VISUAL_LOOP = """    fvgCount = currTfFvgs.size()
             fvgBorder = fvg.dir > 0 ? color.new(bullColor, 60) : color.new(bearColor, 60)
             fvgTxt = fvg.dir > 0 ? bullColor : bearColor
             newBox = box.new(left = fvg.barIdx, top = fvg.top, right = bar_index + fvgExtend, bottom = fvg.bottom, bgcolor = fvgBg, border_width = 1, border_style = line.style_dashed, border_color = fvgBorder, text = fvg.dir > 0 ? "FVG ↑" : "FVG ↓", text_color = fvgTxt, text_halign = text.align_right, text_valign = text.align_center, text_size = size.small)
-            fvgBoxes.unshift(newBox)"""
+            fvgBoxes.unshift(newBox)''',
+     "FVG empty-array guard"),
+]
 
 NEW_STATUS_BLOCK = r'''// Mini status panel
 // v1.5: selectable placement. "Right of Price" keeps the original floating label.
@@ -133,9 +119,8 @@ if barstate.islast
             drawStatusTable(statusBottomLeft, statusTxt)
         else
             statusLabel := label.new(bar_index + 2, close, statusTxt, style = label.style_label_left, color = color.new(color.black, 20), textcolor = color.white, size = size.small)'''
-
-OLD_END_TAG = "// End of Master SMC + SATS Sniper System v1.4"
-NEW_END_TAG = "// End of Master SMC + SATS Sniper System v1.5 SMART KEY LIQUIDITY CANDIDATE"
+# Unescape quotes for Pine output, while keeping literal \n separators.
+NEW_STATUS_BLOCK = NEW_STATUS_BLOCK.replace('\\"', '"')
 
 
 def must_replace(text: str, old: str, new: str, label: str) -> str:
@@ -154,32 +139,18 @@ def replace_section(text: str, start_marker: str, end_marker: str, new_section: 
     return text[:start] + new_section.rstrip() + "\n\n" + text[end:]
 
 
-def active_pine_header_counts(text: str) -> tuple[int, int]:
+def active_counts(text: str) -> tuple[int, int]:
     version_count = 0
     indicator_count = 0
-    for raw_line in text.splitlines():
-        line = raw_line.strip()
-        if not line:
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("//"):
             continue
         if line.startswith("//@version"):
             version_count += 1
-        elif not line.startswith("//") and line.startswith("indicator("):
+        if line.startswith("indicator("):
             indicator_count += 1
     return version_count, indicator_count
-
-
-def assert_raw_pine(text: str) -> None:
-    version_count, indicator_count = active_pine_header_counts(text)
-    if version_count != 1:
-        raise RuntimeError(f"Candidate must contain exactly one executable //@version line, found {version_count}")
-    if indicator_count != 1:
-        raise RuntimeError(f"Candidate must contain exactly one executable indicator() declaration, found {indicator_count}")
-    if "<!DOCTYPE html>" in text or "<html" in text:
-        raise RuntimeError("Candidate appears to contain HTML, not raw Pine text")
-    if 'statusTxt = "Preset: " + masterPreset +\n          "\nBias:' in text:
-        raise RuntimeError("Mini status block contains a broken multiline literal before Bias")
-    if '"\\nBias: "' not in text:
-        raise RuntimeError("Mini status block is missing literal \\nBias separator")
 
 
 def main() -> None:
@@ -188,37 +159,33 @@ def main() -> None:
 
     if not base.startswith("//@version=6"):
         raise RuntimeError("Base file does not start with //@version=6")
-    if "indicator(" not in base[:1000]:
-        raise RuntimeError("Base file does not appear to contain a Pine indicator declaration near the top")
-    if "//@version" in smart_block or "indicator(" in smart_block:
-        raise RuntimeError("Smart block must stay isolated: no executable //@version or indicator() declaration")
+    smart_versions, smart_indicators = active_counts(smart_block)
+    if smart_versions or smart_indicators:
+        raise RuntimeError("Smart block has an active Pine header. It must stay isolated.")
 
     candidate = base
     groups_marker = "// ══════════════════════════════════════════════════════════════════════════════\n// GROUPS"
-    if groups_marker not in candidate:
-        raise RuntimeError("Could not find GROUPS marker")
-    candidate = candidate.replace(groups_marker, HEADER_NOTE + "\n" + groups_marker, 1)
-
+    candidate = must_replace(candidate, groups_marker, HEADER_NOTE + "\n" + groups_marker, "GROUPS marker")
     candidate = must_replace(candidate, OLD_STATUS_INPUT, NEW_STATUS_INPUT, "mini status input replacement")
     candidate = must_replace(candidate, INSERT_MARKER, smart_block.rstrip() + "\n\n" + INSERT_MARKER, "smart block insertion")
-    candidate = must_replace(candidate, OLD_ANY_TOUCH, NEW_ANY_TOUCH, "smart any-key hook")
-    candidate = must_replace(candidate, OLD_BULL_END, NEW_BULL_END, "smart bull reaction hook")
-    candidate = must_replace(candidate, OLD_BEAR_END, NEW_BEAR_END, "smart bear reaction hook")
-    candidate = must_replace(candidate, OLD_OB_VISUAL_LOOP, NEW_OB_VISUAL_LOOP, "OB empty-array guard")
-    candidate = must_replace(candidate, OLD_FVG_VISUAL_LOOP, NEW_FVG_VISUAL_LOOP, "FVG empty-array guard")
+    for old, new, label in REPLACEMENTS:
+        candidate = must_replace(candidate, old, new, label)
     candidate = replace_section(candidate, STATUS_START_MARKER, ALERTS_MARKER, NEW_STATUS_BLOCK, "mini status panel replacement")
-    candidate = candidate.replace(OLD_END_TAG, NEW_END_TAG, 1)
+    candidate = candidate.replace("// End of Master SMC + SATS Sniper System v1.4", "// End of Master SMC + SATS Sniper System v1.5 SMART KEY LIQUIDITY CANDIDATE", 1)
 
-    for hook in ["smartAnyKeyTouched", "smartBullKeyReaction", "smartBearKeyReaction", "miniStatusPosition", "statusTopRight", "statusBottomLeft", "if obCount > 0", "if fvgCount > 0"]:
-        if hook not in candidate:
-            raise RuntimeError(f"Missing expected hook after assembly: {hook}")
+    v_count, i_count = active_counts(candidate)
+    if v_count != 1 or i_count != 1:
+        raise RuntimeError(f"Candidate must contain one active version and one active indicator. Found version={v_count}, indicator={i_count}")
+    for required in ['"\\nBias: "', "miniStatusPosition", "drawStatusTable", "smartAnyKeyTouched", "if obCount > 0", "if fvgCount > 0"]:
+        if required not in candidate:
+            raise RuntimeError(f"Candidate missing required content: {required}")
+    if "<!DOCTYPE html>" in candidate or "<html" in candidate:
+        raise RuntimeError("Candidate contains HTML instead of raw Pine")
 
-    assert_raw_pine(candidate)
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     OUT_PATH.write_text(candidate, encoding="utf-8")
     print(f"Created candidate: {OUT_PATH.relative_to(ROOT)}")
-    print("Next: open this file on GitHub, click Raw, copy into TradingView, and test compile.")
-
+    print("Open the candidate file on GitHub, use Raw, copy into TradingView, then test 3M/5M/15M.")
 
 if __name__ == "__main__":
     main()

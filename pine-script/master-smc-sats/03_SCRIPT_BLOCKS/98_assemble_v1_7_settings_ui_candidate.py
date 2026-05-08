@@ -59,6 +59,14 @@ REPLACEMENTS = [
     ('"Use Smart Levels For TP Liquidity"', '"Use Smart Levels For TP Liquidity Later"'),
 ]
 
+VISIBILITY_REPLACEMENTS = [
+    ('obColor = ob.dir > 0 ? color.new(bullColor, 82) : color.new(bearColor, 82)', 'obColor = ob.dir > 0 ? themeOBBull : themeOBBear'),
+    ('obBorder = ob.dir > 0 ? bullColor : bearColor', 'obBorder = ob.dir > 0 ? themeOBBullBorder : themeOBBearBorder'),
+    ('fvgBg = fvg.dir > 0 ? color.new(bullColor, 87) : color.new(bearColor, 87)', 'fvgBg = fvg.dir > 0 ? themeFVGBull : themeFVGBear'),
+    ('fvgBorder = fvg.dir > 0 ? color.new(bullColor, 60) : color.new(bearColor, 60)', 'fvgBorder = fvg.dir > 0 ? themeFVGBullBorder : themeFVGBearBorder'),
+    ('fvgTxt = fvg.dir > 0 ? bullColor : bearColor', 'fvgTxt = fvg.dir > 0 ? themeFVGBullBorder : themeFVGBearBorder'),
+]
+
 
 def count_active(text, token):
     return sum(1 for line in text.splitlines() if line.strip().startswith(token))
@@ -70,11 +78,13 @@ def main():
     c = c.replace("// v1.6 THEME ENGINE CANDIDATE NOTE", NOTE + "\n// v1.6 THEME ENGINE CANDIDATE NOTE", 1)
     for old, new in REPLACEMENTS:
         c = c.replace(old, new)
+    for old, new in VISIBILITY_REPLACEMENTS:
+        c = c.replace(old, new)
     c = c.replace("// End of Master SMC + SATS Sniper System v1.6 THEME ENGINE CANDIDATE", "// End of Master SMC + SATS Sniper System v1.7 SETTINGS UI CLEANUP CANDIDATE")
 
     if count_active(c, "//@version") != 1 or count_active(c, "indicator(") != 1:
         raise RuntimeError("v1.7 candidate must contain one active version and one indicator")
-    for required in ["01 Quick Start / Master Preset", "02 Theme Engine / Chart Colors", "04 Entry Workflow", "09 Visual Display", "entryWorkflowMode", "themePreset", "smartAnyKeyTouched"]:
+    for required in ["01 Quick Start / Master Preset", "02 Theme Engine / Chart Colors", "04 Entry Workflow", "09 Visual Display", "entryWorkflowMode", "themePreset", "smartAnyKeyTouched", "themeOBBull", "themeFVGBull"]:
         if required not in c:
             raise RuntimeError(f"v1.7 candidate missing required content: {required}")
     if "<!DOCTYPE html>" in c or "<html" in c:

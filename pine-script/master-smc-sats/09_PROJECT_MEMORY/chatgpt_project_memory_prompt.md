@@ -1,4 +1,4 @@
-# Updated Project Memory Prompt — Master SMC + SATS [2026-05-08 / Smart Key Block Created]
+# Updated Project Memory Prompt — Master SMC + SATS [2026-05-08 / v1.5 Candidate Runtime + Mini Status Patch]
 
 Copy and paste this prompt into a new ChatGPT conversation whenever the project needs to continue from the correct state.
 
@@ -28,18 +28,23 @@ No random entries. Setup, opportunity, sniper, and ultra-sniper signals must req
 - Volume, volatility, and killzone checks when enabled.
 
 Current confirmed working base:
-- The protected base is the last working Master SMC + SATS Pine Script v1.4 shared by Ravi in chat.
-- It is preserved under: pine-script/master-smc-sats/01_BASE_WORKING_VERSION/
+- Protected base: pine-script/master-smc-sats/01_BASE_WORKING_VERSION/master-smc-sats-ravi-custom-01-v1.4-LAST-WORKING.pine
 - Do not overwrite the base directly.
-- New logic must be designed as patches or modular blocks first, then merged into a compiled master only after error-free validation.
+- New logic must be designed as patches or modular blocks first, then assembled into a candidate only after validation.
+
+Current active candidate:
+- Generated candidate path: pine-script/master-smc-sats/03_MASTER_CANDIDATES/master-smc-sats-ravi-custom-01-v1.5-smart-key-liquidity-candidate.pine
+- Built by: pine-script/master-smc-sats/03_SCRIPT_BLOCKS/98_assemble_v1_5_candidate.py
+- Source base: v1.4 protected base.
+- Added block: pine-script/master-smc-sats/03_SCRIPT_BLOCKS/06_smart_key_level_engine.pine
 
 Current GitHub project structure:
 - pine-script/master-smc-sats/00_MASTER_COMPILED/ — final full compiled Pine Script versions after patches are validated.
 - pine-script/master-smc-sats/01_BASE_WORKING_VERSION/ — protected backups of the last working Pine Script.
 - pine-script/master-smc-sats/02_SMC_CORE/ — market structure, swing, BOS/CHoCH, OB, FVG logic.
-- pine-script/master-smc-sats/03_SCRIPT_BLOCKS/ — modular Pine block workspace for splitting and troubleshooting the master by logic section.
-- pine-script/master-smc-sats/03_KEY_LEVEL_ENGINE/ — HTF key levels, fallback historical key levels, liquidity levels.
+- pine-script/master-smc-sats/03_SCRIPT_BLOCKS/ — modular Pine block workspace and assembler automation.
 - pine-script/master-smc-sats/03_MASTER_CANDIDATES/ — candidate merged master versions before final confirmation.
+- pine-script/master-smc-sats/03_KEY_LEVEL_ENGINE/ — HTF key levels, fallback historical key levels, liquidity levels.
 - pine-script/master-smc-sats/04_SATS_ENGINE/ — SATS adaptive trend-quality engine.
 - pine-script/master-smc-sats/05_ENTRY_RULES/ — setup, opportunity, sniper, ultra-sniper entry rules.
 - pine-script/master-smc-sats/06_RISK_TP_SL/ — SL, TP, liquidity target, and risk-line logic.
@@ -49,61 +54,32 @@ Current GitHub project structure:
 - pine-script/master-smc-sats/PROJECT_NETWORK_MAP.md — human-readable map of the folder/script network.
 - pine-script/master-smc-sats/README.md — main project summary and workflow rules.
 
-Latest structural decision:
-Ravi approved a safer modular workflow instead of directly merging large patches into v1.4.
-
 Workflow now:
 requirements → isolated patch → script block → master candidate → TradingView test → compiled final
 
 Reason:
-TradingView Pine Script must ultimately be one complete `.pine` file, but GitHub can store separate logical blocks to make development and troubleshooting easier.
+TradingView Pine Script must ultimately be one complete `.pine` file, but GitHub stores separate logical blocks to make development and troubleshooting easier.
 
-New modular workspace:
-- Created: pine-script/master-smc-sats/03_SCRIPT_BLOCKS/README.md
-- Created: pine-script/master-smc-sats/03_SCRIPT_BLOCKS/99_final_assembly_notes.md
-- Created: pine-script/master-smc-sats/03_SCRIPT_BLOCKS/06_smart_key_level_engine.pine
-- Created: pine-script/master-smc-sats/03_SCRIPT_BLOCKS/07_entry_confluence_engine_connection_notes.md
-- Updated: pine-script/master-smc-sats/PROJECT_NETWORK_MAP.md
-- Updated: pine-script/master-smc-sats/09_PROJECT_MEMORY/chatgpt_project_memory_prompt.md
+Modular workspace:
+- 03_SCRIPT_BLOCKS/README.md
+- 03_SCRIPT_BLOCKS/99_final_assembly_notes.md
+- 03_SCRIPT_BLOCKS/06_smart_key_level_engine.pine
+- 03_SCRIPT_BLOCKS/07_entry_confluence_engine_connection_notes.md
+- 03_SCRIPT_BLOCKS/98_assemble_v1_5_candidate.py
 
-Planned script block order:
-1. 00_header_and_groups.pine — header, version, indicator declaration, groups, constants.
-2. 01_inputs_and_presets.pine — all inputs and preset logic.
-3. 02_types_and_utilities.pine — types and helper functions.
-4. 03_core_smc_engine.pine — swings, structure, OB/FVG, sweep/reclaim.
-5. 04_mtf_bias_engine.pine — MTF request.security data and HTF bias scoring.
-6. 05_sats_engine.pine — SATS ER/TQI/ATR adaptive trend engine.
-7. 06_smart_key_level_engine.pine — strongest historical support/resistance, EQH/EQL liquidity, visual smart levels, and entry hooks.
-8. 07_entry_confluence_engine.pine — setup, opportunity, sniper, ultra-sniper logic.
-9. 08_risk_tp_sl_engine.pine — SL, TP, dynamic R, liquidity targets.
-10. 09_visual_engine.pine — lines, boxes, labels, status panel.
-11. 10_alert_engine.pine — alerts and webhook JSON.
-12. 99_final_assembly_notes.md — dependency order and candidate checklist.
-
-Latest feature direction:
-Ravi wants a smart historical / fallback key-level engine that behaves like the useful part of LuxAlgo SMC, but must be safely adapted into the master script instead of blindly pasted.
-
-Required smart key-level behavior:
-- When price is in open space and there is no obvious historical level on the left, the script should scan historical candles to identify meaningful support/resistance below or above price.
-- Ravi prefers the strongest level, not simply the nearest level.
-- Liquidity must be included in the key-level list.
+Smart key-level behavior required by Ravi:
+- When price is in open space and there is no obvious historical level on the left, scan historical candles to identify meaningful support/resistance below or above price.
+- Prefer the strongest level, not simply the nearest level.
+- Include liquidity in the key-level list.
 - Visual display must be optional in settings.
 - Noise must be filtered so the chart does not become messy.
-- The fallback key-level engine should support entry validation and future TP/liquidity targeting only when enabled.
-
-Patch 02 status:
-- File: pine-script/master-smc-sats/08_PATCHES/patch-02-smart-key-level-engine-isolated-v0.1.pine
-- Ravi tested it visually in TradingView.
-- Observed: Smart Support / EQL and Smart Resistance / EQH lines displayed correctly.
-- It has now been converted into a clean modular block.
+- Fallback key-level engine should support entry validation and future TP/liquidity targeting only when enabled.
 
 Block 06 status:
 - File: pine-script/master-smc-sats/03_SCRIPT_BLOCKS/06_smart_key_level_engine.pine
-- Created from Patch 02 isolated v0.1.
-- This is not standalone and should not be pasted into TradingView alone.
-- It intentionally has no `//@version` and no `indicator()` declaration.
+- Not standalone. Do not paste by itself into TradingView.
+- It has no `//@version` and no `indicator()` declaration.
 - It uses unique `smart` and `sk` prefixes.
-- It avoids the previously failed corrupted-code pattern.
 
 Block 06 output hooks:
 - `smartAnyKeyTouched`
@@ -114,40 +90,63 @@ Block 06 output hooks:
 - `smartBuyLiquidityTarget`
 - `smartSellLiquidityTarget`
 
-Entry connection note:
-- File: pine-script/master-smc-sats/03_SCRIPT_BLOCKS/07_entry_confluence_engine_connection_notes.md
-- Purpose: documents exactly how Block 06 should extend the existing v1.4 key-level logic.
-
 Safe entry connection rules:
 1. Do not replace v1.4 key logic. Extend it only.
 2. Add `smartAnyKeyTouched` to `anyExistingKeyLevelTouched`.
 3. Add `smartBullKeyReaction` as an OR condition inside `bullKeyReaction`.
 4. Add `smartBearKeyReaction` as an OR condition inside `bearKeyReaction`.
-5. Keep smart TP integration OFF until the entry validation compiles and works visually.
+5. Keep smart TP integration OFF until entry validation compiles and works visually.
 
-Candidate status:
-- A v1.5 candidate placeholder / warning version was tested by Ravi and displayed the orange warning label.
-- It is not final.
-- Do not promote it to compiled/final until the modular block merge compiles and respects all v1.4 entry conditions.
+Recent TradingView validation:
+- Ravi tested the v1.5 candidate on Gold / XAUUSD.
+- 3M and 15M were showing smart levels correctly.
+- 5M initially had runtime error: `array.get()` index 0 out of bounds, array size is 0.
+- The assembler was patched with guards around current-TF OB/FVG visual loops.
+- After rebuild, Ravi confirmed the 5M runtime issue is gone.
+- Ravi also confirmed smart levels and master visuals appear correctly on 15M.
+
+Latest issue and fix:
+- Ravi reported the mini status panel was still alive and sitting on the price area.
+- He could disable it, but there was no option in settings to move it to top right, top left, bottom right, or bottom left.
+- Important distinction: an earlier placeholder script had a movable warning table, but the real v1.5 master candidate still had the old floating price-level `statusLabel`.
+- Fixed by updating `03_SCRIPT_BLOCKS/98_assemble_v1_5_candidate.py` to inject the real mini status position setting into the generated candidate.
+
+Mini status v1.5 patch details:
+- Input changed from `Show Mini Status Label` to `Show Mini Status Panel`.
+- New input: `Mini Status Position`.
+- Options:
+  - `Right of Price` — original floating label behavior.
+  - `Top Right` — fixed table panel.
+  - `Top Left` — fixed table panel.
+  - `Bottom Right` — fixed table panel.
+  - `Bottom Left` — fixed table panel.
+- Corner modes use Pine `table` objects, not price-level labels, so they do not sit on live price.
+- The generated candidate must be rebuilt through GitHub Actions after this assembler change.
+
+GitHub Action workflow:
+- File: .github/workflows/build-pine-v15-candidate.yml
+- Purpose: builds the generated v1.5 candidate from protected v1.4 base and Block 06.
+- Recommended path: GitHub → Actions → Build Pine v1.5 Candidate → Run workflow → main.
+- After a green run: open the generated candidate file, click Raw, copy raw Pine text into TradingView, test 3M / 5M / 15M.
 
 Important Pine Script lessons from failed attempts:
-- Do not mutate global variables inside functions in Pine v6. This caused errors like: Cannot modify global variable in function.
-- Avoid duplicate input names. This caused errors like: variable is already defined.
-- Declare all new variables before using them. This caused errors like: Undeclared identifier.
-- Avoid blindly merging the LuxAlgo v5 script into the master v6 script.
-- If a function call like ta.crossover/ta.crossunder is used inside conditional expressions and TradingView warns about inconsistent calculations, assign the result to a variable first.
-- Keep all new patch variables uniquely prefixed, preferably with smart or sk, to avoid collisions.
-- Do not paste GitHub webpage HTML into TradingView. Always open the raw file and copy raw Pine text.
+- Do not mutate global variables inside functions in Pine v6.
+- Avoid duplicate input names.
+- Declare all new variables before using them.
+- Avoid blindly merging LuxAlgo v5 into the master v6 script.
+- If ta.crossover/ta.crossunder causes warnings, assign to a variable first.
+- Keep all new patch variables uniquely prefixed, preferably smart or sk.
+- Do not paste GitHub webpage HTML into TradingView. Always open Raw and copy raw Pine text.
 - Isolated patch files can have `//@version` and `indicator()`. Modular blocks must not.
+- Guard arrays before using `array.get()` when the array can be empty.
 
-Recommended next technical action:
-Assemble the first controlled v1.5 candidate by:
-1. Fetching the protected v1.4 base from `01_BASE_WORKING_VERSION/`.
-2. Inserting `03_SCRIPT_BLOCKS/06_smart_key_level_engine.pine` after existing ATR/key-level variables are available and before key-level confluence is calculated.
-3. Extending `anyExistingKeyLevelTouched`, `bullKeyReaction`, and `bearKeyReaction` exactly as described in `07_entry_confluence_engine_connection_notes.md`.
-4. Creating a new candidate file under `03_MASTER_CANDIDATES/`.
-5. Do not touch the protected v1.4 base.
-6. Ask Ravi to test the raw candidate in TradingView.
+Next recommended action:
+1. Let GitHub Actions rebuild the candidate after the latest assembler change, or manually run `Build Pine v1.5 Candidate` on main.
+2. Open: pine-script/master-smc-sats/03_MASTER_CANDIDATES/master-smc-sats-ravi-custom-01-v1.5-smart-key-liquidity-candidate.pine
+3. Tap Raw and copy the raw Pine text into TradingView.
+4. Check Settings → Visuals and confirm `Mini Status Position` exists.
+5. Test `Top Right`, `Top Left`, `Bottom Right`, and `Bottom Left`.
+6. Retest 3M / 5M / 15M on XAUUSD.
 
 Self-updating memory-loop instruction:
 At the end of every important project update, generate a new updated version of this memory prompt.
@@ -165,6 +164,4 @@ Also update PROJECT_NETWORK_MAP.md after each important structural or path chang
 
 Clearly title each new version:
 Updated Project Memory Prompt — Master SMC + SATS [date/version]
-
-Do not remove important historical decisions unless they are clearly obsolete. Keep the prompt compact but complete enough to restart the project safely.
 ```

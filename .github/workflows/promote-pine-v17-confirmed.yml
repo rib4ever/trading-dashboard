@@ -1,0 +1,41 @@
+name: Promote Pine v1.7 Confirmed Working
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: promote-pine-v17-confirmed-main
+  cancel-in-progress: true
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Promote v1.7 candidate to master compiled
+        run: |
+          mkdir -p pine-script/master-smc-sats/00_MASTER_COMPILED
+          cp \
+            pine-script/master-smc-sats/03_MASTER_CANDIDATES/master-smc-sats-ravi-custom-01-v1.7-settings-ui-cleanup-candidate.pine \
+            pine-script/master-smc-sats/00_MASTER_COMPILED/master-smc-sats-ravi-custom-01-v1.7-CONFIRMED-WORKING.pine
+
+      - name: Commit promoted confirmed version
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pine-script/master-smc-sats/00_MASTER_COMPILED/master-smc-sats-ravi-custom-01-v1.7-CONFIRMED-WORKING.pine
+          if git diff --cached --quiet; then
+            echo "No promoted v1.7 changes to commit."
+            exit 0
+          fi
+          git commit -m "Promote Pine v1.7 confirmed working"
+          git pull --rebase --autostash origin main
+          git push origin HEAD:main

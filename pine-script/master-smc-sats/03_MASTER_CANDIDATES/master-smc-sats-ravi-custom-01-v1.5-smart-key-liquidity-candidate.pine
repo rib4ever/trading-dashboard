@@ -31,6 +31,7 @@ indicator(
 // Source base: 01_BASE_WORKING_VERSION/master-smc-sats-ravi-custom-01-v1.4-LAST-WORKING.pine
 // Added: 03_SCRIPT_BLOCKS/06_smart_key_level_engine.pine
 // Connection: smart key-level hooks extend, not replace, v1.4 key reactions.
+// Runtime safety: empty OB/FVG visual arrays are guarded before array.get().
 // Test required in TradingView before promotion to 00_MASTER_COMPILED.
 // ══════════════════════════════════════════════════════════════════════════════
 
@@ -1509,12 +1510,13 @@ if showOB and barstate.islast
         b.delete()
     obBoxes.clear()
     obCount = currTfOBs.size()
-    for i = 0 to obCount - 1
-        ob = currTfOBs.get(i)
-        obColor = ob.dir > 0 ? color.new(bullColor, 82) : color.new(bearColor, 82)
-        obBorder = ob.dir > 0 ? bullColor : bearColor
-        newBox = box.new(left = ob.barIdx, top = ob.top, right = bar_index + obExtend, bottom = ob.bottom, border_color = obBorder, border_width = 1, bgcolor = obColor, text = ob.dir > 0 ? "OB ↑" : "OB ↓", text_color = obBorder, text_halign = text.align_right, text_valign = text.align_center, text_size = size.small)
-        obBoxes.unshift(newBox)
+    if obCount > 0
+        for i = 0 to obCount - 1
+            ob = currTfOBs.get(i)
+            obColor = ob.dir > 0 ? color.new(bullColor, 82) : color.new(bearColor, 82)
+            obBorder = ob.dir > 0 ? bullColor : bearColor
+            newBox = box.new(left = ob.barIdx, top = ob.top, right = bar_index + obExtend, bottom = ob.bottom, border_color = obBorder, border_width = 1, bgcolor = obColor, text = ob.dir > 0 ? "OB ↑" : "OB ↓", text_color = obBorder, text_halign = text.align_right, text_valign = text.align_center, text_size = size.small)
+            obBoxes.unshift(newBox)
 
 // FVG boxes
 var array<box> fvgBoxes = array.new<box>()
@@ -1523,13 +1525,14 @@ if showFVG and barstate.islast
         b.delete()
     fvgBoxes.clear()
     fvgCount = currTfFvgs.size()
-    for i = 0 to fvgCount - 1
-        fvg = currTfFvgs.get(i)
-        fvgBg = fvg.dir > 0 ? color.new(bullColor, 87) : color.new(bearColor, 87)
-        fvgBorder = fvg.dir > 0 ? color.new(bullColor, 60) : color.new(bearColor, 60)
-        fvgTxt = fvg.dir > 0 ? bullColor : bearColor
-        newBox = box.new(left = fvg.barIdx, top = fvg.top, right = bar_index + fvgExtend, bottom = fvg.bottom, bgcolor = fvgBg, border_width = 1, border_style = line.style_dashed, border_color = fvgBorder, text = fvg.dir > 0 ? "FVG ↑" : "FVG ↓", text_color = fvgTxt, text_halign = text.align_right, text_valign = text.align_center, text_size = size.small)
-        fvgBoxes.unshift(newBox)
+    if fvgCount > 0
+        for i = 0 to fvgCount - 1
+            fvg = currTfFvgs.get(i)
+            fvgBg = fvg.dir > 0 ? color.new(bullColor, 87) : color.new(bearColor, 87)
+            fvgBorder = fvg.dir > 0 ? color.new(bullColor, 60) : color.new(bearColor, 60)
+            fvgTxt = fvg.dir > 0 ? bullColor : bearColor
+            newBox = box.new(left = fvg.barIdx, top = fvg.top, right = bar_index + fvgExtend, bottom = fvg.bottom, bgcolor = fvgBg, border_width = 1, border_style = line.style_dashed, border_color = fvgBorder, text = fvg.dir > 0 ? "FVG ↑" : "FVG ↓", text_color = fvgTxt, text_halign = text.align_right, text_valign = text.align_center, text_size = size.small)
+            fvgBoxes.unshift(newBox)
 
 // Swing labels
 var array<label> swingLabelObjs = array.new<label>()

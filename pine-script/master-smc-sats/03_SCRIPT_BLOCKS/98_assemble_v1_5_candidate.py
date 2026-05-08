@@ -61,6 +61,42 @@ if barstate.islast
         else
             statusLabel := label.new(bar_index + 2, close, statusTxt, style = label.style_label_left, color = color.new(color.black, 20), textcolor = color.white, size = size.small)'''
 
+OB_OLD = '''    obCount = currTfOBs.size()
+    for i = 0 to obCount - 1
+        ob = currTfOBs.get(i)
+        obColor = ob.dir > 0 ? color.new(bullColor, 82) : color.new(bearColor, 82)
+        obBorder = ob.dir > 0 ? bullColor : bearColor
+        newBox = box.new(left = ob.barIdx, top = ob.top, right = bar_index + obExtend, bottom = ob.bottom, border_color = obBorder, border_width = 1, bgcolor = obColor, text = ob.dir > 0 ? "OB ↑" : "OB ↓", text_color = obBorder, text_halign = text.align_right, text_valign = text.align_center, text_size = size.small)
+        obBoxes.unshift(newBox)'''
+
+OB_NEW = '''    obCount = currTfOBs.size()
+    if obCount > 0
+        for i = 0 to obCount - 1
+            ob = currTfOBs.get(i)
+            obColor = ob.dir > 0 ? color.new(bullColor, 82) : color.new(bearColor, 82)
+            obBorder = ob.dir > 0 ? bullColor : bearColor
+            newBox = box.new(left = ob.barIdx, top = ob.top, right = bar_index + obExtend, bottom = ob.bottom, border_color = obBorder, border_width = 1, bgcolor = obColor, text = ob.dir > 0 ? "OB ↑" : "OB ↓", text_color = obBorder, text_halign = text.align_right, text_valign = text.align_center, text_size = size.small)
+            obBoxes.unshift(newBox)'''
+
+FVG_OLD = '''    fvgCount = currTfFvgs.size()
+    for i = 0 to fvgCount - 1
+        fvg = currTfFvgs.get(i)
+        fvgBg = fvg.dir > 0 ? color.new(bullColor, 87) : color.new(bearColor, 87)
+        fvgBorder = fvg.dir > 0 ? color.new(bullColor, 60) : color.new(bearColor, 60)
+        fvgTxt = fvg.dir > 0 ? bullColor : bearColor
+        newBox = box.new(left = fvg.barIdx, top = fvg.top, right = bar_index + fvgExtend, bottom = fvg.bottom, bgcolor = fvgBg, border_width = 1, border_style = line.style_dashed, border_color = fvgBorder, text = fvg.dir > 0 ? "FVG ↑" : "FVG ↓", text_color = fvgTxt, text_halign = text.align_right, text_valign = text.align_center, text_size = size.small)
+        fvgBoxes.unshift(newBox)'''
+
+FVG_NEW = '''    fvgCount = currTfFvgs.size()
+    if fvgCount > 0
+        for i = 0 to fvgCount - 1
+            fvg = currTfFvgs.get(i)
+            fvgBg = fvg.dir > 0 ? color.new(bullColor, 87) : color.new(bearColor, 87)
+            fvgBorder = fvg.dir > 0 ? color.new(bullColor, 60) : color.new(bearColor, 60)
+            fvgTxt = fvg.dir > 0 ? bullColor : bearColor
+            newBox = box.new(left = fvg.barIdx, top = fvg.top, right = bar_index + fvgExtend, bottom = fvg.bottom, bgcolor = fvgBg, border_width = 1, border_style = line.style_dashed, border_color = fvgBorder, text = fvg.dir > 0 ? "FVG ↑" : "FVG ↓", text_color = fvgTxt, text_halign = text.align_right, text_valign = text.align_center, text_size = size.small)
+            fvgBoxes.unshift(newBox)'''
+
 
 def must(text, old, new, name):
     if old not in text:
@@ -104,8 +140,8 @@ def main():
     c = must(c, 'anyExistingKeyLevelTouched = currentSwingKeyTouched or currentPdPwPmTouched or currentPoiTouched or htfKey1Touched or htfKey2Touched', 'anyExistingKeyLevelTouched = currentSwingKeyTouched or currentPdPwPmTouched or currentPoiTouched or htfKey1Touched or htfKey2Touched or smartAnyKeyTouched', "smart key hook")
     c = must(c, '     (k2_obNearDir == 1 and nearLevel(k2ObLevel)) or\n     (k2_fvgNearDir == 1 and nearLevel(k2FvgLevel)))', '     (k2_obNearDir == 1 and nearLevel(k2ObLevel)) or\n     (k2_fvgNearDir == 1 and nearLevel(k2FvgLevel)) or\n     smartBullKeyReaction)', "bull hook")
     c = must(c, '     (k2_obNearDir == -1 and nearLevel(k2ObLevel)) or\n     (k2_fvgNearDir == -1 and nearLevel(k2FvgLevel)))', '     (k2_obNearDir == -1 and nearLevel(k2ObLevel)) or\n     (k2_fvgNearDir == -1 and nearLevel(k2FvgLevel)) or\n     smartBearKeyReaction)', "bear hook")
-    c = c.replace('    obCount = currTfOBs.size()\n    for i = 0 to obCount - 1', '    obCount = currTfOBs.size()\n    if obCount > 0\n        for i = 0 to obCount - 1')
-    c = c.replace('    fvgCount = currTfFvgs.size()\n    for i = 0 to fvgCount - 1', '    fvgCount = currTfFvgs.size()\n    if fvgCount > 0\n        for i = 0 to fvgCount - 1')
+    c = must(c, OB_OLD, OB_NEW, "OB guarded visual block")
+    c = must(c, FVG_OLD, FVG_NEW, "FVG guarded visual block")
     c = replace_between(c, STATUS_MARK, ALERT_MARK, STATUS_PANEL)
     c = c.replace("// End of Master SMC + SATS Sniper System v1.4", "// End of Master SMC + SATS Sniper System v1.5 SMART KEY LIQUIDITY CANDIDATE", 1)
 

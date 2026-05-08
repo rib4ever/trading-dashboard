@@ -13,7 +13,7 @@ YELLOW       = #fbbf24
 HIT_COLOR    = #40E0D0
 
 themePreset = input.string(
-     "Night",
+     "Night Phantom",
      "Theme Preset",
      options = [
          "Claude",
@@ -24,6 +24,16 @@ themePreset = input.string(
          "Night",
          "ICT V2",
          "Glass",
+         "Bone Luxe",
+         "Lavender Mist",
+         "Arctic Frost",
+         "Night Phantom",
+         "Onyx Gold",
+         "Diamond Ice",
+         "Forest Temple",
+         "Ember Smoke",
+         "Ocean Glass",
+         "Royal Burgundy",
          "Crystal",
          "Diamond",
          "Earthy",
@@ -54,95 +64,155 @@ manualTpColor   = input.color(#00E676, "Manual TP", inline = "tm3", group = GRP_
 // Note: TradingView script cannot change the chart background itself from an indicator.
 // The background values are kept as reference colors for panels and future documentation.
 color themeBackgroundRef = switch themePreset
-    "Claude"      => #1f1c19
-    "Onyx"        => #121212
-    "Bone"        => #e4e0d6
-    "Lavender"    => #f4effb
-    "Arctic"      => #f1f6fb
-    "Night"       => #0b1220
-    "ICT V2"      => #f3f1ec
-    "Glass"       => #12161c
-    "Manual Custom" => color.black
+    "Claude"          => #1f1c19
+    "Onyx"            => #121212
+    "Bone"            => #e4e0d6
+    "Lavender"        => #f4effb
+    "Arctic"          => #f1f6fb
+    "Night"           => #0b1220
+    "ICT V2"          => #f3f1ec
+    "Glass"           => #12161c
+    "Bone Luxe"       => #ded7c8
+    "Lavender Mist"   => #f0e8f8
+    "Arctic Frost"    => #edf6fb
+    "Night Phantom"   => #070d18
+    "Onyx Gold"       => #0d0c0a
+    "Diamond Ice"     => #08141b
+    "Forest Temple"   => #101a13
+    "Ember Smoke"     => #18110e
+    "Ocean Glass"     => #071b20
+    "Royal Burgundy"  => #180911
+    "Manual Custom"   => color.black
     => color.black
 
-bool themeIsLight = themePreset == "Bone" or themePreset == "Lavender" or themePreset == "Arctic" or themePreset == "ICT V2"
+bool themeIsLight = themePreset == "Bone" or themePreset == "Lavender" or themePreset == "Arctic" or themePreset == "ICT V2" or themePreset == "Bone Luxe" or themePreset == "Lavender Mist" or themePreset == "Arctic Frost"
 
 color themeBaseBull = switch themePreset
-    "Claude"      => #d38a5d
-    "Onyx"        => #c8b89a
-    "Bone"        => #f7f4ed
-    "Lavender"    => #ffffff
-    "Arctic"      => #ffffff
-    "Night"       => #c7e2f7
-    "ICT V2"      => #6b8f7a
-    "Glass"       => #9fded2
-    "Crystal"     => color.rgb(115, 210, 255)
-    "Diamond"     => color.rgb(0, 220, 255)
-    "Earthy"      => color.rgb(111, 145, 82)
-    "Nature"      => color.rgb(55, 170, 95)
-    "Gold Trader" => color.rgb(212, 175, 55)
-    "Cyber Neon"  => color.rgb(0, 255, 170)
-    "Manual Custom" => manualBullColor
-    "Minimal Pro" => BULL_DEFAULT
+    "Claude"          => #d38a5d
+    "Onyx"            => #c8b89a
+    "Bone"            => #f7f4ed
+    "Lavender"        => #ffffff
+    "Arctic"          => #ffffff
+    "Night"           => #c7e2f7
+    "ICT V2"          => #6b8f7a
+    "Glass"           => #9fded2
+    "Bone Luxe"       => #f6efe2
+    "Lavender Mist"   => #ffffff
+    "Arctic Frost"    => #ffffff
+    "Night Phantom"   => #b8d7f0
+    "Onyx Gold"       => #d6b56d
+    "Diamond Ice"     => #bff7ff
+    "Forest Temple"   => #83b87a
+    "Ember Smoke"     => #dd8458
+    "Ocean Glass"     => #82e0d0
+    "Royal Burgundy"  => #d9b36c
+    "Crystal"         => color.rgb(115, 210, 255)
+    "Diamond"         => color.rgb(0, 220, 255)
+    "Earthy"          => color.rgb(111, 145, 82)
+    "Nature"          => color.rgb(55, 170, 95)
+    "Gold Trader"     => color.rgb(212, 175, 55)
+    "Cyber Neon"      => color.rgb(0, 255, 170)
+    "Manual Custom"   => manualBullColor
+    "Minimal Pro"     => BULL_DEFAULT
     => color.rgb(0, 188, 212)
 
 color themeBaseBear = switch themePreset
-    "Claude"      => #7e7a75
-    "Onyx"        => #7a7368
-    "Bone"        => #8c8a81
-    "Lavender"    => #7a6285
-    "Arctic"      => #c7d8e6
-    "Night"       => #5a6472
-    "ICT V2"      => #2f2a25
-    "Glass"       => #cfd5dc
-    "Crystal"     => color.rgb(255, 105, 160)
-    "Diamond"     => color.rgb(255, 50, 95)
-    "Earthy"      => color.rgb(175, 86, 67)
-    "Nature"      => color.rgb(165, 88, 82)
-    "Gold Trader" => color.rgb(150, 40, 55)
-    "Cyber Neon"  => color.rgb(255, 0, 130)
-    "Manual Custom" => manualBearColor
-    "Minimal Pro" => BEAR_DEFAULT
+    "Claude"          => #7e7a75
+    "Onyx"            => #7a7368
+    "Bone"            => #8c8a81
+    "Lavender"        => #7a6285
+    "Arctic"          => #c7d8e6
+    "Night"           => #5a6472
+    "ICT V2"          => #2f2a25
+    "Glass"           => #cfd5dc
+    "Bone Luxe"       => #7c7466
+    "Lavender Mist"   => #6f547b
+    "Arctic Frost"    => #7b98ad
+    "Night Phantom"   => #4d5968
+    "Onyx Gold"       => #756b5d
+    "Diamond Ice"     => #6b7f89
+    "Forest Temple"   => #9a684c
+    "Ember Smoke"     => #73635b
+    "Ocean Glass"     => #70848c
+    "Royal Burgundy"  => #8f5368
+    "Crystal"         => color.rgb(255, 105, 160)
+    "Diamond"         => color.rgb(255, 50, 95)
+    "Earthy"          => color.rgb(175, 86, 67)
+    "Nature"          => color.rgb(165, 88, 82)
+    "Gold Trader"     => color.rgb(150, 40, 55)
+    "Cyber Neon"      => color.rgb(255, 0, 130)
+    "Manual Custom"   => manualBearColor
+    "Minimal Pro"     => BEAR_DEFAULT
     => color.rgb(229, 57, 53)
 
 color themeBaseNeutral = switch themePreset
-    "Claude"      => #9a9289
-    "Onyx"        => #8d887d
-    "Bone"        => #c9c5ba
-    "Lavender"    => #d8cee4
-    "Arctic"      => #d5e2ec
-    "Night"       => #344050
-    "ICT V2"      => #a9a498
-    "Glass"       => #91a0aa
-    "Crystal"     => color.rgb(175, 200, 225)
-    "Diamond"     => color.rgb(190, 195, 205)
-    "Earthy"      => color.rgb(166, 151, 126)
-    "Nature"      => color.rgb(135, 160, 135)
-    "Gold Trader" => color.rgb(165, 145, 95)
-    "Cyber Neon"  => color.rgb(120, 130, 180)
-    "Manual Custom" => manualNeutColor
-    "Minimal Pro" => NEUT_DEFAULT
+    "Claude"          => #9a9289
+    "Onyx"            => #8d887d
+    "Bone"            => #c9c5ba
+    "Lavender"        => #d8cee4
+    "Arctic"          => #d5e2ec
+    "Night"           => #344050
+    "ICT V2"          => #a9a498
+    "Glass"           => #91a0aa
+    "Bone Luxe"       => #b6ad9d
+    "Lavender Mist"   => #c9b8d8
+    "Arctic Frost"    => #bfd4e2
+    "Night Phantom"   => #273142
+    "Onyx Gold"       => #8f8060
+    "Diamond Ice"     => #7fa6b3
+    "Forest Temple"   => #5d7258
+    "Ember Smoke"     => #8f7162
+    "Ocean Glass"     => #5d9ca1
+    "Royal Burgundy"  => #9c7681
+    "Crystal"         => color.rgb(175, 200, 225)
+    "Diamond"         => color.rgb(190, 195, 205)
+    "Earthy"          => color.rgb(166, 151, 126)
+    "Nature"          => color.rgb(135, 160, 135)
+    "Gold Trader"     => color.rgb(165, 145, 95)
+    "Cyber Neon"      => color.rgb(120, 130, 180)
+    "Manual Custom"   => manualNeutColor
+    "Minimal Pro"     => NEUT_DEFAULT
     => color.rgb(144, 164, 174)
 
 // Dedicated zone colors. These stay visible even when candle-style theme colors are very light.
 color themeZoneBullBase = switch themePreset
-    "Bone"     => #6b8f7a
-    "Lavender" => #8e6aa1
-    "Arctic"   => #78a8c8
-    "ICT V2"   => #6b8f7a
-    "Onyx"     => #c8b89a
-    "Claude"   => #d38a5d
-    "Glass"    => #66cfc0
+    "Bone"            => #6b8f7a
+    "Lavender"        => #8e6aa1
+    "Arctic"          => #78a8c8
+    "ICT V2"          => #6b8f7a
+    "Bone Luxe"       => #6f815f
+    "Lavender Mist"   => #8a629d
+    "Arctic Frost"    => #5f94b0
+    "Night Phantom"   => #4f86a8
+    "Onyx Gold"       => #b99245
+    "Diamond Ice"     => #4dbfd0
+    "Forest Temple"   => #3f7a4d
+    "Ember Smoke"     => #b65e3e
+    "Ocean Glass"     => #2fa9a6
+    "Royal Burgundy"  => #b58a4d
+    "Onyx"            => #c8b89a
+    "Claude"          => #d38a5d
+    "Glass"           => #66cfc0
     => themeBaseBull
 
 color themeZoneBearBase = switch themePreset
-    "Bone"     => #8c8a81
-    "Lavender" => #7a6285
-    "Arctic"   => #729bb5
-    "ICT V2"   => #2f2a25
-    "Onyx"     => #7a7368
-    "Claude"   => #7e7a75
-    "Glass"    => #9ba7b2
+    "Bone"            => #8c8a81
+    "Lavender"        => #7a6285
+    "Arctic"          => #729bb5
+    "ICT V2"          => #2f2a25
+    "Bone Luxe"       => #7d7066
+    "Lavender Mist"   => #6b4d78
+    "Arctic Frost"    => #6b8798
+    "Night Phantom"   => #4b5563
+    "Onyx Gold"       => #6d604c
+    "Diamond Ice"     => #536c78
+    "Forest Temple"   => #7a4f3d
+    "Ember Smoke"     => #5e4b43
+    "Ocean Glass"     => #526d75
+    "Royal Burgundy"  => #7a364f
+    "Onyx"            => #7a7368
+    "Claude"          => #7e7a75
+    "Glass"           => #9ba7b2
     => themeBaseBear
 
 color themeBaseSL = switch themePreset
@@ -154,6 +224,16 @@ color themeBaseSL = switch themePreset
     "Night" => #5a6472
     "ICT V2" => #2f2a25
     "Glass" => #cfd5dc
+    "Bone Luxe" => #675f56
+    "Lavender Mist" => #6f547b
+    "Arctic Frost" => #6b8798
+    "Night Phantom" => #4d5968
+    "Onyx Gold" => #6d604c
+    "Diamond Ice" => #536c78
+    "Forest Temple" => #7a4f3d
+    "Ember Smoke" => #5e4b43
+    "Ocean Glass" => #526d75
+    "Royal Burgundy" => #7a364f
     "Earthy" => color.rgb(180, 75, 55)
     "Nature" => color.rgb(170, 70, 75)
     "Gold Trader" => color.rgb(180, 45, 55)
@@ -169,6 +249,16 @@ color themeBaseTP = switch themePreset
     "Night" => #c7e2f7
     "ICT V2" => #6b8f7a
     "Glass" => #9fded2
+    "Bone Luxe" => #6f815f
+    "Lavender Mist" => #ffffff
+    "Arctic Frost" => #ffffff
+    "Night Phantom" => #b8d7f0
+    "Onyx Gold" => #d6b56d
+    "Diamond Ice" => #bff7ff
+    "Forest Temple" => #83b87a
+    "Ember Smoke" => #dd8458
+    "Ocean Glass" => #82e0d0
+    "Royal Burgundy" => #d9b36c
     "Earthy" => color.rgb(135, 170, 85)
     "Nature" => color.rgb(80, 190, 115)
     "Gold Trader" => color.rgb(230, 190, 75)
@@ -194,6 +284,16 @@ color themeWarning = switch themePreset
     "Night" => #c7e2f7
     "ICT V2" => #6b8f7a
     "Glass" => #9fded2
+    "Bone Luxe" => #8b7a55
+    "Lavender Mist" => #8a629d
+    "Arctic Frost" => #5f94b0
+    "Night Phantom" => #b8d7f0
+    "Onyx Gold" => #d6b56d
+    "Diamond Ice" => #bff7ff
+    "Forest Temple" => #c5a85d
+    "Ember Smoke" => #dd8458
+    "Ocean Glass" => #82e0d0
+    "Royal Burgundy" => #d9b36c
     "Earthy" => color.rgb(205, 145, 75)
     "Nature" => color.rgb(210, 170, 80)
     => color.rgb(255, 190, 80)
@@ -210,6 +310,16 @@ color themeLiquidity = switch themePreset
     "Night" => #c7e2f7
     "ICT V2" => #6b8f7a
     "Glass" => #9fded2
+    "Bone Luxe" => #8b7a55
+    "Lavender Mist" => #8a629d
+    "Arctic Frost" => #5f94b0
+    "Night Phantom" => #7eb6d9
+    "Onyx Gold" => #d6b56d
+    "Diamond Ice" => #bff7ff
+    "Forest Temple" => #c5a85d
+    "Ember Smoke" => #dd8458
+    "Ocean Glass" => #82e0d0
+    "Royal Burgundy" => #d9b36c
     "Diamond" => color.rgb(185, 245, 255)
     "Gold Trader" => color.rgb(255, 215, 100)
     => color.rgb(90, 200, 255)

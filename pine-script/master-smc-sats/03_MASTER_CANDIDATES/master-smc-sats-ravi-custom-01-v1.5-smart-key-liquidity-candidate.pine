@@ -32,6 +32,7 @@ indicator(
 // Added: 03_SCRIPT_BLOCKS/06_smart_key_level_engine.pine
 // Connection: smart key-level hooks extend, not replace, v1.4 key reactions.
 // Runtime safety: empty OB/FVG visual arrays are guarded before array.get().
+// Visual safety: mini status can be moved to a corner table panel.
 // Test required in TradingView before promotion to 00_MASTER_COMPILED.
 // ══════════════════════════════════════════════════════════════════════════════
 
@@ -229,7 +230,8 @@ showSetupWarnings  = input.bool(true, "Show Setup Warnings", group = GRP_VIS)
 showSniperEntries  = input.bool(true, "Show Entry Labels", group = GRP_VIS)
 showUltraEntries   = input.bool(true, "Show Ultra Sniper Entries", group = GRP_VIS)
 showRiskLines      = input.bool(true, "Show Entry / SL / TP Lines", group = GRP_VIS)
-showMiniStatus     = input.bool(true, "Show Mini Status Label", group = GRP_VIS)
+showMiniStatus     = input.bool(true, "Show Mini Status Panel", group = GRP_VIS)
+miniStatusPosition = input.string("Right of Price", "Mini Status Position", options = ["Right of Price", "Top Right", "Top Left", "Bottom Right", "Bottom Left"], group = GRP_VIS, tooltip = "Right of Price keeps the original floating price-level label. Corner options use a fixed table panel so it does not sit on live price.")
 
 obExtend     = input.int(20, "OB Extend", minval = 1, group = GRP_VIS)
 fvgExtend    = input.int(20, "FVG Extend", minval = 1, group = GRP_VIS)
@@ -1637,21 +1639,58 @@ else if showRiskLines and tradeDir != 0 and not na(lineEntry)
     line.set_x2(lineEntry, newEnd), line.set_x2(lineSL, newEnd), line.set_x2(lineTP1, newEnd), line.set_x2(lineTP2, newEnd), line.set_x2(lineTP3, newEnd)
     label.set_x(lbEntry, newPos), label.set_x(lbSL, newPos), label.set_x(lbTP1, newPos), label.set_x(lbTP2, newPos), label.set_x(lbTP3, newPos)
 
-// Mini status label
+// Mini status panel
+// v1.5: selectable placement. "Right of Price" keeps the original floating label.
+// Corner positions use tables, so the panel does not sit directly on live price.
 var label statusLabel = na
-if showMiniStatus and barstate.islast
+var table statusTopRight = table.new(position.top_right, 1, 1)
+var table statusTopLeft = table.new(position.top_left, 1, 1)
+var table statusBottomRight = table.new(position.bottom_right, 1, 1)
+var table statusBottomLeft = table.new(position.bottom_left, 1, 1)
+
+clearStatusTable(table tbl) =>
+    table.cell(tbl, 0, 0, "", text_color = color.new(color.white, 100), bgcolor = color.new(color.black, 100), text_size = size.small)
+
+drawStatusTable(table tbl, string txt) =>
+    table.cell(tbl, 0, 0, txt, text_color = color.white, bgcolor = color.new(color.black, 20), text_size = size.small, text_halign = text.align_left)
+
+if barstate.islast
     label.delete(statusLabel)
-    biasTxt = htfBullishBias ? "Bull" : htfBearishBias ? "Bear" : "Neutral"
-    statusTxt = "Preset: " + masterPreset +
-      "\nBias: " + biasTxt + " (" + str.tostring(biasPct, "#.0") + "%)" +
-      "\nKZ: " + killzoneName + " | " + (killzoneAllowed ? "OK" : "BLOCK") + (effectiveKillzoneOnly and killzoneName == "NO KILLZONE" and not allowNoKz ? " — enable Allow NO KILLZONE" : "") +
-      "\nTQI: " + str.tostring(tqi, "#.00") + " / " + str.tostring(effectiveMinTqi, "#.00") +
-      "\nER: " + str.tostring(erValue, "#.00") + " / " + str.tostring(effectiveMinEr, "#.00") +
-      "\nVol: " + volumeState + " | ATR: " + volatilityState +
-      "\nHTF POI B/S: " + (htfBullPoiContext ? "B✓" : "B×") + " / " + (htfBearPoiContext ? "S✓" : "S×") +
-      "\nExec Zone B/S: " + (executionBullZoneOk ? "B✓" : "B×") + " / " + (executionBearZoneOk ? "S✓" : "S×") +
-      "\nKey Touch: " + (anyExistingKeyLevelTouched ? "YES" : "NO") + " | B/S " + (bullKeyReaction ? "B✓" : "B×") + "/" + (bearKeyReaction ? "S✓" : "S×")
-    statusLabel := label.new(bar_index + 2, close, statusTxt, style = label.style_label_left, color = color.new(color.black, 20), textcolor = color.white, size = size.small)
+    clearStatusTable(statusTopRight)
+    clearStatusTable(statusTopLeft)
+    clearStatusTable(statusBottomRight)
+    clearStatusTable(statusBottomLeft)
+
+    if showMiniStatus
+        biasTxt = htfBullishBias ? "Bull" : htfBearishBias ? "Bear" : "Neutral"
+        statusTxt = "Preset: " + masterPreset +
+          "
+Bias: " + biasTxt + " (" + str.tostring(biasPct, "#.0") + "%)" +
+          "
+KZ: " + killzoneName + " | " + (killzoneAllowed ? "OK" : "BLOCK") + (effectiveKillzoneOnly and killzoneName == "NO KILLZONE" and not allowNoKz ? " — enable Allow NO KILLZONE" : "") +
+          "
+TQI: " + str.tostring(tqi, "#.00") + " / " + str.tostring(effectiveMinTqi, "#.00") +
+          "
+ER: " + str.tostring(erValue, "#.00") + " / " + str.tostring(effectiveMinEr, "#.00") +
+          "
+Vol: " + volumeState + " | ATR: " + volatilityState +
+          "
+HTF POI B/S: " + (htfBullPoiContext ? "B✓" : "B×") + " / " + (htfBearPoiContext ? "S✓" : "S×") +
+          "
+Exec Zone B/S: " + (executionBullZoneOk ? "B✓" : "B×") + " / " + (executionBearZoneOk ? "S✓" : "S×") +
+          "
+Key Touch: " + (anyExistingKeyLevelTouched ? "YES" : "NO") + " | B/S " + (bullKeyReaction ? "B✓" : "B×") + "/" + (bearKeyReaction ? "S✓" : "S×")
+
+        if miniStatusPosition == "Top Right"
+            drawStatusTable(statusTopRight, statusTxt)
+        else if miniStatusPosition == "Top Left"
+            drawStatusTable(statusTopLeft, statusTxt)
+        else if miniStatusPosition == "Bottom Right"
+            drawStatusTable(statusBottomRight, statusTxt)
+        else if miniStatusPosition == "Bottom Left"
+            drawStatusTable(statusBottomLeft, statusTxt)
+        else
+            statusLabel := label.new(bar_index + 2, close, statusTxt, style = label.style_label_left, color = color.new(color.black, 20), textcolor = color.white, size = size.small)
 
 // ══════════════════════════════════════════════════════════════════════════════
 // ALERTS

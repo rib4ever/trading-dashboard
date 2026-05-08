@@ -72,9 +72,26 @@ YELLOW       = #fbbf24
 HIT_COLOR    = #40E0D0
 
 themePreset = input.string(
-     "Midnight Pro",
+     "Night",
      "Theme Preset",
-     options = ["Minimal Pro", "Glass", "Crystal", "Diamond", "Earthy", "Nature", "Midnight Pro", "Gold Trader", "Cyber Neon", "Manual Custom"],
+     options = [
+         "Claude",
+         "Onyx",
+         "Bone",
+         "Lavender",
+         "Arctic",
+         "Night",
+         "ICT V2",
+         "Glass",
+         "Crystal",
+         "Diamond",
+         "Earthy",
+         "Nature",
+         "Midnight Pro",
+         "Gold Trader",
+         "Cyber Neon",
+         "Manual Custom"
+     ],
      group = GRP_THEME)
 
 themeIntensity = input.string(
@@ -92,8 +109,32 @@ manualNeutColor = input.color(NEUT_DEFAULT, "Manual Neutral", inline = "tm2", gr
 manualSlColor   = input.color(#FF1744, "Manual SL", inline = "tm3", group = GRP_THEME)
 manualTpColor   = input.color(#00E676, "Manual TP", inline = "tm3", group = GRP_THEME)
 
+// Collection-style chart themes inspired by Ravi's reference palettes.
+// Note: TradingView script cannot change the chart background itself from an indicator.
+// The background values are kept as reference colors for panels and future documentation.
+color themeBackgroundRef = switch themePreset
+    "Claude"      => #1f1c19
+    "Onyx"        => #121212
+    "Bone"        => #e4e0d6
+    "Lavender"    => #f4effb
+    "Arctic"      => #f1f6fb
+    "Night"       => #0b1220
+    "ICT V2"      => #f3f1ec
+    "Glass"       => #12161c
+    "Manual Custom" => color.black
+    => color.black
+
+bool themeIsLight = themePreset == "Bone" or themePreset == "Lavender" or themePreset == "Arctic" or themePreset == "ICT V2"
+
 color themeBaseBull = switch themePreset
-    "Glass"       => color.rgb(80, 220, 190)
+    "Claude"      => #d38a5d
+    "Onyx"        => #c8b89a
+    "Bone"        => #f7f4ed
+    "Lavender"    => #ffffff
+    "Arctic"      => #ffffff
+    "Night"       => #c7e2f7
+    "ICT V2"      => #6b8f7a
+    "Glass"       => #9fded2
     "Crystal"     => color.rgb(115, 210, 255)
     "Diamond"     => color.rgb(0, 220, 255)
     "Earthy"      => color.rgb(111, 145, 82)
@@ -105,7 +146,14 @@ color themeBaseBull = switch themePreset
     => color.rgb(0, 188, 212)
 
 color themeBaseBear = switch themePreset
-    "Glass"       => color.rgb(255, 120, 130)
+    "Claude"      => #7e7a75
+    "Onyx"        => #7a7368
+    "Bone"        => #8c8a81
+    "Lavender"    => #7a6285
+    "Arctic"      => #c7d8e6
+    "Night"       => #5a6472
+    "ICT V2"      => #2f2a25
+    "Glass"       => #cfd5dc
     "Crystal"     => color.rgb(255, 105, 160)
     "Diamond"     => color.rgb(255, 50, 95)
     "Earthy"      => color.rgb(175, 86, 67)
@@ -117,7 +165,14 @@ color themeBaseBear = switch themePreset
     => color.rgb(229, 57, 53)
 
 color themeBaseNeutral = switch themePreset
-    "Glass"       => color.rgb(190, 205, 215)
+    "Claude"      => #9a9289
+    "Onyx"        => #8d887d
+    "Bone"        => #c9c5ba
+    "Lavender"    => #d8cee4
+    "Arctic"      => #d5e2ec
+    "Night"       => #344050
+    "ICT V2"      => #a9a498
+    "Glass"       => #91a0aa
     "Crystal"     => color.rgb(175, 200, 225)
     "Diamond"     => color.rgb(190, 195, 205)
     "Earthy"      => color.rgb(166, 151, 126)
@@ -129,6 +184,14 @@ color themeBaseNeutral = switch themePreset
     => color.rgb(144, 164, 174)
 
 color themeBaseSL = switch themePreset
+    "Claude" => #b96a4d
+    "Onyx" => #8f6f5f
+    "Bone" => #6f6b63
+    "Lavender" => #7a6285
+    "Arctic" => #8aa8bc
+    "Night" => #5a6472
+    "ICT V2" => #2f2a25
+    "Glass" => #cfd5dc
     "Earthy" => color.rgb(180, 75, 55)
     "Nature" => color.rgb(170, 70, 75)
     "Gold Trader" => color.rgb(180, 45, 55)
@@ -136,6 +199,14 @@ color themeBaseSL = switch themePreset
     => color.rgb(255, 70, 90)
 
 color themeBaseTP = switch themePreset
+    "Claude" => #d38a5d
+    "Onyx" => #c8b89a
+    "Bone" => #f7f4ed
+    "Lavender" => #ffffff
+    "Arctic" => #ffffff
+    "Night" => #c7e2f7
+    "ICT V2" => #6b8f7a
+    "Glass" => #9fded2
     "Earthy" => color.rgb(135, 170, 85)
     "Nature" => color.rgb(80, 190, 115)
     "Gold Trader" => color.rgb(230, 190, 75)
@@ -150,18 +221,41 @@ neutColor = themeBaseNeutral
 slColor   = themeBaseSL
 tpColor   = themeBaseTP
 
-color themeWarning     = themePreset == "Earthy" ? color.rgb(205, 145, 75) : themePreset == "Nature" ? color.rgb(210, 170, 80) : color.rgb(255, 190, 80)
-color themePanelBg     = color.new(color.black, themePanelTransparency)
-color themePanelText   = color.white
+color themeWarning = switch themePreset
+    "Claude" => #d38a5d
+    "Onyx" => #c8b89a
+    "Bone" => #8c8a81
+    "Lavender" => #7a6285
+    "Arctic" => #7f9caf
+    "Night" => #c7e2f7
+    "ICT V2" => #6b8f7a
+    "Glass" => #9fded2
+    "Earthy" => color.rgb(205, 145, 75)
+    "Nature" => color.rgb(210, 170, 80)
+    => color.rgb(255, 190, 80)
+
+color themePanelBg = themeIsLight ? color.new(themeBackgroundRef, math.min(themePanelTransparency + 5, 95)) : color.new(themeBackgroundRef, themePanelTransparency)
+color themePanelText = themeIsLight ? color.rgb(25, 25, 25) : color.white
 color themePanelBorder = color.new(themeBaseNeutral, 35)
-color themeLiquidity   = themePreset == "Diamond" ? color.rgb(185, 245, 255) : themePreset == "Gold Trader" ? color.rgb(255, 215, 100) : color.rgb(90, 200, 255)
-color themeKeyLevel    = color.new(themeLiquidity, 0)
-color themeOBBull      = color.new(themeBaseBull, themeZoneTransparency)
-color themeOBBear      = color.new(themeBaseBear, themeZoneTransparency)
-color themeFVGBull     = color.new(themeBaseBull, math.min(themeZoneTransparency + 5, 95))
-color themeFVGBear     = color.new(themeBaseBear, math.min(themeZoneTransparency + 5, 95))
-color themeSniper      = themePreset == "Gold Trader" ? color.rgb(255, 215, 80) : color.rgb(0, 255, 220)
-color themeUltra       = themePreset == "Diamond" ? color.white : themePreset == "Gold Trader" ? color.rgb(255, 235, 120) : color.rgb(240, 245, 255)
+color themeLiquidity = switch themePreset
+    "Claude" => #d38a5d
+    "Onyx" => #c8b89a
+    "Bone" => #8c8a81
+    "Lavender" => #7a6285
+    "Arctic" => #8aa8bc
+    "Night" => #c7e2f7
+    "ICT V2" => #6b8f7a
+    "Glass" => #9fded2
+    "Diamond" => color.rgb(185, 245, 255)
+    "Gold Trader" => color.rgb(255, 215, 100)
+    => color.rgb(90, 200, 255)
+color themeKeyLevel = color.new(themeLiquidity, 0)
+color themeOBBull = color.new(themeBaseBull, themeZoneTransparency)
+color themeOBBear = color.new(themeBaseBear, themeZoneTransparency)
+color themeFVGBull = color.new(themeBaseBull, math.min(themeZoneTransparency + 5, 95))
+color themeFVGBear = color.new(themeBaseBear, math.min(themeZoneTransparency + 5, 95))
+color themeSniper = themeBaseBull
+color themeUltra = themeIsLight ? color.rgb(20, 20, 20) : color.white
 
 // ══════════════════════════════════════════════════════════════════════════════
 // MASTER PRESETS

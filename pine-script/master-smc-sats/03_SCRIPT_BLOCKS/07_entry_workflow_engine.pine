@@ -1,0 +1,87 @@
+// ══════════════════════════════════════════════════════════════════════════════
+// 07 ENTRY WORKFLOW ENGINE — BLOCK VERSION
+// For: Master SMC + SATS Sniper System [Ravi Custom 01]
+//
+// Purpose:
+// - Make entries optional and workflow-driven.
+// - Allow the script to run as pure SMC / market-structure only.
+// - Keep setup, opportunity, normal, sniper, ultra, and key-level entries separate.
+// - Block confirmed entries on HTF charts by default.
+// - Hide old historical entry labels/TP/SL lines by default.
+//
+// IMPORTANT:
+// - This block is NOT standalone.
+// - No //@version and no indicator() declaration are included here on purpose.
+// - Insert after cleanMode / normalMode / debugMode are declared and before entry booleans.
+// ══════════════════════════════════════════════════════════════════════════════
+
+GRP_ENTRY = "🚦 Entry Workflow"
+
+entryWorkflowMode = input.string(
+     "Market Structure Only",
+     "Entry Workflow Mode",
+     options = [
+         "Market Structure Only",
+         "Setups Only",
+         "Opportunity Mode",
+         "Confirmed Entries",
+         "Full Mode",
+         "Manual Custom"
+     ],
+     group = GRP_ENTRY,
+     tooltip = "Market Structure Only disables all entries. Setups Only shows warnings. Opportunity Mode enables early entries. Confirmed Entries enables normal/sniper entries. Full Mode also enables ultra/key-level entries. Manual Custom uses the individual toggles below.")
+
+manualEnableSetupWarnings      = input.bool(true,  "Manual: Enable Setup Warnings", group = GRP_ENTRY)
+manualEnableOpportunityEntries = input.bool(false, "Manual: Enable Opportunity Entries", group = GRP_ENTRY)
+manualEnableNormalEntries      = input.bool(false, "Manual: Enable Normal Entries", group = GRP_ENTRY)
+manualEnableSniperEntries      = input.bool(false, "Manual: Enable Sniper Entries", group = GRP_ENTRY)
+manualEnableUltraEntries       = input.bool(false, "Manual: Enable Ultra Entries", group = GRP_ENTRY)
+manualEnableKeyLevelEntries    = input.bool(false, "Manual: Enable Key-Level Entries", group = GRP_ENTRY)
+
+showEntryLabelsFinalInput      = input.bool(true,  "Show Entry Labels", group = GRP_ENTRY)
+showHistoricalEntries          = input.bool(false, "Show Historical Entry Labels/Lines", group = GRP_ENTRY, tooltip = "OFF by default so old historical entries do not drag TP/SL lines into the current chart.")
+entryHistoryBars               = input.int(500, "Historical Entry Lookback Bars", minval = 50, maxval = 5000, group = GRP_ENTRY)
+showTpSlForEntriesFinal        = input.bool(true, "Show TP/SL For Confirmed Entries", group = GRP_ENTRY)
+
+restrictConfirmedEntriesToExecutionTf = input.bool(true, "Restrict Confirmed Entries To Execution TF", group = GRP_ENTRY, tooltip = "Recommended ON. 15M/1H/4H should guide bias and POIs, not print sniper entries.")
+maxConfirmedEntryTfMinutes = input.int(5, "Max Confirmed Entry TF Minutes", minval = 1, maxval = 60, group = GRP_ENTRY)
+allowHigherTimeframeEntries = input.bool(false, "Allow Higher Timeframe Entries", group = GRP_ENTRY, tooltip = "Emergency override. Keep OFF for Ravi Custom 01 scalping.")
+
+modeMarketStructureOnly = entryWorkflowMode == "Market Structure Only"
+modeSetupsOnly          = entryWorkflowMode == "Setups Only"
+modeOpportunity         = entryWorkflowMode == "Opportunity Mode"
+modeConfirmed           = entryWorkflowMode == "Confirmed Entries"
+modeFull                = entryWorkflowMode == "Full Mode"
+modeManual              = entryWorkflowMode == "Manual Custom"
+
+enableSetupWarningsFinal = not modeMarketStructureOnly and (
+     modeSetupsOnly or modeOpportunity or modeConfirmed or modeFull or
+     (modeManual and manualEnableSetupWarnings))
+
+enableOpportunityEntriesFinal = not modeMarketStructureOnly and (
+     modeOpportunity or modeFull or
+     (modeManual and manualEnableOpportunityEntries))
+
+enableNormalEntriesFinal = not modeMarketStructureOnly and (
+     modeConfirmed or modeFull or
+     (modeManual and manualEnableNormalEntries))
+
+enableSniperEntriesFinal = not modeMarketStructureOnly and (
+     modeConfirmed or modeFull or
+     (modeManual and manualEnableSniperEntries))
+
+enableUltraEntriesFinal = not modeMarketStructureOnly and (
+     modeFull or
+     (modeManual and manualEnableUltraEntries))
+
+enableKeyLevelEntriesFinal = not modeMarketStructureOnly and (
+     modeFull or
+     (modeManual and manualEnableKeyLevelEntries))
+
+confirmedEntryTfOk = allowHigherTimeframeEntries or not restrictConfirmedEntriesToExecutionTf or timeframe.in_seconds(timeframe.period) <= maxConfirmedEntryTfMinutes * 60
+entryVisualWindowOk = showHistoricalEntries or (last_bar_index - bar_index <= entryHistoryBars)
+showEntryLabelsFinal = showEntryLabelsFinalInput and entryVisualWindowOk
+
+// ══════════════════════════════════════════════════════════════════════════════
+// END 07 ENTRY WORKFLOW ENGINE BLOCK
+// ══════════════════════════════════════════════════════════════════════════════

@@ -12,6 +12,11 @@ Current integrations:
 4. Add selectable mini-status placement:
    - Right of Price: original price-level label behavior.
    - Top Right / Top Left / Bottom Right / Bottom Left: fixed corner table panel.
+
+Important implementation note:
+The mini-status block is replaced by section boundaries instead of an exact long
+string match. This prevents workflow failure when small whitespace/line wrapping
+differences exist in the protected v1.4 base.
 """
 
 from __future__ import annotations
@@ -26,6 +31,10 @@ SMART_BLOCK_PATH = PROJECT / "03_SCRIPT_BLOCKS" / "06_smart_key_level_engine.pin
 OUT_PATH = PROJECT / "03_MASTER_CANDIDATES" / "master-smc-sats-ravi-custom-01-v1.5-smart-key-liquidity-candidate.pine"
 
 INSERT_MARKER = "// ══════════════════════════════════════════════════════════════════════════════\n// ZONE + KEY LEVEL CONFLUENCE\n// ══════════════════════════════════════════════════════════════════════════════"
+
+ALERTS_MARKER = "// ══════════════════════════════════════════════════════════════════════════════\n// ALERTS\n// ══════════════════════════════════════════════════════════════════════════════"
+
+STATUS_START_MARKER = "// Mini status label"
 
 OLD_ANY_TOUCH = "anyExistingKeyLevelTouched = currentSwingKeyTouched or currentPdPwPmTouched or currentPoiTouched or htfKey1Touched or htfKey2Touched"
 NEW_ANY_TOUCH = "anyExistingKeyLevelTouched = currentSwingKeyTouched or currentPdPwPmTouched or currentPoiTouched or htfKey1Touched or htfKey2Touched or smartAnyKeyTouched"
@@ -74,21 +83,6 @@ OLD_STATUS_INPUT = 'showMiniStatus     = input.bool(true, "Show Mini Status Labe
 NEW_STATUS_INPUT = '''showMiniStatus     = input.bool(true, "Show Mini Status Panel", group = GRP_VIS)
 miniStatusPosition = input.string("Right of Price", "Mini Status Position", options = ["Right of Price", "Top Right", "Top Left", "Bottom Right", "Bottom Left"], group = GRP_VIS, tooltip = "Right of Price keeps the original floating price-level label. Corner options use a fixed table panel so it does not sit on live price.")'''
 
-OLD_STATUS_BLOCK = '''// Mini status label
-var label statusLabel = na
-if showMiniStatus and barstate.islast
-    label.delete(statusLabel)
-    biasTxt = htfBullishBias ? "Bull" : htfBearishBias ? "Bear" : "Neutral"
-    statusTxt = "Preset: " + masterPreset +
-      "\nBias: " + biasTxt + " (" + str.tostring(biasPct, "#.0") + "%)" +
-      "\nKZ: " + killzoneName + " | " + (killzoneAllowed ? "OK" : "BLOCK") + (effectiveKillzoneOnly and killzoneName == "NO KILLZONE" and not allowNoKz ? " — enable Allow NO KILLZONE" : "") +
-      "\nTQI: " + str.tostring(tqi, "#.00") + " / " + str.tostring(effectiveMinTqi, "#.00") +
-      "\nER: " + str.tostring(erValue, "#.00") + " / " + str.tostring(effectiveMinEr, "#.00") +
-      "\nVol: " + volumeState + " | ATR: " + volatilityState +
-      "\nHTF POI B/S: " + (htfBullPoiContext ? "B✓" : "B×") + " / " + (htfBearPoiContext ? "S✓" : "S×") +
-      "\nExec Zone B/S: " + (executionBullZoneOk ? "B✓" : "B×") + " / " + (executionBearZoneOk ? "S✓" : "S×") +
-      "\nKey Touch: " + (anyExistingKeyLevelTouched ? "YES" : "NO") + " | B/S " + (bullKeyReaction ? "B✓" : "B×") + "/" + (bearKeyReaction ? "S✓" : "S×")
-    statusLabel := label.new(bar_index + 2, close, statusTxt, style = label.style_label_left, color = color.new(color.black, 20), textcolor = color.white, size = size.small)'''
 NEW_STATUS_BLOCK = '''// Mini status panel
 // v1.5: selectable placement. "Right of Price" keeps the original floating label.
 // Corner positions use tables, so the panel does not sit directly on live price.
@@ -156,6 +150,16 @@ def must_replace(text: str, old: str, new: str, label: str) -> str:
     return text.replace(old, new, 1)
 
 
+def replace_section(text: str, start_marker: str, end_marker: str, new_section: str, label: str) -> str:
+    start = text.find(start_marker)
+    if start == -1:
+        raise RuntimeError(f"Section start marker not found: {label}")
+    end = text.find(end_marker, start)
+    if end == -1:
+        raise RuntimeError(f"Section end marker not found: {label}")
+    return text[:start] + new_section.rstrip() + "\n\n" + text[end:]
+
+
 def active_pine_header_counts(text: str) -> tuple[int, int]:
     version_count = 0
     indicator_count = 0
@@ -212,7 +216,9 @@ def main() -> None:
     candidate = must_replace(candidate, OLD_BEAR_END, NEW_BEAR_END, "bearKeyReaction smart OR")
     candidate = must_replace(candidate, OLD_OB_VISUAL_LOOP, NEW_OB_VISUAL_LOOP, "guard current TF OB visual loop")
     candidate = must_replace(candidate, OLD_FVG_VISUAL_LOOP, NEW_FVG_VISUAL_LOOP, "guard current TF FVG visual loop")
-    candidate = must_replace(candidate, OLD_STATUS_BLOCK, NEW_STATUS_BLOCK, "mini status panel selectable placement")
+
+    # Use bounded section replacement for mini status. Exact long-string matching is fragile here.
+    candidate = replace_section(candidate, STATUS_START_MARKER, ALERTS_MARKER, NEW_STATUS_BLOCK, "mini status panel selectable placement")
 
     candidate = candidate.replace(OLD_END_TAG, NEW_END_TAG, 1)
 

@@ -100,7 +100,7 @@ themeIntensity = input.string(
      options = ["Soft", "Standard", "Strong"],
      group = GRP_THEME)
 
-themeZoneTransparency = input.int(82, "Zone Transparency", minval = 0, maxval = 95, group = GRP_THEME)
+themeZoneTransparency = input.int(68, "Zone Transparency", minval = 20, maxval = 90, group = GRP_THEME, tooltip = "Lower value = stronger OB/FVG zones. Higher value = lighter zones. Default was reduced so light themes do not disappear.")
 themePanelTransparency = input.int(20, "Panel Transparency", minval = 0, maxval = 95, group = GRP_THEME)
 
 manualBullColor = input.color(BULL_DEFAULT, "Manual Bull", inline = "tm1", group = GRP_THEME)
@@ -183,6 +183,27 @@ color themeBaseNeutral = switch themePreset
     "Minimal Pro" => NEUT_DEFAULT
     => color.rgb(144, 164, 174)
 
+// Dedicated zone colors. These stay visible even when candle-style theme colors are very light.
+color themeZoneBullBase = switch themePreset
+    "Bone"     => #6b8f7a
+    "Lavender" => #8e6aa1
+    "Arctic"   => #78a8c8
+    "ICT V2"   => #6b8f7a
+    "Onyx"     => #c8b89a
+    "Claude"   => #d38a5d
+    "Glass"    => #66cfc0
+    => themeBaseBull
+
+color themeZoneBearBase = switch themePreset
+    "Bone"     => #8c8a81
+    "Lavender" => #7a6285
+    "Arctic"   => #729bb5
+    "ICT V2"   => #2f2a25
+    "Onyx"     => #7a7368
+    "Claude"   => #7e7a75
+    "Glass"    => #9ba7b2
+    => themeBaseBear
+
 color themeBaseSL = switch themePreset
     "Claude" => #b96a4d
     "Onyx" => #8f6f5f
@@ -214,6 +235,8 @@ color themeBaseTP = switch themePreset
     => color.rgb(60, 230, 160)
 
 int themeSignalTransparency = themeIntensity == "Soft" ? 25 : themeIntensity == "Strong" ? 0 : 10
+int themeObTransparency = themeIsLight ? math.min(themeZoneTransparency, 62) : themeZoneTransparency
+int themeFvgTransparency = themeIsLight ? math.min(themeZoneTransparency + 6, 72) : math.min(themeZoneTransparency + 5, 90)
 
 bullColor = themeBaseBull
 bearColor = themeBaseBear
@@ -250,10 +273,14 @@ color themeLiquidity = switch themePreset
     "Gold Trader" => color.rgb(255, 215, 100)
     => color.rgb(90, 200, 255)
 color themeKeyLevel = color.new(themeLiquidity, 0)
-color themeOBBull = color.new(themeBaseBull, themeZoneTransparency)
-color themeOBBear = color.new(themeBaseBear, themeZoneTransparency)
-color themeFVGBull = color.new(themeBaseBull, math.min(themeZoneTransparency + 5, 95))
-color themeFVGBear = color.new(themeBaseBear, math.min(themeZoneTransparency + 5, 95))
+color themeOBBull = color.new(themeZoneBullBase, themeObTransparency)
+color themeOBBear = color.new(themeZoneBearBase, themeObTransparency)
+color themeFVGBull = color.new(themeZoneBullBase, themeFvgTransparency)
+color themeFVGBear = color.new(themeZoneBearBase, themeFvgTransparency)
+color themeOBBullBorder = color.new(themeZoneBullBase, 15)
+color themeOBBearBorder = color.new(themeZoneBearBase, 15)
+color themeFVGBullBorder = color.new(themeZoneBullBase, 25)
+color themeFVGBearBorder = color.new(themeZoneBearBase, 25)
 color themeSniper = themeBaseBull
 color themeUltra = themeIsLight ? color.rgb(20, 20, 20) : color.white
 

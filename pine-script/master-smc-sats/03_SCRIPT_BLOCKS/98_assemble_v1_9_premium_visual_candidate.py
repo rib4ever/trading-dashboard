@@ -80,11 +80,17 @@ def main():
     if count_active(pv, "//@version") != 0 or count_active(pv, "indicator(") != 0:
         raise RuntimeError("Premium visual block must remain isolated: no active version or indicator")
 
+    # Safety patch for older generated blocks / stale candidates.
+    pv = pv.replace("int pvLabelSizeTiny = pvIsClean ? size.tiny : size.small", "pvLabelSizeTiny = pvIsClean ? size.tiny : size.small")
+
     c = c.replace("// v1.8 FIBONACCI POI VISUAL ENGINE CANDIDATE NOTE", NOTE + "\n// v1.8 FIBONACCI POI VISUAL ENGINE CANDIDATE NOTE", 1)
 
     if PV_INSERT_MARKER not in c:
         raise RuntimeError("Could not find Fibonacci block marker for premium visual insertion")
     c = c.replace(PV_INSERT_MARKER, pv.rstrip() + "\n\n" + PV_INSERT_MARKER, 1)
+
+    # Safety patch if previous v1.9 line exists anywhere in assembled text.
+    c = c.replace("int pvLabelSizeTiny = pvIsClean ? size.tiny : size.small", "pvLabelSizeTiny = pvIsClean ? size.tiny : size.small")
 
     if OLD_FIB_LINES not in c:
         raise RuntimeError("Could not find original Fibonacci line drawing block")
@@ -102,6 +108,8 @@ def main():
     for required in ["13 Premium Visual Hierarchy", "pvMode", "pvPoiAccent", "pvFibBandBg", "12 Fibonacci POI Visual Engine", "showFibPoiEngine", "entryWorkflowMode"]:
         if required not in c:
             raise RuntimeError(f"v1.9 candidate missing required content: {required}")
+    if "int pvLabelSizeTiny" in c:
+        raise RuntimeError("v1.9 candidate still contains invalid int pvLabelSizeTiny declaration")
     if "<!DOCTYPE html>" in c or "<html" in c:
         raise RuntimeError("Candidate contains HTML, not raw Pine")
 

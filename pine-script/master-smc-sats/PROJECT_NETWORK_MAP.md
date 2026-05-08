@@ -80,9 +80,9 @@ Purpose of this modular plan:
 | `01_BASE_WORKING_VERSION/master-smc-sats-ravi-custom-01-v1.4-LAST-WORKING.pine` | Protected last working Pine v6 master script. | Do not edit directly. |
 | `03_SCRIPT_BLOCKS/06_smart_key_level_engine.pine` | Modular smart key-level block from Patch 02. Finds strongest historical support/resistance and EQH/EQL liquidity, with optional visuals and entry hooks. | Created. Not standalone. |
 | `03_SCRIPT_BLOCKS/07_entry_confluence_engine_connection_notes.md` | Exact connection notes showing how smart hooks extend v1.4 key logic. | Created. |
-| `03_SCRIPT_BLOCKS/98_assemble_v1_5_candidate.py` | Assembly script that reads v1.4 base plus Block 06 and writes the generated v1.5 candidate. | Active. Updated with 5M runtime array guards. |
-| `03_MASTER_CANDIDATES/master-smc-sats-ravi-custom-01-v1.5-smart-key-liquidity-candidate.pine` | Generated v1.5 candidate from v1.4 + Block 06. | Under TradingView test. Must be rebuilt after assembler changes. |
-| `03_MASTER_CANDIDATES/master-smc-sats-ravi-custom-01-v1.5-candidate-smart-key-levels.pine` | Safe placeholder/warning script. | Updated: warning now uses selectable table position instead of price-level label. |
+| `03_SCRIPT_BLOCKS/98_assemble_v1_5_candidate.py` | Assembly script that reads v1.4 base plus Block 06 and writes the generated v1.5 candidate. | Active. Updated with 5M runtime guards and mini-status position selector injection. |
+| `03_MASTER_CANDIDATES/master-smc-sats-ravi-custom-01-v1.5-smart-key-liquidity-candidate.pine` | Generated v1.5 candidate from v1.4 + Block 06. | Under TradingView test. Rebuild after assembler changes. |
+| `03_MASTER_CANDIDATES/master-smc-sats-ravi-custom-01-v1.5-candidate-smart-key-levels.pine` | Safe placeholder/warning script. | Warning uses selectable table position instead of price-level label. |
 | `08_PATCHES/patch-02-smart-key-level-engine-isolated-v0.1.pine` | Standalone Pine v6 isolated indicator for smart key-level testing. | Ravi visually confirmed Smart Support / Smart Resistance. |
 | `08_PATCHES/patch-03-master-v1.5-integration-map.md` | Merge map for connecting Patch 02 into v1.4 as v1.5 candidate. | Created. |
 | `.github/workflows/build-pine-v15-candidate.yml` | GitHub Action to assemble the v1.5 candidate. | Active. Manual run supported; push path trigger added. |
@@ -142,10 +142,17 @@ Current v1.5 feature:
   - `bullKeyReaction`
   - `bearKeyReaction`
 
-Latest fix:
-- Ravi found a 5M TradingView runtime error: `array.get()` index 0 out of bounds when array size is 0.
-- The assembler was patched to guard current-TF OB/FVG visual loops before calling `array.get()`.
-- The generated v1.5 candidate must be rebuilt through GitHub Actions before retesting.
+Validated by Ravi:
+- 5M runtime array error was fixed after adding array guards in the assembler.
+- Smart levels appear on 3M, 5M, and 15M.
+
+Latest mini-status update:
+- Ravi confirmed the 5M issue is gone, but the mini status panel still sat on the live price area and had no placement option in the real master candidate.
+- `03_SCRIPT_BLOCKS/98_assemble_v1_5_candidate.py` was updated so the real v1.5 candidate receives:
+  - `Mini Status Position`
+  - options: `Right of Price`, `Top Right`, `Top Left`, `Bottom Right`, `Bottom Left`
+  - corner options use a Pine `table` instead of a price-level label.
+- The generated candidate must be rebuilt before TradingView will show the new setting.
 
 ## Placeholder status
 
@@ -217,8 +224,7 @@ After each important update:
 
 ## Latest session update
 
-- Updated `.github/workflows/build-pine-v15-candidate.yml` with push path triggers.
-- Updated `03_SCRIPT_BLOCKS/98_assemble_v1_5_candidate.py` with 5M runtime array guards.
-- Updated placeholder candidate so its warning can be positioned via settings and no longer sits on the live price level.
-- Added `09_PROJECT_MEMORY/session-update-2026-05-08-v1.5-runtime-placeholder-fix.md`.
-- Next action: run GitHub Action, rebuild the generated candidate, then retest 3M / 5M / 15M in TradingView.
+- Updated `03_SCRIPT_BLOCKS/98_assemble_v1_5_candidate.py` to inject a real `Mini Status Position` setting into the generated v1.5 master candidate.
+- The status panel can now remain `Right of Price` or move to a corner table: Top Right, Top Left, Bottom Right, Bottom Left.
+- This is separate from the placeholder warning script and applies to the real v1.5 candidate after rebuild.
+- Next action: wait for or run GitHub Action, then copy the rebuilt raw candidate into TradingView and check settings under Visuals.

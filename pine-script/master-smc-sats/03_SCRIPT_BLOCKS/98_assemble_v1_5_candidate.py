@@ -21,6 +21,7 @@ HEADER_NOTE = """// ════════════════════
 // Connection: smart key-level hooks extend, not replace, v1.4 key reactions.
 // Runtime safety: empty OB/FVG visual arrays are guarded before array.get().
 // Visual safety: mini status can be moved to a corner table panel.
+// Smart levels: current chart timeframe pivot clusters; default selection is nearest valid support/resistance.
 // Test required in TradingView before promotion to 00_MASTER_COMPILED.
 // ══════════════════════════════════════════════════════════════════════════════
 """
@@ -75,7 +76,7 @@ REPLACEMENTS = [
      "FVG empty-array guard"),
 ]
 
-NEW_STATUS_BLOCK = r'''// Mini status panel
+NEW_STATUS_BLOCK = '''// Mini status panel
 // v1.5: selectable placement. "Right of Price" keeps the original floating label.
 // Corner positions use tables, so the panel does not sit directly on live price.
 var label statusLabel = na
@@ -100,14 +101,14 @@ if barstate.islast
     if showMiniStatus
         biasTxt = htfBullishBias ? "Bull" : htfBearishBias ? "Bear" : "Neutral"
         statusTxt = "Preset: " + masterPreset +
-          "\nBias: " + biasTxt + " (" + str.tostring(biasPct, "#.0") + "%)" +
-          "\nKZ: " + killzoneName + " | " + (killzoneAllowed ? "OK" : "BLOCK") + (effectiveKillzoneOnly and killzoneName == "NO KILLZONE" and not allowNoKz ? " — enable Allow NO KILLZONE" : "") +
-          "\nTQI: " + str.tostring(tqi, "#.00") + " / " + str.tostring(effectiveMinTqi, "#.00") +
-          "\nER: " + str.tostring(erValue, "#.00") + " / " + str.tostring(effectiveMinEr, "#.00") +
-          "\nVol: " + volumeState + " | ATR: " + volatilityState +
-          "\nHTF POI B/S: " + (htfBullPoiContext ? "B✓" : "B×") + " / " + (htfBearPoiContext ? "S✓" : "S×") +
-          "\nExec Zone B/S: " + (executionBullZoneOk ? "B✓" : "B×") + " / " + (executionBearZoneOk ? "S✓" : "S×") +
-          "\nKey Touch: " + (anyExistingKeyLevelTouched ? "YES" : "NO") + " | B/S " + (bullKeyReaction ? "B✓" : "B×") + "/" + (bearKeyReaction ? "S✓" : "S×")
+          "\\nBias: " + biasTxt + " (" + str.tostring(biasPct, "#.0") + "%)" +
+          "\\nKZ: " + killzoneName + " | " + (killzoneAllowed ? "OK" : "BLOCK") + (effectiveKillzoneOnly and killzoneName == "NO KILLZONE" and not allowNoKz ? " — enable Allow NO KILLZONE" : "") +
+          "\\nTQI: " + str.tostring(tqi, "#.00") + " / " + str.tostring(effectiveMinTqi, "#.00") +
+          "\\nER: " + str.tostring(erValue, "#.00") + " / " + str.tostring(effectiveMinEr, "#.00") +
+          "\\nVol: " + volumeState + " | ATR: " + volatilityState +
+          "\\nHTF POI B/S: " + (htfBullPoiContext ? "B✓" : "B×") + " / " + (htfBearPoiContext ? "S✓" : "S×") +
+          "\\nExec Zone B/S: " + (executionBullZoneOk ? "B✓" : "B×") + " / " + (executionBearZoneOk ? "S✓" : "S×") +
+          "\\nKey Touch: " + (anyExistingKeyLevelTouched ? "YES" : "NO") + " | B/S " + (bullKeyReaction ? "B✓" : "B×") + "/" + (bearKeyReaction ? "S✓" : "S×")
 
         if miniStatusPosition == "Top Right"
             drawStatusTable(statusTopRight, statusTxt)
@@ -119,8 +120,6 @@ if barstate.islast
             drawStatusTable(statusBottomLeft, statusTxt)
         else
             statusLabel := label.new(bar_index + 2, close, statusTxt, style = label.style_label_left, color = color.new(color.black, 20), textcolor = color.white, size = size.small)'''
-# Unescape quotes for Pine output, while keeping literal \n separators.
-NEW_STATUS_BLOCK = NEW_STATUS_BLOCK.replace('\\"', '"')
 
 
 def must_replace(text: str, old: str, new: str, label: str) -> str:
@@ -144,10 +143,15 @@ def active_counts(text: str) -> tuple[int, int]:
     indicator_count = 0
     for raw in text.splitlines():
         line = raw.strip()
-        if not line or line.startswith("//"):
+        if not line:
             continue
+        # //@version is intentionally a Pine directive even though it begins with //.
         if line.startswith("//@version"):
             version_count += 1
+            continue
+        # Other // comments should not count as active code.
+        if line.startswith("//"):
+            continue
         if line.startswith("indicator("):
             indicator_count += 1
     return version_count, indicator_count
@@ -176,7 +180,7 @@ def main() -> None:
     v_count, i_count = active_counts(candidate)
     if v_count != 1 or i_count != 1:
         raise RuntimeError(f"Candidate must contain one active version and one active indicator. Found version={v_count}, indicator={i_count}")
-    for required in ['"\\nBias: "', "miniStatusPosition", "drawStatusTable", "smartAnyKeyTouched", "if obCount > 0", "if fvgCount > 0"]:
+    for required in ['"\\nBias: "', "miniStatusPosition", "drawStatusTable", "smartAnyKeyTouched", "if obCount > 0", "if fvgCount > 0", "Smart Level Source TF"]:
         if required not in candidate:
             raise RuntimeError(f"Candidate missing required content: {required}")
     if "<!DOCTYPE html>" in candidate or "<html" in candidate:

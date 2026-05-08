@@ -1,0 +1,27 @@
+name: Audit Pine Settings
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'pine-script/master-smc-sats/03_SCRIPT_BLOCKS/97_audit_settings_usage.py'
+      - 'pine-script/master-smc-sats/03_MASTER_CANDIDATES/master-smc-sats-ravi-custom-01-v1.6-theme-engine-candidate.pine'
+
+permissions:
+  contents: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run settings audit
+        run: python pine-script/master-smc-sats/03_SCRIPT_BLOCKS/97_audit_settings_usage.py
+
+      - name: Commit settings usage report
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: Audit Pine settings usage
+          file_pattern: pine-script/master-smc-sats/08_PATCHES/patch-11-settings-usage-report.md

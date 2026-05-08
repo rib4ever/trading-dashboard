@@ -27,8 +27,10 @@ indicator(
 
 // ══════════════════════════════════════════════════════════════════════════════
 // v1.5 CANDIDATE NOTE
-// Built from protected v1.4 base plus isolated smart key-level block.
-// Smart levels are current-chart-timeframe pivot clusters.
+// Built from protected v1.4 base plus isolated smart key-level and entry workflow blocks.
+// Smart levels are selectable from current chart / HTF1 / HTF2.
+// Entry workflow can run as Market Structure Only, Setups Only, Opportunity Mode,
+// Confirmed Entries, Full Mode, or Manual Custom.
 // Mini status panel has selectable placement.
 // Test in TradingView before promotion to compiled master.
 // ══════════════════════════════════════════════════════════════════════════════
@@ -1334,6 +1336,94 @@ cleanMode = visualMode == "Clean"
 normalMode = visualMode == "Normal"
 debugMode = visualMode == "Debug"
 
+// ══════════════════════════════════════════════════════════════════════════════
+// 07 ENTRY WORKFLOW ENGINE — BLOCK VERSION
+// For: Master SMC + SATS Sniper System [Ravi Custom 01]
+//
+// Purpose:
+// - Make entries optional and workflow-driven.
+// - Allow the script to run as pure SMC / market-structure only.
+// - Keep setup, opportunity, normal, sniper, ultra, and key-level entries separate.
+// - Block confirmed entries on HTF charts by default.
+// - Hide old historical entry labels/TP/SL lines by default.
+//
+// IMPORTANT:
+// - This block is NOT standalone.
+// - No //@version and no indicator() declaration are included here on purpose.
+// - Insert after cleanMode / normalMode / debugMode are declared and before entry booleans.
+// ══════════════════════════════════════════════════════════════════════════════
+
+GRP_ENTRY = "🚦 Entry Workflow"
+
+entryWorkflowMode = input.string(
+     "Market Structure Only",
+     "Entry Workflow Mode",
+     options = [
+         "Market Structure Only",
+         "Setups Only",
+         "Opportunity Mode",
+         "Confirmed Entries",
+         "Full Mode",
+         "Manual Custom"
+     ],
+     group = GRP_ENTRY,
+     tooltip = "Market Structure Only disables all entries. Setups Only shows warnings. Opportunity Mode enables early entries. Confirmed Entries enables normal/sniper entries. Full Mode also enables ultra/key-level entries. Manual Custom uses the individual toggles below.")
+
+manualEnableSetupWarnings      = input.bool(true,  "Manual: Enable Setup Warnings", group = GRP_ENTRY)
+manualEnableOpportunityEntries = input.bool(false, "Manual: Enable Opportunity Entries", group = GRP_ENTRY)
+manualEnableNormalEntries      = input.bool(false, "Manual: Enable Normal Entries", group = GRP_ENTRY)
+manualEnableSniperEntries      = input.bool(false, "Manual: Enable Sniper Entries", group = GRP_ENTRY)
+manualEnableUltraEntries       = input.bool(false, "Manual: Enable Ultra Entries", group = GRP_ENTRY)
+manualEnableKeyLevelEntries    = input.bool(false, "Manual: Enable Key-Level Entries", group = GRP_ENTRY)
+
+showEntryLabelsFinalInput      = input.bool(true,  "Show Entry Labels", group = GRP_ENTRY)
+showHistoricalEntries          = input.bool(false, "Show Historical Entry Labels/Lines", group = GRP_ENTRY, tooltip = "OFF by default so old historical entries do not drag TP/SL lines into the current chart.")
+entryHistoryBars               = input.int(500, "Historical Entry Lookback Bars", minval = 50, maxval = 5000, group = GRP_ENTRY)
+showTpSlForEntriesFinal        = input.bool(true, "Show TP/SL For Confirmed Entries", group = GRP_ENTRY)
+
+restrictConfirmedEntriesToExecutionTf = input.bool(true, "Restrict Confirmed Entries To Execution TF", group = GRP_ENTRY, tooltip = "Recommended ON. 15M/1H/4H should guide bias and POIs, not print sniper entries.")
+maxConfirmedEntryTfMinutes = input.int(5, "Max Confirmed Entry TF Minutes", minval = 1, maxval = 60, group = GRP_ENTRY)
+allowHigherTimeframeEntries = input.bool(false, "Allow Higher Timeframe Entries", group = GRP_ENTRY, tooltip = "Emergency override. Keep OFF for Ravi Custom 01 scalping.")
+
+modeMarketStructureOnly = entryWorkflowMode == "Market Structure Only"
+modeSetupsOnly          = entryWorkflowMode == "Setups Only"
+modeOpportunity         = entryWorkflowMode == "Opportunity Mode"
+modeConfirmed           = entryWorkflowMode == "Confirmed Entries"
+modeFull                = entryWorkflowMode == "Full Mode"
+modeManual              = entryWorkflowMode == "Manual Custom"
+
+enableSetupWarningsFinal = not modeMarketStructureOnly and (
+     modeSetupsOnly or modeOpportunity or modeConfirmed or modeFull or
+     (modeManual and manualEnableSetupWarnings))
+
+enableOpportunityEntriesFinal = not modeMarketStructureOnly and (
+     modeOpportunity or modeFull or
+     (modeManual and manualEnableOpportunityEntries))
+
+enableNormalEntriesFinal = not modeMarketStructureOnly and (
+     modeConfirmed or modeFull or
+     (modeManual and manualEnableNormalEntries))
+
+enableSniperEntriesFinal = not modeMarketStructureOnly and (
+     modeConfirmed or modeFull or
+     (modeManual and manualEnableSniperEntries))
+
+enableUltraEntriesFinal = not modeMarketStructureOnly and (
+     modeFull or
+     (modeManual and manualEnableUltraEntries))
+
+enableKeyLevelEntriesFinal = not modeMarketStructureOnly and (
+     modeFull or
+     (modeManual and manualEnableKeyLevelEntries))
+
+confirmedEntryTfOk = allowHigherTimeframeEntries or not restrictConfirmedEntriesToExecutionTf or timeframe.in_seconds(timeframe.period) <= maxConfirmedEntryTfMinutes * 60
+entryVisualWindowOk = showHistoricalEntries or (last_bar_index - bar_index <= entryHistoryBars)
+showEntryLabelsFinal = showEntryLabelsFinalInput and entryVisualWindowOk
+
+// ══════════════════════════════════════════════════════════════════════════════
+// END 07 ENTRY WORKFLOW ENGINE BLOCK
+// ══════════════════════════════════════════════════════════════════════════════
+
 bullTrendSetup = htfBullishBias and sweepOkBuy and bullZoneOk and bullKeyReaction and setupQualityOk
 bearTrendSetup = htfBearishBias and sweepOkSell and bearZoneOk and bearKeyReaction and setupQualityOk
 bullCounterSetup = showCounterTrendSetups and not htfBullishBias and htfBullPoiContext and sweepOkBuy and bullZoneOk and bullKeyReaction and setupQualityOk
@@ -1342,7 +1432,10 @@ bullSetupWarning = bullTrendSetup or bullCounterSetup
 bearSetupWarning = bearTrendSetup or bearCounterSetup
 
 bullSniperEntry =
-     bullContextBiasOk and
+     enableSniperEntriesFinal and
+     confirmedEntryTfOk and
+     htfBullishBias and
+     not htfBearishBias and
      htfBullContextOk and
      bullKeyReaction and
      sweepOkBuy and
@@ -1356,7 +1449,10 @@ bullSniperEntry =
      barstate.isconfirmed
 
 bearSniperEntry =
-     bearContextBiasOk and
+     enableSniperEntriesFinal and
+     confirmedEntryTfOk and
+     htfBearishBias and
+     not htfBullishBias and
      htfBearContextOk and
      bearKeyReaction and
      sweepOkSell and
@@ -1374,6 +1470,7 @@ oppKzAllowed = not opportunityUsesKZ or killzoneAllowed
 oppVolAllowed = not opportunityUsesVolume or volumeAllowed
 
 bullOpportunityEntry =
+     enableOpportunityEntriesFinal and
      enableOpportunityMode and
      bullSetupWarning and
      bullKeyReaction and
@@ -1386,6 +1483,7 @@ bullOpportunityEntry =
      not bullSniperEntry
 
 bearOpportunityEntry =
+     enableOpportunityEntriesFinal and
      enableOpportunityMode and
      bearSetupWarning and
      bearKeyReaction and
@@ -1398,6 +1496,7 @@ bearOpportunityEntry =
      not bearSniperEntry
 
 bullUltraEntry =
+     enableUltraEntriesFinal and
      bullSniperEntry and
      strongHtfBull and
      tqi >= effectiveUltraTqi and
@@ -1405,11 +1504,70 @@ bullUltraEntry =
      priceInsideBullOB and priceInsideBullFVG
 
 bearUltraEntry =
+     enableUltraEntriesFinal and
      bearSniperEntry and
      strongHtfBear and
      tqi >= effectiveUltraTqi and
      (pdReclaimHigh or pwReclaimHigh or pmReclaimHigh or k1_reclaimHigh or k2_reclaimHigh) and
      priceInsideBearOB and priceInsideBearFVG
+
+normalBullEntry =
+     enableNormalEntriesFinal and
+     confirmedEntryTfOk and
+     htfBullishBias and
+     not htfBearishBias and
+     htfBullContextOk and
+     bullKeyReaction and
+     sweepOkBuy and
+     bullZoneOk and
+     satsBullishConfirm and
+     qualityAllowed and
+     volumeAllowed and
+     volatilityAllowed and
+     killzoneAllowed and
+     barstate.isconfirmed and
+     not bullSniperEntry
+
+normalBearEntry =
+     enableNormalEntriesFinal and
+     confirmedEntryTfOk and
+     htfBearishBias and
+     not htfBullishBias and
+     htfBearContextOk and
+     bearKeyReaction and
+     sweepOkSell and
+     bearZoneOk and
+     satsBearishConfirm and
+     qualityAllowed and
+     volumeAllowed and
+     volatilityAllowed and
+     killzoneAllowed and
+     barstate.isconfirmed and
+     not bearSniperEntry
+
+keyLevelBullEntry =
+     enableKeyLevelEntriesFinal and
+     confirmedEntryTfOk and
+     bullKeyReaction and
+     htfBullishBias and
+     satsBullishConfirm and
+     qualityAllowed and
+     sweepOkBuy and
+     barstate.isconfirmed and
+     not bullSniperEntry and
+     not normalBullEntry
+
+keyLevelBearEntry =
+     enableKeyLevelEntriesFinal and
+     confirmedEntryTfOk and
+     bearKeyReaction and
+     htfBearishBias and
+     satsBearishConfirm and
+     qualityAllowed and
+     sweepOkSell and
+     barstate.isconfirmed and
+     not bearSniperEntry and
+     not normalBearEntry
 
 // ══════════════════════════════════════════════════════════════════════════════
 // RISK / TP / SL
@@ -1469,8 +1627,8 @@ var float tradeTP3 = na
 var int tradeEntryBar = na
 var string tradeType = ""
 
-buyEntrySignal = bullSniperEntry or (showRiskForOpportunity and bullOpportunityEntry)
-sellEntrySignal = bearSniperEntry or (showRiskForOpportunity and bearOpportunityEntry)
+buyEntrySignal = entryVisualWindowOk and showTpSlForEntriesFinal and (bullSniperEntry or normalBullEntry or keyLevelBullEntry or (showRiskForOpportunity and bullOpportunityEntry))
+sellEntrySignal = entryVisualWindowOk and showTpSlForEntriesFinal and (bearSniperEntry or normalBearEntry or keyLevelBearEntry or (showRiskForOpportunity and bearOpportunityEntry))
 
 if buyEntrySignal
     tradeDir := 1
@@ -1481,7 +1639,7 @@ if buyEntrySignal
     tradeTP2 := chooseBuyTP(tradeEntry, risk, liveTp2R, nearestBuyLiq2)
     tradeTP3 := chooseBuyTP(tradeEntry, risk, liveTp3R, nearestBuyLiq3)
     tradeEntryBar := bar_index
-    tradeType := bullSniperEntry ? (bullUltraEntry ? "ULTRA BUY" : "SNIPER BUY") : "OPPORTUNITY BUY"
+    tradeType := bullSniperEntry ? (bullUltraEntry ? "ULTRA BUY" : "SNIPER BUY") : normalBullEntry ? "NORMAL BUY" : keyLevelBullEntry ? "KEY LEVEL BUY" : "OPPORTUNITY BUY"
 
 if sellEntrySignal
     tradeDir := -1
@@ -1492,7 +1650,7 @@ if sellEntrySignal
     tradeTP2 := chooseSellTP(tradeEntry, risk, liveTp2R, nearestSellLiq2)
     tradeTP3 := chooseSellTP(tradeEntry, risk, liveTp3R, nearestSellLiq3)
     tradeEntryBar := bar_index
-    tradeType := bearSniperEntry ? (bearUltraEntry ? "ULTRA SELL" : "SNIPER SELL") : "OPPORTUNITY SELL"
+    tradeType := bearSniperEntry ? (bearUltraEntry ? "ULTRA SELL" : "SNIPER SELL") : normalBearEntry ? "NORMAL SELL" : keyLevelBearEntry ? "KEY LEVEL SELL" : "OPPORTUNITY SELL"
 
 // ══════════════════════════════════════════════════════════════════════════════
 // PLOTS / VISUALS
@@ -1628,8 +1786,8 @@ if barstate.islast
 // Setup warnings
 var int lastBullSetupLabelBar = na
 var int lastBearSetupLabelBar = na
-bullSetupLabelOk = showSetupWarnings and not cleanMode and bullSetupWarning and not bullSniperEntry and (na(lastBullSetupLabelBar) or bar_index - lastBullSetupLabelBar >= setupCooldownBars)
-bearSetupLabelOk = showSetupWarnings and not cleanMode and bearSetupWarning and not bearSniperEntry and (na(lastBearSetupLabelBar) or bar_index - lastBearSetupLabelBar >= setupCooldownBars)
+bullSetupLabelOk = enableSetupWarningsFinal and showSetupWarnings and not cleanMode and bullSetupWarning and not bullSniperEntry and (na(lastBullSetupLabelBar) or bar_index - lastBullSetupLabelBar >= setupCooldownBars)
+bearSetupLabelOk = enableSetupWarningsFinal and showSetupWarnings and not cleanMode and bearSetupWarning and not bearSniperEntry and (na(lastBearSetupLabelBar) or bar_index - lastBearSetupLabelBar >= setupCooldownBars)
 
 if bullSetupLabelOk
     bullSetupTxt = bullTrendSetup ? "⚠ Bull Setup\nSweep + Key + Zone" : "⚠ CT Bull Setup\nSweep + Key + Zone"
@@ -1640,19 +1798,19 @@ if bearSetupLabelOk
     label.new(bar_index, high, bearSetupTxt, style = label.style_label_down, color = color.new(bearColor, 15), textcolor = color.white, size = size.small)
     lastBearSetupLabelBar := bar_index
 
-if showSniperEntries and not cleanMode and bullOpportunityEntry
+if showEntryLabelsFinal and showSniperEntries and not cleanMode and bullOpportunityEntry
     label.new(bar_index, low, "⚡ OPPORTUNITY BUY\nTQI " + str.tostring(tqi, "#.00") + " | ER " + str.tostring(erValue, "#.00"), style = label.style_label_up, color = color.new(bullColor, 35), textcolor = color.white, size = size.small)
-if showSniperEntries and not cleanMode and bearOpportunityEntry
+if showEntryLabelsFinal and showSniperEntries and not cleanMode and bearOpportunityEntry
     label.new(bar_index, high, "⚡ OPPORTUNITY SELL\nTQI " + str.tostring(tqi, "#.00") + " | ER " + str.tostring(erValue, "#.00"), style = label.style_label_down, color = color.new(bearColor, 35), textcolor = color.white, size = size.small)
 
 // Entry labels
-if showSniperEntries and bullSniperEntry and not bullUltraEntry
+if showEntryLabelsFinal and showSniperEntries and bullSniperEntry and not bullUltraEntry
     label.new(bar_index, low, "🎯 SNIPER BUY\nTQI " + str.tostring(tqi, "#.00") + " | ER " + str.tostring(erValue, "#.00"), style = label.style_label_up, color = bullColor, textcolor = color.white, size = size.normal)
-if showSniperEntries and bearSniperEntry and not bearUltraEntry
+if showEntryLabelsFinal and showSniperEntries and bearSniperEntry and not bearUltraEntry
     label.new(bar_index, high, "🎯 SNIPER SELL\nTQI " + str.tostring(tqi, "#.00") + " | ER " + str.tostring(erValue, "#.00"), style = label.style_label_down, color = bearColor, textcolor = color.white, size = size.normal)
-if showUltraEntries and bullUltraEntry
+if showEntryLabelsFinal and showUltraEntries and bullUltraEntry
     label.new(bar_index, low, "🔥 ULTRA BUY\nHTF + Key + OB/FVG\nTQI " + str.tostring(tqi, "#.00"), style = label.style_label_up, color = color.new(bullColor, 0), textcolor = color.white, size = size.large)
-if showUltraEntries and bearUltraEntry
+if showEntryLabelsFinal and showUltraEntries and bearUltraEntry
     label.new(bar_index, high, "🔥 ULTRA SELL\nHTF + Key + OB/FVG\nTQI " + str.tostring(tqi, "#.00"), style = label.style_label_down, color = color.new(bearColor, 0), textcolor = color.white, size = size.large)
 
 // Risk lines
@@ -1709,8 +1867,10 @@ if barstate.islast
     clearStatusTable(statusBottomLeft)
     if showMiniStatus
         biasTxt = htfBullishBias ? "Bull" : htfBearishBias ? "Bear" : "Neutral"
-        statusTxt = "Preset: " + masterPreset +
+        statusTxt = "Mode: " + entryWorkflowMode +
+          "\nPreset: " + masterPreset +
           "\nBias: " + biasTxt + " (" + str.tostring(biasPct, "#.0") + "%)" +
+          "\nEntry TF: " + (confirmedEntryTfOk ? "OK" : "BLOCK >" + str.tostring(maxConfirmedEntryTfMinutes) + "m") +
           "\nKZ: " + killzoneName + " | " + (killzoneAllowed ? "OK" : "BLOCK") + (effectiveKillzoneOnly and killzoneName == "NO KILLZONE" and not allowNoKz ? " - enable Allow NO KILLZONE" : "") +
           "\nTQI: " + str.tostring(tqi, "#.00") + " / " + str.tostring(effectiveMinTqi, "#.00") +
           "\nER: " + str.tostring(erValue, "#.00") + " / " + str.tostring(effectiveMinEr, "#.00") +
@@ -1762,5 +1922,5 @@ if enableAlerts and alertSniper and bearSniperEntry
     alert(webhookJson ? makeJson(action) : msg, alert.freq_once_per_bar_close)
 
 // ══════════════════════════════════════════════════════════════════════════════
-// End of Master SMC + SATS Sniper System v1.5 SMART KEY LIQUIDITY CANDIDATE
+// End of Master SMC + SATS Sniper System v1.5 SMART KEY LIQUIDITY + ENTRY WORKFLOW CANDIDATE
 // ══════════════════════════════════════════════════════════════════════════════

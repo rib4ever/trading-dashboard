@@ -9,6 +9,13 @@
 // - This block must be inserted into the master after ATR / level variables exist
 //   and before entry confluence variables are calculated.
 // - No //@version and no indicator() declaration are included here on purpose.
+//
+// v1.5 clarification:
+// - Smart levels can be selected from current chart pivots, HTF1 swings, HTF2 swings,
+//   or a combined nearest level model.
+// - Current-chart levels are pivot-cluster support/resistance with EQH/EQL-style touch counts.
+// - HTF1/HTF2 levels use the selected HTF swing high/low values from the master script.
+// - Full LuxAlgo MTF EQH/EQL port remains a later upgrade.
 // ══════════════════════════════════════════════════════════════════════════════
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -19,7 +26,8 @@ GRP_SK = "🧭 Smart Key Levels / Liquidity"
 
 showSmartKeyLevels      = input.bool(true,  "Show Smart Key Levels", group = GRP_SK)
 enableSmartKeyFallback  = input.bool(true,  "Enable Smart Historical Fallback", group = GRP_SK)
-smartKeyPreferStrongest = input.bool(true,  "Prefer Strongest Level", group = GRP_SK)
+smartKeySourceMode      = input.string("Current + HTF1 + HTF2", "Smart Level Source", options = ["Current chart", "HTF1", "HTF2", "Current + HTF1", "Current + HTF2", "HTF1 + HTF2", "Current + HTF1 + HTF2"], group = GRP_SK, tooltip = "Current chart = pivot clusters from the chart timeframe. HTF1/HTF2 = selected HTF swing high/low levels from the HTF Key Levels settings.")
+smartKeySelectionMode   = input.string("Nearest", "Smart Level Selection", options = ["Nearest", "Strongest"], group = GRP_SK, tooltip = "Nearest = closest valid support below price and resistance above price. Strongest = prioritizes repeated current-chart pivot touches first.")
 smartKeyPivotLen        = input.int(5,      "Smart Pivot Length", minval = 2, maxval = 25, group = GRP_SK)
 smartKeyMaxStored       = input.int(80,     "Max Stored Smart Levels Each Side", minval = 10, maxval = 200, group = GRP_SK)
 smartKeyMinTouches      = input.int(2,      "Minimum Smart Liquidity Touches", minval = 1, maxval = 10, group = GRP_SK)
@@ -29,7 +37,7 @@ smartKeyTouchBuffer     = input.float(0.20, "Smart Current Candle Touch Buffer x
 smartKeyExtendBars      = input.int(80,     "Smart Line Extend Bars", minval = 10, maxval = 500, group = GRP_SK)
 showSmartLabels         = input.bool(true,  "Show Smart Key Labels", group = GRP_SK)
 
-useSmartKeyForEntries   = input.bool(true,  "Use Smart Levels For Entry Validation", group = GRP_SK, tooltip = "Adds smart historical support/resistance and EQH/EQL liquidity into key-level touch and reaction logic.")
+useSmartKeyForEntries   = input.bool(true,  "Use Smart Levels For Entry Validation", group = GRP_SK, tooltip = "Adds smart historical support/resistance and HTF swing liquidity into key-level touch and reaction logic.")
 useSmartKeyForTP        = input.bool(false, "Use Smart Levels For TP Liquidity", group = GRP_SK, tooltip = "Reserved for a later TP/liquidity upgrade. Keep OFF until TP integration is validated.")
 
 smartSupportColor       = input.color(#40E0D0, "Smart Support Color", group = GRP_SK)
@@ -38,8 +46,8 @@ smartLiquidityColor     = input.color(#FBBF24, "Smart Liquidity Color", group = 
 
 // ══════════════════════════════════════════════════════════════════════════════
 // SMART LEVEL STORAGE
-// Supports are pivot lows / equal lows.
-// Resistances are pivot highs / equal highs.
+// Supports are pivot lows / EQL-style repeated lows.
+// Resistances are pivot highs / EQH-style repeated highs.
 // Global arrays are updated in main scope only; no global mutation inside functions.
 // ══════════════════════════════════════════════════════════════════════════════
 var array<float> skSupportLevels = array.new<float>()
@@ -58,7 +66,7 @@ skPivotHigh = ta.pivothigh(high, smartKeyPivotLen, smartKeyPivotLen)
 skPivotLow  = ta.pivotlow(low, smartKeyPivotLen, smartKeyPivotLen)
 
 // ══════════════════════════════════════════════════════════════════════════════
-// SUPPORT LEVEL UPDATE — pivot lows clustered into strongest levels.
+// SUPPORT LEVEL UPDATE — pivot lows clustered into levels.
 // ══════════════════════════════════════════════════════════════════════════════
 if enableSmartKeyFallback and not na(skPivotLow)
     float newSupport = skPivotLow
@@ -88,7 +96,7 @@ if enableSmartKeyFallback and not na(skPivotLow)
         array.set(skSupportBars, matchedSupportIndex, newSupportBar)
 
 // ══════════════════════════════════════════════════════════════════════════════
-// RESISTANCE LEVEL UPDATE — pivot highs clustered into strongest levels.
+// RESISTANCE LEVEL UPDATE — pivot highs clustered into levels.
 // ══════════════════════════════════════════════════════════════════════════════
 if enableSmartKeyFallback and not na(skPivotHigh)
     float newResistance = skPivotHigh
@@ -118,11 +126,10 @@ if enableSmartKeyFallback and not na(skPivotHigh)
         array.set(skResistanceBars, matchedResistanceIndex, newResistanceBar)
 
 // ══════════════════════════════════════════════════════════════════════════════
-// FIND BEST SUPPORT BELOW PRICE AND BEST RESISTANCE ABOVE PRICE
-// Strongest score = touches first, then recency, then distance as tie-breaker.
+// CURRENT-TIMEFRAME BEST SUPPORT / RESISTANCE
 // ══════════════════════════════════════════════════════════════════════════════
-float smartSupportLevel = na
-int smartSupportHits = 0
+float smartCurrentSupportLevel = na
+int smartCurrentSupportHits = 0
 float smartSupportScore = na
 
 int supportTotal = array.size(skSupportLevels)
@@ -135,14 +142,14 @@ if enableSmartKeyFallback and supportTotal > 0
         if validBelow
             float distAtr = math.abs(close - lvl) / math.max(smartAtr, syminfo.mintick)
             float recency = 1.0 / (1.0 + math.max(bar_index - lastSeenBar, 0) / 500.0)
-            float score = smartKeyPreferStrongest ? hits * 10.0 + recency - distAtr * 0.05 : -distAtr + hits * 0.25
+            float score = smartKeySelectionMode == "Strongest" ? hits * 10.0 + recency - distAtr * 0.05 : -distAtr + hits * 0.10 + recency * 0.05
             if na(smartSupportScore) or score > smartSupportScore
                 smartSupportScore := score
-                smartSupportLevel := lvl
-                smartSupportHits := hits
+                smartCurrentSupportLevel := lvl
+                smartCurrentSupportHits := hits
 
-float smartResistanceLevel = na
-int smartResistanceHits = 0
+float smartCurrentResistanceLevel = na
+int smartCurrentResistanceHits = 0
 float smartResistanceScore = na
 
 int resistanceTotal = array.size(skResistanceLevels)
@@ -155,11 +162,56 @@ if enableSmartKeyFallback and resistanceTotal > 0
         if validAbove
             float distAtr = math.abs(lvl - close) / math.max(smartAtr, syminfo.mintick)
             float recency = 1.0 / (1.0 + math.max(bar_index - lastSeenBar, 0) / 500.0)
-            float score = smartKeyPreferStrongest ? hits * 10.0 + recency - distAtr * 0.05 : -distAtr + hits * 0.25
+            float score = smartKeySelectionMode == "Strongest" ? hits * 10.0 + recency - distAtr * 0.05 : -distAtr + hits * 0.10 + recency * 0.05
             if na(smartResistanceScore) or score > smartResistanceScore
                 smartResistanceScore := score
-                smartResistanceLevel := lvl
-                smartResistanceHits := hits
+                smartCurrentResistanceLevel := lvl
+                smartCurrentResistanceHits := hits
+
+// ══════════════════════════════════════════════════════════════════════════════
+// HTF SMART SOURCE SELECTION
+// HTF1 and HTF2 come from the master HTF Key Level settings.
+// Support must be below/at price. Resistance must be above/at price.
+// ══════════════════════════════════════════════════════════════════════════════
+pickNearestSupport(float a, float b, float c) =>
+    float best = na
+    if not na(a) and a <= close
+        best := a
+    if not na(b) and b <= close and (na(best) or b > best)
+        best := b
+    if not na(c) and c <= close and (na(best) or c > best)
+        best := c
+    best
+
+pickNearestResistance(float a, float b, float c) =>
+    float best = na
+    if not na(a) and a >= close
+        best := a
+    if not na(b) and b >= close and (na(best) or b < best)
+        best := b
+    if not na(c) and c >= close and (na(best) or c < best)
+        best := c
+    best
+
+bool useCurrentSmart = smartKeySourceMode == "Current chart" or smartKeySourceMode == "Current + HTF1" or smartKeySourceMode == "Current + HTF2" or smartKeySourceMode == "Current + HTF1 + HTF2"
+bool useHtf1Smart = smartKeySourceMode == "HTF1" or smartKeySourceMode == "Current + HTF1" or smartKeySourceMode == "HTF1 + HTF2" or smartKeySourceMode == "Current + HTF1 + HTF2"
+bool useHtf2Smart = smartKeySourceMode == "HTF2" or smartKeySourceMode == "Current + HTF2" or smartKeySourceMode == "HTF1 + HTF2" or smartKeySourceMode == "Current + HTF1 + HTF2"
+
+float smartSourceSupportCurrent = useCurrentSmart ? smartCurrentSupportLevel : na
+float smartSourceResistanceCurrent = useCurrentSmart ? smartCurrentResistanceLevel : na
+float smartSourceSupportHtf1 = useHtf1Smart ? k1_swingL : na
+float smartSourceResistanceHtf1 = useHtf1Smart ? k1_swingH : na
+float smartSourceSupportHtf2 = useHtf2Smart ? k2_swingL : na
+float smartSourceResistanceHtf2 = useHtf2Smart ? k2_swingH : na
+
+float smartSupportLevel = pickNearestSupport(smartSourceSupportCurrent, smartSourceSupportHtf1, smartSourceSupportHtf2)
+float smartResistanceLevel = pickNearestResistance(smartSourceResistanceCurrent, smartSourceResistanceHtf1, smartSourceResistanceHtf2)
+
+int smartSupportHits = smartSupportLevel == smartCurrentSupportLevel ? smartCurrentSupportHits : smartKeyMinTouches
+int smartResistanceHits = smartResistanceLevel == smartCurrentResistanceLevel ? smartCurrentResistanceHits : smartKeyMinTouches
+
+string smartSupportSource = smartSupportLevel == smartCurrentSupportLevel ? "Current" : smartSupportLevel == k1_swingL ? "HTF1" : smartSupportLevel == k2_swingL ? "HTF2" : "Smart"
+string smartResistanceSource = smartResistanceLevel == smartCurrentResistanceLevel ? "Current" : smartResistanceLevel == k1_swingH ? "HTF1" : smartResistanceLevel == k2_swingH ? "HTF2" : "Smart"
 
 // ══════════════════════════════════════════════════════════════════════════════
 // CURRENT CANDLE TOUCH / LIQUIDITY BOOLEANS
@@ -198,14 +250,14 @@ if barstate.islast
 
     if showSmartKeyLevels and not na(smartSupportLevel)
         color supportLineColor = smartSupportHits >= smartKeyMinTouches ? smartLiquidityColor : smartSupportColor
-        string supportTxt = smartSupportHits >= smartKeyMinTouches ? "Smart Support / EQL" : "Smart Support"
+        string supportTxt = smartSupportHits >= smartKeyMinTouches ? smartSupportSource + " Smart Support / EQL" : smartSupportSource + " Smart Support"
         smartSupportLine := line.new(bar_index - 1, smartSupportLevel, bar_index + smartKeyExtendBars, smartSupportLevel, color = supportLineColor, style = line.style_solid, width = smartSupportHits >= smartKeyMinTouches ? 2 : 1)
         if showSmartLabels
             smartSupportLabel := label.new(bar_index + smartKeyExtendBars, smartSupportLevel, supportTxt + " x" + str.tostring(smartSupportHits) + " " + str.tostring(smartSupportLevel, format.mintick), style = label.style_label_left, color = color.new(supportLineColor, 82), textcolor = supportLineColor, size = size.small)
 
     if showSmartKeyLevels and not na(smartResistanceLevel)
         color resistanceLineColor = smartResistanceHits >= smartKeyMinTouches ? smartLiquidityColor : smartResistanceColor
-        string resistanceTxt = smartResistanceHits >= smartKeyMinTouches ? "Smart Resistance / EQH" : "Smart Resistance"
+        string resistanceTxt = smartResistanceHits >= smartKeyMinTouches ? smartResistanceSource + " Smart Resistance / EQH" : smartResistanceSource + " Smart Resistance"
         smartResistanceLine := line.new(bar_index - 1, smartResistanceLevel, bar_index + smartKeyExtendBars, smartResistanceLevel, color = resistanceLineColor, style = line.style_solid, width = smartResistanceHits >= smartKeyMinTouches ? 2 : 1)
         if showSmartLabels
             smartResistanceLabel := label.new(bar_index + smartKeyExtendBars, smartResistanceLevel, resistanceTxt + " x" + str.tostring(smartResistanceHits) + " " + str.tostring(smartResistanceLevel, format.mintick), style = label.style_label_left, color = color.new(resistanceLineColor, 82), textcolor = resistanceLineColor, size = size.small)

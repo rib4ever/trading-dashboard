@@ -1,0 +1,105 @@
+// Theme Engine Block for v1.6
+// This block is not standalone. It must be injected into the master script.
+// It intentionally keeps existing variable names used by the base script:
+// bullColor, bearColor, neutColor, slColor, tpColor.
+
+GRP_THEME = "Theme Engine"
+
+BULL_DEFAULT = #089981
+BEAR_DEFAULT = #f23645
+NEUT_DEFAULT = #b8b8b8
+ORANGE       = #f97316
+YELLOW       = #fbbf24
+HIT_COLOR    = #40E0D0
+
+themePreset = input.string(
+     "Midnight Pro",
+     "Theme Preset",
+     options = ["Minimal Pro", "Glass", "Crystal", "Diamond", "Earthy", "Nature", "Midnight Pro", "Gold Trader", "Cyber Neon", "Manual Custom"],
+     group = GRP_THEME)
+
+themeIntensity = input.string(
+     "Standard",
+     "Theme Intensity",
+     options = ["Soft", "Standard", "Strong"],
+     group = GRP_THEME)
+
+themeZoneTransparency = input.int(82, "Zone Transparency", minval = 0, maxval = 95, group = GRP_THEME)
+themePanelTransparency = input.int(20, "Panel Transparency", minval = 0, maxval = 95, group = GRP_THEME)
+
+manualBullColor = input.color(BULL_DEFAULT, "Manual Bull", inline = "tm1", group = GRP_THEME)
+manualBearColor = input.color(BEAR_DEFAULT, "Manual Bear", inline = "tm1", group = GRP_THEME)
+manualNeutColor = input.color(NEUT_DEFAULT, "Manual Neutral", inline = "tm2", group = GRP_THEME)
+manualSlColor   = input.color(#FF1744, "Manual SL", inline = "tm3", group = GRP_THEME)
+manualTpColor   = input.color(#00E676, "Manual TP", inline = "tm3", group = GRP_THEME)
+
+color themeBaseBull = switch themePreset
+    "Glass"       => color.rgb(80, 220, 190)
+    "Crystal"     => color.rgb(115, 210, 255)
+    "Diamond"     => color.rgb(0, 220, 255)
+    "Earthy"      => color.rgb(111, 145, 82)
+    "Nature"      => color.rgb(55, 170, 95)
+    "Gold Trader" => color.rgb(212, 175, 55)
+    "Cyber Neon"  => color.rgb(0, 255, 170)
+    "Manual Custom" => manualBullColor
+    "Minimal Pro" => BULL_DEFAULT
+    => color.rgb(0, 188, 212)
+
+color themeBaseBear = switch themePreset
+    "Glass"       => color.rgb(255, 120, 130)
+    "Crystal"     => color.rgb(255, 105, 160)
+    "Diamond"     => color.rgb(255, 50, 95)
+    "Earthy"      => color.rgb(175, 86, 67)
+    "Nature"      => color.rgb(165, 88, 82)
+    "Gold Trader" => color.rgb(150, 40, 55)
+    "Cyber Neon"  => color.rgb(255, 0, 130)
+    "Manual Custom" => manualBearColor
+    "Minimal Pro" => BEAR_DEFAULT
+    => color.rgb(229, 57, 53)
+
+color themeBaseNeutral = switch themePreset
+    "Glass"       => color.rgb(190, 205, 215)
+    "Crystal"     => color.rgb(175, 200, 225)
+    "Diamond"     => color.rgb(190, 195, 205)
+    "Earthy"      => color.rgb(166, 151, 126)
+    "Nature"      => color.rgb(135, 160, 135)
+    "Gold Trader" => color.rgb(165, 145, 95)
+    "Cyber Neon"  => color.rgb(120, 130, 180)
+    "Manual Custom" => manualNeutColor
+    "Minimal Pro" => NEUT_DEFAULT
+    => color.rgb(144, 164, 174)
+
+color themeBaseSL = switch themePreset
+    "Earthy" => color.rgb(180, 75, 55)
+    "Nature" => color.rgb(170, 70, 75)
+    "Gold Trader" => color.rgb(180, 45, 55)
+    "Manual Custom" => manualSlColor
+    => color.rgb(255, 70, 90)
+
+color themeBaseTP = switch themePreset
+    "Earthy" => color.rgb(135, 170, 85)
+    "Nature" => color.rgb(80, 190, 115)
+    "Gold Trader" => color.rgb(230, 190, 75)
+    "Manual Custom" => manualTpColor
+    => color.rgb(60, 230, 160)
+
+int themeSignalTransparency = themeIntensity == "Soft" ? 25 : themeIntensity == "Strong" ? 0 : 10
+
+bullColor = themeBaseBull
+bearColor = themeBaseBear
+neutColor = themeBaseNeutral
+slColor   = themeBaseSL
+tpColor   = themeBaseTP
+
+color themeWarning     = themePreset == "Earthy" ? color.rgb(205, 145, 75) : themePreset == "Nature" ? color.rgb(210, 170, 80) : color.rgb(255, 190, 80)
+color themePanelBg     = color.new(color.black, themePanelTransparency)
+color themePanelText   = color.white
+color themePanelBorder = color.new(themeBaseNeutral, 35)
+color themeLiquidity   = themePreset == "Diamond" ? color.rgb(185, 245, 255) : themePreset == "Gold Trader" ? color.rgb(255, 215, 100) : color.rgb(90, 200, 255)
+color themeKeyLevel    = color.new(themeLiquidity, 0)
+color themeOBBull      = color.new(themeBaseBull, themeZoneTransparency)
+color themeOBBear      = color.new(themeBaseBear, themeZoneTransparency)
+color themeFVGBull     = color.new(themeBaseBull, math.min(themeZoneTransparency + 5, 95))
+color themeFVGBear     = color.new(themeBaseBear, math.min(themeZoneTransparency + 5, 95))
+color themeSniper      = themePreset == "Gold Trader" ? color.rgb(255, 215, 80) : color.rgb(0, 255, 220)
+color themeUltra       = themePreset == "Diamond" ? color.white : themePreset == "Gold Trader" ? color.rgb(255, 235, 120) : color.rgb(240, 245, 255)

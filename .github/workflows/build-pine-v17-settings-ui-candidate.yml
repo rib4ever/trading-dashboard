@@ -1,0 +1,32 @@
+name: Build Pine v1.7 Settings UI Candidate
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'pine-script/master-smc-sats/03_SCRIPT_BLOCKS/98_assemble_v1_7_settings_ui_candidate.py'
+      - 'pine-script/master-smc-sats/03_SCRIPT_BLOCKS/98_assemble_v1_6_theme_candidate.py'
+      - 'pine-script/master-smc-sats/03_SCRIPT_BLOCKS/98_assemble_v1_5_candidate.py'
+      - 'pine-script/master-smc-sats/03_SCRIPT_BLOCKS/09a_theme_engine.pine'
+      - 'pine-script/master-smc-sats/03_SCRIPT_BLOCKS/07_entry_workflow_engine.pine'
+      - 'pine-script/master-smc-sats/03_SCRIPT_BLOCKS/06_smart_key_level_engine.pine'
+      - 'pine-script/master-smc-sats/01_BASE_WORKING_VERSION/master-smc-sats-ravi-custom-01-v1.4-LAST-WORKING.pine'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build v1.7 settings UI candidate
+        run: python pine-script/master-smc-sats/03_SCRIPT_BLOCKS/98_assemble_v1_7_settings_ui_candidate.py
+
+      - name: Commit generated candidate
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: Build Pine v1.7 settings UI candidate
+          file_pattern: pine-script/master-smc-sats/03_MASTER_CANDIDATES/master-smc-sats-ravi-custom-01-v1.7-settings-ui-cleanup-candidate.pine

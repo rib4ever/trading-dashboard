@@ -61,15 +61,27 @@ def must_replace(text: str, old: str, new: str, label: str) -> str:
 
 
 def active_pine_header_counts(text: str) -> tuple[int, int]:
-    """Count executable Pine headers only. Ignore blank lines and comment lines."""
+    """
+    Count executable Pine headers.
+
+    Important Pine detail:
+    - //@version=6 is a Pine directive, even though it starts with //.
+    - Normal comments must still be ignored.
+
+    The previous version checked line.startswith('//') before checking //@version,
+    so it incorrectly returned version_count = 0 and failed the workflow.
+    """
     version_count = 0
     indicator_count = 0
     for raw_line in text.splitlines():
         line = raw_line.strip()
-        if not line or line.startswith("//"):
+        if not line:
             continue
         if line.startswith("//@version"):
             version_count += 1
+            continue
+        if line.startswith("//"):
+            continue
         if line.startswith("indicator("):
             indicator_count += 1
     return version_count, indicator_count

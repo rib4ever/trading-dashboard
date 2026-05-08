@@ -41,7 +41,7 @@ pine-script/master-smc-sats/
 | `03_MASTER_CANDIDATES/` | Candidate merged master versions before final confirmation. | Test candidates here before promoting to final. |
 | `03_KEY_LEVEL_ENGINE/` | HTF levels, smart fallback levels, equal highs/lows, support/resistance strength scoring. | Key-level logic should be designed here or in the matching script block first. |
 | `04_SATS_ENGINE/` | SATS adaptive trend-quality engine: TQI, ER, ATR adaptation, trend direction. | Keep SATS calculations independent. |
-| `05_ENTRY_RULES/` | Setup, opportunity, sniper, and ultra-sniper entry conditions. | Must respect Ravi's no-random-entry confluence model. |
+| `05_ENTRY_RULES/` | Setup, opportunity, sniper, normal, key-level, and ultra entry conditions. | Must respect Ravi's no-random-entry confluence model and workflow mode. |
 | `06_RISK_TP_SL/` | Stop loss, take profit, liquidity targets, R-multiple logic, risk lines. | Smart liquidity TP integration remains future work. |
 | `07_VISUALS_ALERTS/` | Labels, boxes, lines, status panel, alerts, webhook JSON. | Keep chart noise controlled with settings. |
 | `08_PATCHES/` | Patch plans, isolated tests, failed attempts, fixes, and implementation notes. | Every new feature starts here before master integration. |
@@ -59,6 +59,7 @@ pine-script/master-smc-sats/
 ├── 04_mtf_bias_engine.pine
 ├── 05_sats_engine.pine
 ├── 06_smart_key_level_engine.pine
+├── 07_entry_workflow_engine.pine
 ├── 07_entry_confluence_engine.pine
 ├── 07_entry_confluence_engine_connection_notes.md
 ├── 08_risk_tp_sl_engine.pine
@@ -78,13 +79,15 @@ Purpose of this modular plan:
 | File | Description | Status |
 |---|---|---|
 | `01_BASE_WORKING_VERSION/master-smc-sats-ravi-custom-01-v1.4-LAST-WORKING.pine` | Protected last working Pine v6 master script. | Do not edit directly. |
-| `03_SCRIPT_BLOCKS/06_smart_key_level_engine.pine` | Modular smart key-level block. Now supports selectable source: Current chart, HTF1, HTF2, Current + HTF1, Current + HTF2, HTF1 + HTF2, Current + HTF1 + HTF2. | Updated. Not standalone. |
+| `03_SCRIPT_BLOCKS/06_smart_key_level_engine.pine` | Modular smart key-level block. Supports selectable source: Current chart, HTF1, HTF2, Current + HTF1, Current + HTF2, HTF1 + HTF2, Current + HTF1 + HTF2. | Updated. Not standalone. |
+| `03_SCRIPT_BLOCKS/07_entry_workflow_engine.pine` | Modular entry workflow controller. Adds Market Structure Only, Setups Only, Opportunity Mode, Confirmed Entries, Full Mode, and Manual Custom. | Created. Not standalone. |
 | `03_SCRIPT_BLOCKS/07_entry_confluence_engine_connection_notes.md` | Exact connection notes showing how smart hooks extend v1.4 key logic. | Created. |
-| `03_SCRIPT_BLOCKS/98_assemble_v1_5_candidate.py` | Assembly script that reads v1.4 base plus Block 06 and writes the generated v1.5 candidate. | Active. Uses full-block OB/FVG indentation-safe replacements. |
-| `03_MASTER_CANDIDATES/master-smc-sats-ravi-custom-01-v1.5-smart-key-liquidity-candidate.pine` | Generated v1.5 candidate from v1.4 + Block 06. | Must be rebuilt after latest assembler/block changes. |
+| `03_SCRIPT_BLOCKS/98_assemble_v1_5_candidate.py` | Assembly script that reads v1.4 base plus Block 06 and Block 07 and writes the generated v1.5 candidate. | Active. Uses full-block OB/FVG indentation-safe replacements and workflow-controlled entry gating. |
+| `03_MASTER_CANDIDATES/master-smc-sats-ravi-custom-01-v1.5-smart-key-liquidity-candidate.pine` | Generated v1.5 candidate from v1.4 + Smart Key Levels + Entry Workflow. | Must be rebuilt after latest assembler/block changes. |
 | `03_MASTER_CANDIDATES/master-smc-sats-ravi-custom-01-v1.5-candidate-smart-key-levels.pine` | Safe placeholder/warning script. | Warning uses selectable table position instead of price-level label. |
 | `08_PATCHES/patch-02-smart-key-level-engine-isolated-v0.1.pine` | Standalone Pine v6 isolated indicator for smart key-level testing. | Ravi visually confirmed Smart Support / Smart Resistance. |
 | `08_PATCHES/patch-03-master-v1.5-integration-map.md` | Merge map for connecting Patch 02 into v1.4 as v1.5 candidate. | Created. |
+| `08_PATCHES/patch-09-entry-workflow-realignment-plan.md` | Patch plan for re-evaluating and controlling all entry models. | Created. |
 | `.github/workflows/build-pine-v15-candidate.yml` | GitHub Action to assemble the v1.5 candidate. | Active. Manual run supported; push path trigger added. |
 | `09_PROJECT_MEMORY/session-update-2026-05-08-v1.5-runtime-placeholder-fix.md` | Session note documenting the 5M runtime error and placeholder display fix. | Created. |
 
@@ -97,21 +100,59 @@ Purpose of this modular plan:
    ↓ provides smartAnyKeyTouched, smartBullKeyReaction, smartBearKeyReaction,
      smartBullLiquidityTouched, smartBearLiquidityTouched,
      smartBuyLiquidityTarget, smartSellLiquidityTarget
+03_SCRIPT_BLOCKS/07_entry_workflow_engine
+   ↓ provides entryWorkflowMode, enableSetupWarningsFinal,
+     enableOpportunityEntriesFinal, enableNormalEntriesFinal,
+     enableSniperEntriesFinal, enableUltraEntriesFinal,
+     enableKeyLevelEntriesFinal, confirmedEntryTfOk, entryVisualWindowOk
 04_SATS_ENGINE
    ↓ provides trend quality, TQI, ER, adaptive trend direction
-05_ENTRY_RULES / 03_SCRIPT_BLOCKS/07_entry_confluence_engine
-   ↓ combines SMC + key levels + SATS + filters into signals
+05_ENTRY_RULES / entry confluence
+   ↓ combines workflow mode + SMC + key levels + SATS + filters into signals
 06_RISK_TP_SL
    ↓ calculates SL/TP using SMC/liquidity/R-multiple logic
 07_VISUALS_ALERTS
    ↓ displays signals, levels, status, and alerts
 03_SCRIPT_BLOCKS/98_assemble_v1_5_candidate.py
-   ↓ creates v1.5 candidate from protected v1.4 + Block 06
+   ↓ creates v1.5 candidate from protected v1.4 + Block 06 + Block 07
 03_MASTER_CANDIDATES
    ↓ holds testable merged candidates before confirmation
 00_MASTER_COMPILED
    ↓ final integrated Pine Script version after TradingView confirmation
 ```
+
+## Entry workflow modes
+
+New workflow controller:
+
+```text
+Entry Workflow Mode:
+- Market Structure Only
+- Setups Only
+- Opportunity Mode
+- Confirmed Entries
+- Full Mode
+- Manual Custom
+```
+
+Default direction for Ravi Custom 01:
+
+```text
+15M / 1H / 4H = bias, POI, structure, key levels only
+3M / 5M = execution entries only when enabled
+Historical entry labels/lines = OFF by default
+```
+
+Expected behavior:
+
+| Mode | Setup warnings | Opportunity | Normal | Sniper | Ultra | Key-level | TP/SL |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Market Structure Only | no | no | no | no | no | no | no |
+| Setups Only | yes | no | no | no | no | no | no |
+| Opportunity Mode | yes | yes | no | no | no | no | optional |
+| Confirmed Entries | yes | optional | yes | yes | no | no | yes |
+| Full Mode | yes | yes | yes | yes | yes | yes | yes |
+| Manual Custom | user choice | user choice | user choice | user choice | user choice | user choice | user choice |
 
 ## Current protected base
 
@@ -136,30 +177,29 @@ Current generated test file:
 
 Current v1.5 feature:
 - Adds smart historical support/resistance and EQH/EQL liquidity as an extension of v1.4 key-level logic.
-- Does not replace the original v1.4 key-level reactions.
+- Adds entry workflow control layer.
+- Does not replace the original v1.4 SMC engine.
 - Extends:
   - `anyExistingKeyLevelTouched`
   - `bullKeyReaction`
   - `bearKeyReaction`
-- Smart level source is now selectable:
-  - Current chart
-  - HTF1
-  - HTF2
-  - Current + HTF1
-  - Current + HTF2
-  - HTF1 + HTF2
-  - Current + HTF1 + HTF2
+  - `bullSniperEntry`
+  - `bearSniperEntry`
+  - `bullOpportunityEntry`
+  - `bearOpportunityEntry`
+  - `bullUltraEntry`
+  - `bearUltraEntry`
+  - risk line signal gating
+- Adds normal and key-level entry booleans.
 
 Validated by Ravi:
 - 5M runtime array error was fixed after adding array guards in the assembler.
 - Smart levels appear on 3M, 5M, and 15M.
 
 Latest compile/debug update:
-- Ravi found a Pine indentation compile error after OB/FVG guard insertion: `Mismatched input "ob"`.
-- Root cause: quick string replacement added `if obCount > 0` but did not indent the full inner loop body.
-- Fix applied in `03_SCRIPT_BLOCKS/98_assemble_v1_5_candidate.py`: uses full OB and FVG block replacements with correct nested indentation.
-- Ravi also requested smart support/resistance to respect the original HTF requirement. Block 06 now supports selectable HTF source using HTF1/HTF2 swing levels from master settings.
-- Rebuild required before TradingView retest.
+- Created `03_SCRIPT_BLOCKS/07_entry_workflow_engine.pine`.
+- Updated `03_SCRIPT_BLOCKS/98_assemble_v1_5_candidate.py` to inject Block 07 and gate all entry families.
+- Candidate must be rebuilt via GitHub Action before TradingView testing.
 
 ## Placeholder status
 
@@ -174,10 +214,6 @@ Purpose:
 - Not the final master code.
 - Updated so its warning appears in a selectable table position instead of directly on the price level.
 
-Settings added:
-- `Show Placeholder Warning`
-- `Placeholder Position`: Top Right, Top Left, Bottom Right, Bottom Left, Middle Right, Middle Left
-
 ## GitHub Action workflow
 
 File:
@@ -185,9 +221,6 @@ File:
 ```text
 .github/workflows/build-pine-v15-candidate.yml
 ```
-
-Purpose:
-- Builds the generated v1.5 candidate from the protected v1.4 base and Block 06.
 
 Recommended manual run path:
 
@@ -200,7 +233,7 @@ After successful green run:
 2. Tap/click `Raw`.
 3. Copy raw Pine text.
 4. Paste into TradingView.
-5. Test 3M, 5M, and 15M.
+5. Test 3M, 5M, 15M, and 1H.
 
 ## Known Pine Script safety rules
 
@@ -208,7 +241,7 @@ After successful green run:
 - Avoid duplicate input variable names.
 - Declare variables before referencing them.
 - Avoid blindly merging LuxAlgo v5 into the v6 master.
-- Keep new patch variables uniquely prefixed, preferably `smart` or `sk`.
+- Keep new patch variables uniquely prefixed, preferably `smart`, `sk`, or workflow-specific names.
 - Guard arrays before using `array.get()` when the array can be empty.
 - Pine indentation matters: after adding an `if` before a `for`, the full nested loop body must be indented one additional level.
 - Do not paste GitHub webpage HTML into TradingView; always copy from `Raw`.
@@ -232,6 +265,8 @@ After each important update:
 
 ## Latest session update
 
-- Updated `03_SCRIPT_BLOCKS/98_assemble_v1_5_candidate.py` to fix OB/FVG nested indentation after array-guard patching.
-- Updated `03_SCRIPT_BLOCKS/06_smart_key_level_engine.pine` to include selectable Smart Level Source with HTF1/HTF2 options.
-- Next action: run GitHub Action again, copy the rebuilt raw candidate into TradingView, and confirm the previous line 1515 `ob` indentation error is gone.
+- Created Patch 09 plan for full entry workflow realignment.
+- Created `03_SCRIPT_BLOCKS/07_entry_workflow_engine.pine`.
+- Updated `03_SCRIPT_BLOCKS/98_assemble_v1_5_candidate.py` to inject entry workflow controls.
+- Updated this network map.
+- Next action: run GitHub Action again, copy rebuilt Raw candidate into TradingView, and test first in `Market Structure Only`, then `Setups Only`, then `Confirmed Entries` on 3M/5M only.

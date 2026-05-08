@@ -1,6 +1,6 @@
 # Project Network Map — Master SMC + SATS Sniper System
 
-This file maps the Pine Script project folders and explains what each path should contain.
+This file maps the Pine Script project folders and explains what each path contains.
 
 ## Root project path
 
@@ -10,7 +10,7 @@ pine-script/master-smc-sats/
 
 Main workspace for Ravi's TradingView Pine Script project: `Master SMC + SATS Sniper System [Ravi Custom 01]`.
 
-## Folder and script network
+## Folder network
 
 ```text
 pine-script/master-smc-sats/
@@ -34,22 +34,20 @@ pine-script/master-smc-sats/
 
 | Path | Purpose | Current rule |
 |---|---|---|
-| `README.md` | Main project overview, high-level strategy, and workflow rules. | Keep short and clear. Update only when the project strategy changes. |
-| `PROJECT_NETWORK_MAP.md` | This file. Describes the folder/script network and where each logic block belongs. | Update whenever a new folder, important file, or workflow is added. |
-| `00_MASTER_COMPILED/` | Final full Pine Script versions after validated patches are merged. | Only place scripts here after they are expected to compile as one complete indicator. |
-| `01_BASE_WORKING_VERSION/` | Protected backups of the last confirmed working Pine Script. | Do not directly modify. This is the fallback restore point. |
-| `02_SMC_CORE/` | Market structure logic: swings, HH/HL/LH/LL, BOS/CHoCH, OB, FVG, sweep/reclaim base logic. | Keep core structure logic separate from entries and visuals where possible. |
-| `03_SCRIPT_BLOCKS/` | Modular Pine block workspace for splitting the master into logical sections before final assembly. | Blocks are for organization/testing only. TradingView still needs one final `.pine` file. |
-| `03_MASTER_CANDIDATES/` | Candidate merged master versions before they become the new protected base. | Use for v1.5+ candidates. Do not treat these as confirmed until TradingView compiles them. |
-| `03_KEY_LEVEL_ENGINE/` | HTF levels, smart fallback historical key levels, equal high/low liquidity, support/resistance strength scoring. | New LuxAlgo-inspired key-level logic belongs here first before master merge. |
-| `04_SATS_ENGINE/` | SATS adaptive trend-quality engine: TQI, ER, ATR adaptation, SuperTrend-style direction. | Keep SATS calculations independent so they can be tested separately. |
-| `05_ENTRY_RULES/` | Setup, opportunity, sniper, and ultra-sniper entry conditions. | Entry rules must respect Ravi's no-random-entry confluence model. |
-| `06_RISK_TP_SL/` | Stop loss, take profit, liquidity target selection, R-multiple logic, risk lines. | Later smart liquidity levels can be plugged here for TP selection. |
-| `07_VISUALS_ALERTS/` | Labels, boxes, lines, status panel, alerts, webhook JSON formatting. | Keep chart noise controlled with settings. |
-| `08_PATCHES/` | Patch plans, failed attempts, fixes, and implementation notes. | Every new feature should start here before becoming part of the compiled master. |
-| `09_PROJECT_MEMORY/` | ChatGPT memory prompt and session update template. | Update after each important project session so future chats can continue safely. |
+| `00_MASTER_COMPILED/` | Final full Pine Script versions after validated patches are merged. | Only promote here after TradingView compile/runtime testing is confirmed. |
+| `01_BASE_WORKING_VERSION/` | Protected backup of the last confirmed working Pine Script. | Do not edit directly. Current protected base is v1.4. |
+| `02_SMC_CORE/` | Swings, structure, BOS/CHoCH, OB, FVG, sweep/reclaim base logic. | Keep core market-structure logic separate from entries and visuals. |
+| `03_SCRIPT_BLOCKS/` | Modular Pine block workspace and assembly automation. | Develop blocks here first, then assemble candidates. Blocks are not standalone unless stated. |
+| `03_MASTER_CANDIDATES/` | Candidate merged master versions before final confirmation. | Test candidates here before promoting to final. |
+| `03_KEY_LEVEL_ENGINE/` | HTF levels, smart fallback levels, equal highs/lows, support/resistance strength scoring. | Key-level logic should be designed here or in the matching script block first. |
+| `04_SATS_ENGINE/` | SATS adaptive trend-quality engine: TQI, ER, ATR adaptation, trend direction. | Keep SATS calculations independent. |
+| `05_ENTRY_RULES/` | Setup, opportunity, sniper, and ultra-sniper entry conditions. | Must respect Ravi's no-random-entry confluence model. |
+| `06_RISK_TP_SL/` | Stop loss, take profit, liquidity targets, R-multiple logic, risk lines. | Smart liquidity TP integration remains future work. |
+| `07_VISUALS_ALERTS/` | Labels, boxes, lines, status panel, alerts, webhook JSON. | Keep chart noise controlled with settings. |
+| `08_PATCHES/` | Patch plans, isolated tests, failed attempts, fixes, and implementation notes. | Every new feature starts here before master integration. |
+| `09_PROJECT_MEMORY/` | ChatGPT project memory prompts and session update notes. | Update after important sessions so work can continue safely. |
 
-## 03_SCRIPT_BLOCKS modular plan
+## Modular script-block plan
 
 ```text
 03_SCRIPT_BLOCKS/
@@ -72,31 +70,30 @@ pine-script/master-smc-sats/
 
 Purpose of this modular plan:
 - Keep every engine isolated and easier to troubleshoot.
-- Preserve the current GitHub structure while preparing a cleaner master candidate.
-- Merge only after a block is logically checked and placed in the correct dependency order.
-- Maintain a repeatable loop: patch → block → candidate → TradingView test → final release.
+- Preserve the GitHub structure while preparing one final TradingView `.pine` file.
+- Maintain the repeatable loop: patch → block → candidate → TradingView test → final release.
 
 ## Important active files
 
 | File | Description | Status |
 |---|---|---|
 | `01_BASE_WORKING_VERSION/master-smc-sats-ravi-custom-01-v1.4-LAST-WORKING.pine` | Protected last working Pine v6 master script. | Do not edit directly. |
-| `03_SCRIPT_BLOCKS/README.md` | Modular block workspace rules and planned block list. | Created. |
-| `03_SCRIPT_BLOCKS/06_smart_key_level_engine.pine` | Clean modular block converted from Patch 02. Finds strongest historical support/resistance and EQH/EQL liquidity with optional visuals and entry hooks. | Created. Not standalone; must be assembled into master candidate. |
-| `03_SCRIPT_BLOCKS/07_entry_confluence_engine_connection_notes.md` | Exact connection notes showing how smart key hooks extend `anyExistingKeyLevelTouched`, `bullKeyReaction`, and `bearKeyReaction`. | Created. |
-| `03_SCRIPT_BLOCKS/98_assemble_v1_5_candidate.py` | Local assembly script that reads the protected v1.4 base plus Block 06 and writes a v1.5 candidate. | Created. Run locally from repo root. |
-| `03_SCRIPT_BLOCKS/99_final_assembly_notes.md` | Assembly order, dependencies, and candidate checklist. | Created. |
-| `03_MASTER_CANDIDATES/README.md` | Candidate workflow rulebook. | Created. |
-| `08_PATCHES/patch-02-smart-key-level-engine-plan.md` | Written implementation plan for strongest historical key-level and liquidity engine. | Planning document created. |
-| `08_PATCHES/patch-02-smart-key-level-engine-isolated-v0.1.pine` | Standalone Pine v6 isolated indicator for smart support/resistance and liquidity testing. | TradingView visual test confirmed by Ravi. |
-| `08_PATCHES/patch-03-master-v1.5-integration-map.md` | Exact merge map for connecting Patch 02 into the master v1.4 logic as v1.5 candidate. | Created. |
+| `03_SCRIPT_BLOCKS/06_smart_key_level_engine.pine` | Modular smart key-level block from Patch 02. Finds strongest historical support/resistance and EQH/EQL liquidity, with optional visuals and entry hooks. | Created. Not standalone. |
+| `03_SCRIPT_BLOCKS/07_entry_confluence_engine_connection_notes.md` | Exact connection notes showing how smart hooks extend v1.4 key logic. | Created. |
+| `03_SCRIPT_BLOCKS/98_assemble_v1_5_candidate.py` | Assembly script that reads v1.4 base plus Block 06 and writes the generated v1.5 candidate. | Active. Updated with 5M runtime array guards. |
+| `03_MASTER_CANDIDATES/master-smc-sats-ravi-custom-01-v1.5-smart-key-liquidity-candidate.pine` | Generated v1.5 candidate from v1.4 + Block 06. | Under TradingView test. Must be rebuilt after assembler changes. |
+| `03_MASTER_CANDIDATES/master-smc-sats-ravi-custom-01-v1.5-candidate-smart-key-levels.pine` | Safe placeholder/warning script. | Updated: warning now uses selectable table position instead of price-level label. |
+| `08_PATCHES/patch-02-smart-key-level-engine-isolated-v0.1.pine` | Standalone Pine v6 isolated indicator for smart key-level testing. | Ravi visually confirmed Smart Support / Smart Resistance. |
+| `08_PATCHES/patch-03-master-v1.5-integration-map.md` | Merge map for connecting Patch 02 into v1.4 as v1.5 candidate. | Created. |
+| `.github/workflows/build-pine-v15-candidate.yml` | GitHub Action to assemble the v1.5 candidate. | Active. Manual run supported; push path trigger added. |
+| `09_PROJECT_MEMORY/session-update-2026-05-08-v1.5-runtime-placeholder-fix.md` | Session note documenting the 5M runtime error and placeholder display fix. | Created. |
 
 ## Key logic relationships
 
 ```text
 02_SMC_CORE
    ↓ provides structure, OB/FVG, sweep/reclaim
-03_KEY_LEVEL_ENGINE / 03_SCRIPT_BLOCKS/06_smart_key_level_engine
+03_SCRIPT_BLOCKS/06_smart_key_level_engine
    ↓ provides smartAnyKeyTouched, smartBullKeyReaction, smartBearKeyReaction,
      smartBullLiquidityTouched, smartBearLiquidityTouched,
      smartBuyLiquidityTarget, smartSellLiquidityTarget
@@ -104,21 +101,19 @@ Purpose of this modular plan:
    ↓ provides trend quality, TQI, ER, adaptive trend direction
 05_ENTRY_RULES / 03_SCRIPT_BLOCKS/07_entry_confluence_engine
    ↓ combines SMC + key levels + SATS + filters into signals
-06_RISK_TP_SL / 03_SCRIPT_BLOCKS/08_risk_tp_sl_engine
+06_RISK_TP_SL
    ↓ calculates SL/TP using SMC/liquidity/R-multiple logic
-07_VISUALS_ALERTS / 03_SCRIPT_BLOCKS/09_visual_engine and 10_alert_engine
+07_VISUALS_ALERTS
    ↓ displays signals, levels, status, and alerts
 03_SCRIPT_BLOCKS/98_assemble_v1_5_candidate.py
-   ↓ creates the first controlled v1.5 candidate from v1.4 + Block 06
+   ↓ creates v1.5 candidate from protected v1.4 + Block 06
 03_MASTER_CANDIDATES
    ↓ holds testable merged candidates before confirmation
 00_MASTER_COMPILED
-   ↓ final integrated Pine Script version
+   ↓ final integrated Pine Script version after TradingView confirmation
 ```
 
 ## Current protected base
-
-The latest protected working base remains:
 
 ```text
 01_BASE_WORKING_VERSION/master-smc-sats-ravi-custom-01-v1.4-LAST-WORKING.pine
@@ -131,155 +126,99 @@ Rules:
 - Assemble candidates only after each block is checked.
 - Test in TradingView before promoting any candidate.
 
-## Current active feature plan
+## v1.5 candidate status
 
-Smart historical fallback key-level and liquidity engine:
-
-- Use LuxAlgo-style concepts, but do not paste the LuxAlgo v5 script directly.
-- Adapt the useful logic safely into Pine v6.
-- Prefer strongest key level, not nearest.
-- Include liquidity levels such as equal highs/lows and previous highs/lows.
-- Add optional visual settings.
-- Reduce noise with strength/touch filters.
-- Connect to existing `anyExistingKeyLevelTouched`, `bullKeyReaction`, and `bearKeyReaction` after isolated testing.
-
-## Patch 02 isolated testing result
-
-Test file:
+Current generated test file:
 
 ```text
-08_PATCHES/patch-02-smart-key-level-engine-isolated-v0.1.pine
+03_MASTER_CANDIDATES/master-smc-sats-ravi-custom-01-v1.5-smart-key-liquidity-candidate.pine
 ```
 
-Observed result from Ravi:
-- Smart Support / EQL line displayed.
-- Smart Resistance / EQH line displayed.
-- The isolated patch appears visually correct on TradingView.
+Current v1.5 feature:
+- Adds smart historical support/resistance and EQH/EQL liquidity as an extension of v1.4 key-level logic.
+- Does not replace the original v1.4 key-level reactions.
+- Extends:
+  - `anyExistingKeyLevelTouched`
+  - `bullKeyReaction`
+  - `bearKeyReaction`
 
-## Block 06 status
+Latest fix:
+- Ravi found a 5M TradingView runtime error: `array.get()` index 0 out of bounds when array size is 0.
+- The assembler was patched to guard current-TF OB/FVG visual loops before calling `array.get()`.
+- The generated v1.5 candidate must be rebuilt through GitHub Actions before retesting.
 
-Created from Patch 02:
+## Placeholder status
+
+File:
 
 ```text
-03_SCRIPT_BLOCKS/06_smart_key_level_engine.pine
+03_MASTER_CANDIDATES/master-smc-sats-ravi-custom-01-v1.5-candidate-smart-key-levels.pine
 ```
 
 Purpose:
-- Not standalone.
-- No `//@version` line.
-- No `indicator()` declaration.
-- Uses unique `smart` / `sk` prefixes.
-- Exposes safe hooks for later master integration:
+- Warning/reference only.
+- Not the final master code.
+- Updated so its warning appears in a selectable table position instead of directly on the price level.
 
-```pine
-smartAnyKeyTouched
-smartBullKeyReaction
-smartBearKeyReaction
-smartBullLiquidityTouched
-smartBearLiquidityTouched
-smartBuyLiquidityTarget
-smartSellLiquidityTarget
-```
+Settings added:
+- `Show Placeholder Warning`
+- `Placeholder Position`: Top Right, Top Left, Bottom Right, Bottom Left, Middle Right, Middle Left
 
-Connection note:
+## GitHub Action workflow
+
+File:
 
 ```text
-03_SCRIPT_BLOCKS/07_entry_confluence_engine_connection_notes.md
+.github/workflows/build-pine-v15-candidate.yml
 ```
 
-## v1.5 candidate assembly script
+Purpose:
+- Builds the generated v1.5 candidate from the protected v1.4 base and Block 06.
 
-Created:
+Recommended manual run path:
 
 ```text
-03_SCRIPT_BLOCKS/98_assemble_v1_5_candidate.py
+GitHub → Actions → Build Pine v1.5 Candidate → Run workflow → main
 ```
 
-Run locally from the repository root after pulling the latest `main`:
-
-```bash
-python pine-script/master-smc-sats/03_SCRIPT_BLOCKS/98_assemble_v1_5_candidate.py
-```
-
-Expected output:
-
-```text
-03_MASTER_CANDIDATES/master-smc-sats-ravi-custom-01-v1.5-smart-key-liquidity-candidate.pine
-```
-
-The script checks:
-- Base starts with `//@version=6`.
-- Base has one `indicator()` declaration.
-- Block 06 has no `//@version` and no `indicator()` declaration.
-- Smart hooks are inserted.
-- Existing v1.4 key logic is extended, not replaced.
-
-## Patch 03 / v1.5 merge objective
-
-Use this file as the merge map:
-
-```text
-08_PATCHES/patch-03-master-v1.5-integration-map.md
-```
-
-Future target candidate file:
-
-```text
-03_MASTER_CANDIDATES/master-smc-sats-ravi-custom-01-v1.5-smart-key-liquidity-candidate.pine
-```
-
-Important:
-- Do not paste GitHub webpage HTML into TradingView.
-- Open the `.pine` file, tap/click `Raw`, then copy the raw Pine text.
-- The first line of a complete candidate must be `//@version=6`.
-
-## Suggested next enhancement ideas
-
-After v1.5 compiles and visually behaves correctly:
-
-1. Add previous day/week/month highs and lows into the smart score.
-2. Add HTF smart levels from 15M and 1H using `request.security`.
-3. Use smart resistance/support as optional TP liquidity targets.
-4. Add a debug table showing why a level was selected: touches, distance, recency, liquidity.
-5. Add strict toggle: `Require Smart Key Level When No HTF Level Exists`.
+After successful green run:
+1. Open the generated v1.5 candidate file.
+2. Tap/click `Raw`.
+3. Copy raw Pine text.
+4. Paste into TradingView.
+5. Test 3M, 5M, and 15M.
 
 ## Known Pine Script safety rules
 
 - Do not modify global variables inside functions.
 - Avoid duplicate input variable names.
-- Use unique prefixes for new patch variables, for example `smart` or `sk`.
 - Declare variables before referencing them.
-- Avoid huge direct merges.
-- Keep each patch small and testable.
+- Avoid blindly merging LuxAlgo v5 into the v6 master.
+- Keep new patch variables uniquely prefixed, preferably `smart` or `sk`.
+- Guard arrays before using `array.get()` when the array can be empty.
+- Do not paste GitHub webpage HTML into TradingView; always copy from `Raw`.
 - Isolated scripts may have `//@version` and `indicator()`, but modular blocks must not.
 
 ## Project memory loop
 
-The memory loop is stored in:
+Stored in:
 
 ```text
 09_PROJECT_MEMORY/chatgpt_project_memory_prompt.md
 09_PROJECT_MEMORY/session_update_template.md
+09_PROJECT_MEMORY/session-update-2026-05-08-v1.5-runtime-placeholder-fix.md
 ```
 
-After each major update:
+After each important update:
 1. Summarize what changed.
-2. Update the memory prompt.
-3. Update this network map if paths or responsibilities changed.
+2. Update the memory prompt or add a session note.
+3. Update this network map when paths, workflows, responsibilities, or active files change.
 4. Keep the last working script clearly identified.
-
-## Latest structural decision
-
-Ravi approved a safer modular workflow:
-
-```text
-requirements → isolated patch → script block → assembly script → master candidate → TradingView test → compiled final
-```
-
-This means future work should not directly merge large patches into v1.4. Instead, capture each engine as a separate block inside `03_SCRIPT_BLOCKS/`, then assemble one clean master candidate.
 
 ## Latest session update
 
-- Created `03_SCRIPT_BLOCKS/98_assemble_v1_5_candidate.py`.
-- Updated this network map to include the assembly script.
-- Next recommended action: pull the repo locally and run the assembly script, or continue by preparing a GitHub-generated candidate once full raw content can be assembled safely.
+- Updated `.github/workflows/build-pine-v15-candidate.yml` with push path triggers.
+- Updated `03_SCRIPT_BLOCKS/98_assemble_v1_5_candidate.py` with 5M runtime array guards.
+- Updated placeholder candidate so its warning can be positioned via settings and no longer sits on the live price level.
+- Added `09_PROJECT_MEMORY/session-update-2026-05-08-v1.5-runtime-placeholder-fix.md`.
+- Next action: run GitHub Action, rebuild the generated candidate, then retest 3M / 5M / 15M in TradingView.

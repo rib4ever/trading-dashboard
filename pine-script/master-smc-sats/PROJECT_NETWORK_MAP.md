@@ -78,10 +78,10 @@ Purpose of this modular plan:
 | File | Description | Status |
 |---|---|---|
 | `01_BASE_WORKING_VERSION/master-smc-sats-ravi-custom-01-v1.4-LAST-WORKING.pine` | Protected last working Pine v6 master script. | Do not edit directly. |
-| `03_SCRIPT_BLOCKS/06_smart_key_level_engine.pine` | Modular smart key-level block from Patch 02. Finds strongest historical support/resistance and EQH/EQL liquidity, with optional visuals and entry hooks. | Created. Not standalone. |
+| `03_SCRIPT_BLOCKS/06_smart_key_level_engine.pine` | Modular smart key-level block. Now supports selectable source: Current chart, HTF1, HTF2, Current + HTF1, Current + HTF2, HTF1 + HTF2, Current + HTF1 + HTF2. | Updated. Not standalone. |
 | `03_SCRIPT_BLOCKS/07_entry_confluence_engine_connection_notes.md` | Exact connection notes showing how smart hooks extend v1.4 key logic. | Created. |
-| `03_SCRIPT_BLOCKS/98_assemble_v1_5_candidate.py` | Assembly script that reads v1.4 base plus Block 06 and writes the generated v1.5 candidate. | Active. Updated with 5M runtime guards and mini-status position selector injection. |
-| `03_MASTER_CANDIDATES/master-smc-sats-ravi-custom-01-v1.5-smart-key-liquidity-candidate.pine` | Generated v1.5 candidate from v1.4 + Block 06. | Under TradingView test. Rebuild after assembler changes. |
+| `03_SCRIPT_BLOCKS/98_assemble_v1_5_candidate.py` | Assembly script that reads v1.4 base plus Block 06 and writes the generated v1.5 candidate. | Active. Uses full-block OB/FVG indentation-safe replacements. |
+| `03_MASTER_CANDIDATES/master-smc-sats-ravi-custom-01-v1.5-smart-key-liquidity-candidate.pine` | Generated v1.5 candidate from v1.4 + Block 06. | Must be rebuilt after latest assembler/block changes. |
 | `03_MASTER_CANDIDATES/master-smc-sats-ravi-custom-01-v1.5-candidate-smart-key-levels.pine` | Safe placeholder/warning script. | Warning uses selectable table position instead of price-level label. |
 | `08_PATCHES/patch-02-smart-key-level-engine-isolated-v0.1.pine` | Standalone Pine v6 isolated indicator for smart key-level testing. | Ravi visually confirmed Smart Support / Smart Resistance. |
 | `08_PATCHES/patch-03-master-v1.5-integration-map.md` | Merge map for connecting Patch 02 into v1.4 as v1.5 candidate. | Created. |
@@ -141,18 +141,25 @@ Current v1.5 feature:
   - `anyExistingKeyLevelTouched`
   - `bullKeyReaction`
   - `bearKeyReaction`
+- Smart level source is now selectable:
+  - Current chart
+  - HTF1
+  - HTF2
+  - Current + HTF1
+  - Current + HTF2
+  - HTF1 + HTF2
+  - Current + HTF1 + HTF2
 
 Validated by Ravi:
 - 5M runtime array error was fixed after adding array guards in the assembler.
 - Smart levels appear on 3M, 5M, and 15M.
 
-Latest mini-status update:
-- Ravi confirmed the 5M issue is gone, but the mini status panel still sat on the live price area and had no placement option in the real master candidate.
-- `03_SCRIPT_BLOCKS/98_assemble_v1_5_candidate.py` was updated so the real v1.5 candidate receives:
-  - `Mini Status Position`
-  - options: `Right of Price`, `Top Right`, `Top Left`, `Bottom Right`, `Bottom Left`
-  - corner options use a Pine `table` instead of a price-level label.
-- The generated candidate must be rebuilt before TradingView will show the new setting.
+Latest compile/debug update:
+- Ravi found a Pine indentation compile error after OB/FVG guard insertion: `Mismatched input "ob"`.
+- Root cause: quick string replacement added `if obCount > 0` but did not indent the full inner loop body.
+- Fix applied in `03_SCRIPT_BLOCKS/98_assemble_v1_5_candidate.py`: uses full OB and FVG block replacements with correct nested indentation.
+- Ravi also requested smart support/resistance to respect the original HTF requirement. Block 06 now supports selectable HTF source using HTF1/HTF2 swing levels from master settings.
+- Rebuild required before TradingView retest.
 
 ## Placeholder status
 
@@ -203,6 +210,7 @@ After successful green run:
 - Avoid blindly merging LuxAlgo v5 into the v6 master.
 - Keep new patch variables uniquely prefixed, preferably `smart` or `sk`.
 - Guard arrays before using `array.get()` when the array can be empty.
+- Pine indentation matters: after adding an `if` before a `for`, the full nested loop body must be indented one additional level.
 - Do not paste GitHub webpage HTML into TradingView; always copy from `Raw`.
 - Isolated scripts may have `//@version` and `indicator()`, but modular blocks must not.
 
@@ -224,7 +232,6 @@ After each important update:
 
 ## Latest session update
 
-- Updated `03_SCRIPT_BLOCKS/98_assemble_v1_5_candidate.py` to inject a real `Mini Status Position` setting into the generated v1.5 master candidate.
-- The status panel can now remain `Right of Price` or move to a corner table: Top Right, Top Left, Bottom Right, Bottom Left.
-- This is separate from the placeholder warning script and applies to the real v1.5 candidate after rebuild.
-- Next action: wait for or run GitHub Action, then copy the rebuilt raw candidate into TradingView and check settings under Visuals.
+- Updated `03_SCRIPT_BLOCKS/98_assemble_v1_5_candidate.py` to fix OB/FVG nested indentation after array-guard patching.
+- Updated `03_SCRIPT_BLOCKS/06_smart_key_level_engine.pine` to include selectable Smart Level Source with HTF1/HTF2 options.
+- Next action: run GitHub Action again, copy the rebuilt raw candidate into TradingView, and confirm the previous line 1515 `ob` indentation error is gone.

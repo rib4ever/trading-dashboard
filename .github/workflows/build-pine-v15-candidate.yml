@@ -2,6 +2,11 @@ name: Build Pine v1.5 Candidate
 
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - 'pine-script/master-smc-sats/03_SCRIPT_BLOCKS/06_smart_key_level_engine.pine'
+      - 'pine-script/master-smc-sats/03_SCRIPT_BLOCKS/98_assemble_v1_5_candidate.py'
+      - 'pine-script/master-smc-sats/01_BASE_WORKING_VERSION/master-smc-sats-ravi-custom-01-v1.4-LAST-WORKING.pine'
 
 permissions:
   contents: write

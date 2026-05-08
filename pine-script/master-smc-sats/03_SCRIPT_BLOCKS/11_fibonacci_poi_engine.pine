@@ -1,0 +1,203 @@
+// ══════════════════════════════════════════════════════════════════════════════
+// 11 FIBONACCI POI VISUAL ENGINE — BLOCK VERSION
+// For: Master SMC + SATS Sniper System [Ravi Custom 01]
+//
+// Purpose:
+// - Visual-only Fibonacci POI support.
+// - Does not modify entries, alerts, risk, SMC, or SATS logic.
+// - Auto-draws directional fib from confirmed market-structure pivots.
+// - Highlights 61.8% to 80% retracement area.
+// - Searches for OB/FVG-style confluence inside/touching that area.
+// - Draws one strongest POI box.
+//
+// IMPORTANT:
+// - This block is NOT standalone.
+// - No //@version and no indicator() declaration are included here on purpose.
+// - Insert near the end of the master script, after theme colors exist.
+// ══════════════════════════════════════════════════════════════════════════════
+
+GRP_FIB = "12 Fibonacci POI Visual Engine"
+
+showFibPoiEngine = input.bool(true, "Show Fibonacci POI Engine", group = GRP_FIB)
+fibPreset = input.string("Auto", "Fib Preset", options = ["Auto", "XAUUSD Scalping", "BTCUSD Scalping", "Index Scalping", "Scalping", "Day Trade", "Swing", "Manual Custom"], group = GRP_FIB)
+fibUseSelectedTf = input.bool(false, "Use Selected Fib Timeframe", group = GRP_FIB, tooltip = "OFF = use current chart timeframe. ON = calculate visual fib using selected timeframe series.")
+fibSelectedTf = input.timeframe("15", "Selected Fib Timeframe", group = GRP_FIB)
+fibDirectionMode = input.string("Auto by Structure", "Fib Direction", options = ["Auto by Structure", "Bullish only", "Bearish only"], group = GRP_FIB)
+fibShowFibLines = input.bool(true, "Show Fib Lines", group = GRP_FIB)
+fibShowRetracementBox = input.bool(true, "Show 61.8% - 80% Zone", group = GRP_FIB)
+fibShowPoiBox = input.bool(true, "Show Strongest POI Box", group = GRP_FIB)
+fibPoiRequireObFvg = input.bool(true, "POI Requires OB/FVG Touch", group = GRP_FIB)
+fibExtendBars = input.int(80, "Fib Extend Bars", minval = 20, maxval = 500, group = GRP_FIB)
+fibManualPivotLen = input.int(8, "Manual Pivot Length", minval = 3, maxval = 50, group = GRP_FIB)
+fibManualLookback = input.int(120, "Manual OB/FVG Search Lookback", minval = 30, maxval = 500, group = GRP_FIB)
+fibZoneLower = input.float(0.618, "Fib Zone Start", minval = 0.50, maxval = 0.90, step = 0.001, group = GRP_FIB)
+fibZoneUpper = input.float(0.800, "Fib Zone End", minval = 0.55, maxval = 0.95, step = 0.001, group = GRP_FIB)
+
+int fibEffectivePivotLen = switch fibPreset
+    "XAUUSD Scalping" => 6
+    "BTCUSD Scalping" => 8
+    "Index Scalping"  => 7
+    "Scalping"        => 6
+    "Day Trade"       => 12
+    "Swing"           => 20
+    "Manual Custom"   => fibManualPivotLen
+    => 8
+
+int fibEffectiveLookback = switch fibPreset
+    "XAUUSD Scalping" => 90
+    "BTCUSD Scalping" => 120
+    "Index Scalping"  => 100
+    "Scalping"        => 90
+    "Day Trade"       => 180
+    "Swing"           => 300
+    "Manual Custom"   => fibManualLookback
+    => 120
+
+float fibHighSrc = fibUseSelectedTf ? request.security(syminfo.tickerid, fibSelectedTf, high) : high
+float fibLowSrc = fibUseSelectedTf ? request.security(syminfo.tickerid, fibSelectedTf, low) : low
+float fibCloseSrc = fibUseSelectedTf ? request.security(syminfo.tickerid, fibSelectedTf, close) : close
+float fibOpenSrc = fibUseSelectedTf ? request.security(syminfo.tickerid, fibSelectedTf, open) : open
+
+float fibPh = ta.pivothigh(fibHighSrc, fibEffectivePivotLen, fibEffectivePivotLen)
+float fibPl = ta.pivotlow(fibLowSrc, fibEffectivePivotLen, fibEffectivePivotLen)
+
+var float fibLastHigh = na
+var int fibLastHighBar = na
+var float fibLastLow = na
+var int fibLastLowBar = na
+
+if not na(fibPh)
+    fibLastHigh := fibPh
+    fibLastHighBar := bar_index - fibEffectivePivotLen
+if not na(fibPl)
+    fibLastLow := fibPl
+    fibLastLowBar := bar_index - fibEffectivePivotLen
+
+bool fibHasLeg = not na(fibLastHigh) and not na(fibLastLow) and not na(fibLastHighBar) and not na(fibLastLowBar) and fibLastHigh != fibLastLow
+bool fibAutoBull = fibHasLeg and fibLastHighBar > fibLastLowBar
+bool fibAutoBear = fibHasLeg and fibLastLowBar > fibLastHighBar
+bool fibBullMode = fibDirectionMode == "Bullish only" or (fibDirectionMode == "Auto by Structure" and fibAutoBull)
+bool fibBearMode = fibDirectionMode == "Bearish only" or (fibDirectionMode == "Auto by Structure" and fibAutoBear)
+
+float fibAnchorA = fibBullMode ? fibLastLow : fibBearMode ? fibLastHigh : na
+float fibAnchorB = fibBullMode ? fibLastHigh : fibBearMode ? fibLastLow : na
+int fibAnchorABar = fibBullMode ? fibLastLowBar : fibBearMode ? fibLastHighBar : na
+int fibAnchorBBar = fibBullMode ? fibLastHighBar : fibBearMode ? fibLastLowBar : na
+float fibRange = math.abs(fibAnchorB - fibAnchorA)
+
+float fib0 = fibBullMode ? fibLastHigh : fibBearMode ? fibLastLow : na
+float fib100 = fibBullMode ? fibLastLow : fibBearMode ? fibLastHigh : na
+float fib618 = fibBullMode ? fibLastHigh - fibRange * fibZoneLower : fibBearMode ? fibLastLow + fibRange * fibZoneLower : na
+float fib705 = fibBullMode ? fibLastHigh - fibRange * 0.705 : fibBearMode ? fibLastLow + fibRange * 0.705 : na
+float fib786 = fibBullMode ? fibLastHigh - fibRange * 0.786 : fibBearMode ? fibLastLow + fibRange * 0.786 : na
+float fib800 = fibBullMode ? fibLastHigh - fibRange * fibZoneUpper : fibBearMode ? fibLastLow + fibRange * fibZoneUpper : na
+
+float fibZoneTop = math.max(fib618, fib800)
+float fibZoneBottom = math.min(fib618, fib800)
+bool fibValidVisual = showFibPoiEngine and fibHasLeg and (fibBullMode or fibBearMode) and fibRange > syminfo.mintick and not na(fibZoneTop) and not na(fibZoneBottom)
+
+fibOverlaps(float topA, float botA, float topB, float botB) =>
+    math.max(topA, botA) >= math.min(topB, botB) and math.min(topA, botA) <= math.max(topB, botB)
+
+float fibBestPoiTop = na
+float fibBestPoiBottom = na
+float fibBestPoiScore = na
+string fibBestPoiType = ""
+
+if fibValidVisual
+    int fibMaxLoop = math.min(fibEffectiveLookback, 450)
+    for i = 3 to fibMaxLoop
+        // Simple directional OB approximation.
+        bool bullOb = fibBullMode and fibCloseSrc[i] < fibOpenSrc[i]
+        bool bearOb = fibBearMode and fibCloseSrc[i] > fibOpenSrc[i]
+        float obTop = bullOb ? math.max(fibOpenSrc[i], fibHighSrc[i]) : bearOb ? math.max(fibOpenSrc[i], fibHighSrc[i]) : na
+        float obBot = bullOb ? math.min(fibLowSrc[i], fibOpenSrc[i]) : bearOb ? math.min(fibOpenSrc[i], fibLowSrc[i]) : na
+        bool obTouch = (bullOb or bearOb) and fibOverlaps(obTop, obBot, fibZoneTop, fibZoneBottom)
+        if obTouch
+            float mid = (obTop + obBot) / 2.0
+            float distTo705 = math.abs(mid - fib705) / math.max(fibRange, syminfo.mintick)
+            float recencyScore = 1.0 / (1.0 + i / 100.0)
+            float score = 70.0 + recencyScore * 20.0 - distTo705 * 30.0
+            if na(fibBestPoiScore) or score > fibBestPoiScore
+                fibBestPoiScore := score
+                fibBestPoiTop := obTop
+                fibBestPoiBottom := obBot
+                fibBestPoiType := fibBullMode ? "Bullish OB" : "Bearish OB"
+
+        // Simple FVG approximation from existing 3-candle imbalance logic.
+        bool bullFvgLocal = fibBullMode and fibLowSrc[i + 1] > fibHighSrc[i + 3]
+        bool bearFvgLocal = fibBearMode and fibHighSrc[i + 1] < fibLowSrc[i + 3]
+        float fvgTop = bullFvgLocal ? fibLowSrc[i + 1] : bearFvgLocal ? fibLowSrc[i + 3] : na
+        float fvgBot = bullFvgLocal ? fibHighSrc[i + 3] : bearFvgLocal ? fibHighSrc[i + 1] : na
+        bool fvgTouch = (bullFvgLocal or bearFvgLocal) and fibOverlaps(fvgTop, fvgBot, fibZoneTop, fibZoneBottom)
+        if fvgTouch
+            float mid = (fvgTop + fvgBot) / 2.0
+            float distTo705 = math.abs(mid - fib705) / math.max(fibRange, syminfo.mintick)
+            float recencyScore = 1.0 / (1.0 + i / 100.0)
+            float score = 80.0 + recencyScore * 20.0 - distTo705 * 30.0
+            if na(fibBestPoiScore) or score > fibBestPoiScore
+                fibBestPoiScore := score
+                fibBestPoiTop := fvgTop
+                fibBestPoiBottom := fvgBot
+                fibBestPoiType := fibBullMode ? "Bullish FVG" : "Bearish FVG"
+
+bool fibHasPoi = not na(fibBestPoiTop) and not na(fibBestPoiBottom)
+
+var line fibLine0 = na
+var line fibLine618 = na
+var line fibLine705 = na
+var line fibLine786 = na
+var line fibLine800 = na
+var line fibLine100 = na
+var box fibRetracementBox = na
+var box fibPoiBox = na
+var label fibPoiLabel = na
+var label fibDirLabel = na
+
+if barstate.islast
+    line.delete(fibLine0)
+    line.delete(fibLine618)
+    line.delete(fibLine705)
+    line.delete(fibLine786)
+    line.delete(fibLine800)
+    line.delete(fibLine100)
+    box.delete(fibRetracementBox)
+    box.delete(fibPoiBox)
+    label.delete(fibPoiLabel)
+    label.delete(fibDirLabel)
+
+    if fibValidVisual and (not fibPoiRequireObFvg or fibHasPoi)
+        color fibBaseColor = fibBullMode ? themeZoneBullBase : themeZoneBearBase
+        color fibLineColor = color.new(fibBaseColor, 15)
+        color fibBoxColor = color.new(fibBaseColor, 84)
+        color fibBoxBorder = color.new(fibBaseColor, 30)
+        int x1 = math.min(fibAnchorABar, fibAnchorBBar)
+        int x2 = bar_index + fibExtendBars
+
+        if fibShowFibLines
+            fibLine0 := line.new(x1, fib0, x2, fib0, color = color.new(fibLineColor, 20), style = line.style_solid, width = 1)
+            fibLine618 := line.new(x1, fib618, x2, fib618, color = fibLineColor, style = line.style_dashed, width = 1)
+            fibLine705 := line.new(x1, fib705, x2, fib705, color = color.new(themeWarning, 0), style = line.style_solid, width = 2)
+            fibLine786 := line.new(x1, fib786, x2, fib786, color = fibLineColor, style = line.style_dashed, width = 1)
+            fibLine800 := line.new(x1, fib800, x2, fib800, color = fibLineColor, style = line.style_dashed, width = 1)
+            fibLine100 := line.new(x1, fib100, x2, fib100, color = color.new(fibLineColor, 20), style = line.style_solid, width = 1)
+
+        if fibShowRetracementBox
+            fibRetracementBox := box.new(x1, fibZoneTop, x2, fibZoneBottom, bgcolor = fibBoxColor, border_color = fibBoxBorder, text = "Fib POI 61.8%-80%", text_color = fibLineColor, text_size = size.tiny)
+
+        if fibShowPoiBox and fibHasPoi
+            color poiBg = color.new(themeWarning, 78)
+            color poiBorder = color.new(themeWarning, 0)
+            fibPoiBox := box.new(bar_index - fibEffectiveLookback, math.max(fibBestPoiTop, fibBestPoiBottom), x2, math.min(fibBestPoiTop, fibBestPoiBottom), bgcolor = poiBg, border_color = poiBorder, text = "STRONG POI", text_color = poiBorder, text_size = size.small)
+            string dirTxt = fibBullMode ? "BUY STRUCTURE" : "SELL STRUCTURE"
+            fibPoiLabel := label.new(x2, (fibBestPoiTop + fibBestPoiBottom) / 2.0, "Fib POI\n" + dirTxt + "\n" + fibBestPoiType + "\nScore " + str.tostring(fibBestPoiScore, "#.0"), style = label.style_label_left, color = poiBorder, textcolor = themePanelText, size = size.small)
+
+        fibDirLabel := label.new(x2, fib705, fibBullMode ? "Bull Fib 70.5%" : "Bear Fib 70.5%", style = label.style_label_left, color = color.new(fibLineColor, 15), textcolor = themePanelText, size = size.tiny)
+
+// Hidden diagnostics for Style tab only.
+plotshape(fibValidVisual and fibHasPoi and fibBullMode, title = "Fib Bull POI Found", style = shape.circle, location = location.belowbar, size = size.tiny, color = themeWarning, display = display.none)
+plotshape(fibValidVisual and fibHasPoi and fibBearMode, title = "Fib Bear POI Found", style = shape.circle, location = location.abovebar, size = size.tiny, color = themeWarning, display = display.none)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// END 11 FIBONACCI POI VISUAL ENGINE BLOCK
+// ══════════════════════════════════════════════════════════════════════════════

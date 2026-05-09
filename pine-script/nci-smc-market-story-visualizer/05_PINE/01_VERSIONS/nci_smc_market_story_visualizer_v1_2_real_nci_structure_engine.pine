@@ -1,0 +1,304 @@
+//@version=6
+indicator("NCI x SMC Market Story Visualizer [Ravi Custom] v1.2", shorttitle="NCIStory", overlay=true, max_boxes_count=500, max_lines_count=500, max_labels_count=500)
+
+// v1.2 Real NCI Structure Engine - first hierarchy recalculation layer.
+// Visual only. No entry or execution logic.
+
+// Inputs
+grpTF = "01. Timeframe Story Stack"
+tf1 = input.timeframe("240", "TF Slot 1 - Master Story", group=grpTF)
+tf2 = input.timeframe("60", "TF Slot 2 - Explains Slot 1", group=grpTF)
+tf3 = input.timeframe("15", "TF Slot 3 - Explains Slot 2", group=grpTF)
+tf4 = input.timeframe("5", "TF Slot 4 - Explains Slot 3", group=grpTF)
+showChartLayer = input.bool(true, "Show Current Chart TF Working Layer", group=grpTF)
+
+grpView = "02. Theme / Display"
+themeMode = input.string("Light - Black Font", "Theme", options=["Light - Black Font", "Dark - White Font"], group=grpView)
+panelMode = input.string("Mobile Compact", "Panel Mode", options=["Mobile Compact", "Normal", "Full Debug"], group=grpView)
+panelPos = input.string("Top Right", "Panel Position", options=["Top Right", "Top Left", "Bottom Right", "Bottom Left"], group=grpView)
+showPanel = input.bool(true, "Show Story Panel", group=grpView)
+showChartKL = input.bool(true, "Show Chart TF KL / Range", group=grpView)
+showMasterKL = input.bool(true, "Show Master KL", group=grpView)
+showSDZones = input.bool(true, "Show SD Zones", group=grpView)
+showDebug = input.bool(false, "Debug", group=grpView)
+
+grpCalc = "03. Structure Settings"
+emaLen = input.int(20, "Temporary EMA Gauge", minval=1, group=grpCalc)
+atrLen = input.int(14, "ATR Length", minval=1, group=grpCalc)
+pLeft = input.int(3, "Pivot Left", minval=1, maxval=20, group=grpCalc)
+pRight = input.int(3, "Pivot Right", minval=1, maxval=20, group=grpCalc)
+rangeAtrMult = input.float(2.0, "Range Width ATR Multiplier", minval=0.5, maxval=10.0, step=0.25, group=grpCalc)
+nearAtrMult = input.float(0.35, "Near Edge ATR Multiplier", minval=0.05, maxval=2.0, step=0.05, group=grpCalc)
+lineLen = input.int(130, "Chart KL / Range Length", minval=20, maxval=500, group=grpCalc)
+masterLineLen = input.int(280, "Master KL Length", minval=50, maxval=1000, group=grpCalc)
+
+grpNCI = "04. NCI Validation"
+maruRatio = input.float(0.70, "Maru Body / Range", minval=0.50, maxval=0.95, step=0.05, group=grpNCI)
+bigMaruAtr = input.float(1.15, "Big Maru ATR Multiplier", minval=0.50, maxval=3.00, step=0.05, group=grpNCI)
+smallCandleMax = input.float(0.65, "Small Candle Max vs Big Candle", minval=0.20, maxval=1.00, step=0.05, group=grpNCI)
+
+// Theme
+isLight = themeMode == "Light - Black Font"
+txt = isLight ? color.black : color.white
+headBg = isLight ? color.new(color.silver, 10) : color.new(color.black, 0)
+rowBg = isLight ? color.new(color.white, 72) : color.new(color.gray, 86)
+altBg = isLight ? color.new(color.silver, 80) : color.new(color.gray, 90)
+
+// Utility
+f_tfLabel(string tf) => tf == "240" ? "4H" : tf == "60" ? "1H" : tf == "30" ? "30M" : tf == "15" ? "15M" : tf == "5" ? "5M" : tf == "3" ? "3M" : tf == "1" ? "1M" : tf
+f_tfMin(string tf) => tf == "1" ? 1 : tf == "3" ? 3 : tf == "5" ? 5 : tf == "15" ? 15 : tf == "30" ? 30 : tf == "60" ? 60 : tf == "240" ? 240 : tf == "D" ? 1440 : tf == "W" ? 10080 : na
+f_chartMin() => timeframe.isminutes ? timeframe.multiplier : timeframe.isdaily ? 1440 * timeframe.multiplier : timeframe.isweekly ? 10080 * timeframe.multiplier : na
+f_sameTf(string tf) => tf == timeframe.period or f_tfMin(tf) == f_chartMin()
+f_chartRole() => f_sameTf(tf1) ? "Slot 1 Master" : f_sameTf(tf2) ? "Slot 2 explains Slot 1" : f_sameTf(tf3) ? "Slot 3 explains Slot 2" : f_sameTf(tf4) ? "Slot 4 reaction" : showChartLayer ? "Extra working layer" : "Hidden"
+f_pos(string p) => p == "Top Left" ? position.top_left : p == "Bottom Right" ? position.bottom_right : p == "Bottom Left" ? position.bottom_left : position.top_right
+f_price(float x) => na(x) ? "n/a" : str.tostring(x, format.mintick)
+f_ctx(float c, float e) => c > e ? "Bullish" : c < e ? "Bearish" : "Neutral"
+
+// Candle and pressure helpers
+f_body(float o, float c) => math.abs(c - o)
+f_rng(float h, float l) => h - l
+f_bodyRatio(float o, float h, float l, float c) => f_rng(h, l) > 0 ? f_body(o, c) / f_rng(h, l) : 0.0
+f_isBull(float o, float c) => c > o
+f_isBear(float o, float c) => c < o
+f_isMaru(float o, float h, float l, float c) => f_bodyRatio(o, h, l, c) >= maruRatio
+f_isBigMaru(float o, float h, float l, float c, float atr) => f_isMaru(o, h, l, c) and f_rng(h, l) >= atr * bigMaruAtr
+f_isSmallAfterBig(float h, float l, float h1, float l1) => f_rng(h, l) <= f_rng(h1, l1) * smallCandleMax
+f_twoMaruUp(float level) => not na(level) and f_isBull(open[1], close[1]) and f_isBull(open, close) and f_isMaru(open[1], high[1], low[1], close[1]) and f_isMaru(open, high, low, close) and close[1] > level and close > level and close > close[1]
+f_twoMaruDn(float level) => not na(level) and f_isBear(open[1], close[1]) and f_isBear(open, close) and f_isMaru(open[1], high[1], low[1], close[1]) and f_isMaru(open, high, low, close) and close[1] < level and close < level and close < close[1]
+f_bigSmallUp(float level, float atr) => not na(level) and f_isBull(open[1], close[1]) and f_isBigMaru(open[1], high[1], low[1], close[1], atr) and f_isSmallAfterBig(high, low, high[1], low[1]) and low > (low[1] + f_rng(high[1], low[1]) * 0.50) and close > level
+f_bigSmallDn(float level, float atr) => not na(level) and f_isBear(open[1], close[1]) and f_isBigMaru(open[1], high[1], low[1], close[1], atr) and f_isSmallAfterBig(high, low, high[1], low[1]) and high < (high[1] - f_rng(high[1], low[1]) * 0.50) and close < level
+f_validationText(float highLine, float lowLine, float atr) =>
+    validUp = f_twoMaruUp(highLine) or f_bigSmallUp(highLine, atr)
+    validDn = f_twoMaruDn(lowLine) or f_bigSmallDn(lowLine, atr)
+    not na(highLine) and close > highLine and validUp ? "Valid upside break pressure" : not na(lowLine) and close < lowLine and validDn ? "Valid downside break pressure" : not na(highLine) and close > highLine ? "Upside break needs confirmation" : not na(lowLine) and close < lowLine ? "Downside break needs confirmation" : "No valid break/pullback pressure yet"
+
+// Pivot and structure helpers
+f_pivH(int occ) =>
+    ph = ta.pivothigh(high, pLeft, pRight)
+    ta.valuewhen(not na(ph), ph, occ)
+f_pivL(int occ) =>
+    pl = ta.pivotlow(low, pLeft, pRight)
+    ta.valuewhen(not na(pl), pl, occ)
+f_parentDirection(float ph, float phPrev, float pl, float plPrev) =>
+    enough = not na(ph) and not na(phPrev) and not na(pl) and not na(plPrev)
+    hh = enough and ph > phPrev
+    hl = enough and pl > plPrev
+    lh = enough and ph < phPrev
+    ll = enough and pl < plPrev
+    hh and hl ? "Bullish" : lh and ll ? "Bearish" : enough ? "Mixed" : "Building"
+f_masterState(float c, float ph, float phPrev, float pl, float plPrev, float atr) =>
+    dir = f_parentDirection(ph, phPrev, pl, plPrev)
+    width = not na(ph) and not na(pl) ? math.abs(ph - pl) : na
+    rangeCtx = not na(width) and width <= atr * rangeAtrMult
+    c > ph and dir != "Building" ? "Break attempt above master KL DOWN" : c < pl and dir != "Building" ? "Break attempt below master KL UP" : dir == "Bullish" ? "Bullish continuation candidate" : dir == "Bearish" ? "Bearish continuation candidate" : rangeCtx ? "Master range candidate" : dir == "Mixed" ? "Master transition / mixed" : "Master structure building"
+f_eventAnchor(float c, float ph, float pl, float atr, string st) =>
+    nearHigh = not na(ph) and math.abs(c - ph) <= atr * nearAtrMult
+    nearLow = not na(pl) and math.abs(c - pl) <= atr * nearAtrMult
+    c > ph ? "Break above parent KL DOWN" : c < pl ? "Break below parent KL UP" : str.contains(st, "Bearish") and nearLow ? "Bearish LL reaction" : str.contains(st, "Bullish") and nearHigh ? "Bullish HH reaction" : str.contains(st, "Bearish") and nearHigh ? "Bearish LH / KL DOWN decision" : str.contains(st, "Bullish") and nearLow ? "Bullish HL / KL UP decision" : "No active parent event anchor"
+
+// v1.2 parent-child recalculation logic
+f_hierarchyState(string parentDir, float parentClose, float parentKLDown, float parentKLUp, string parentValidation) =>
+    upAttempt = not na(parentKLDown) and parentClose > parentKLDown
+    dnAttempt = not na(parentKLUp) and parentClose < parentKLUp
+    upValid = upAttempt and str.contains(parentValidation, "Valid upside")
+    dnValid = dnAttempt and str.contains(parentValidation, "Valid downside")
+    parentDir == "Bearish" and upValid ? "Parent bearish KL DOWN broken: child recalculates bullish" : parentDir == "Bullish" and dnValid ? "Parent bullish KL UP broken: child recalculates bearish" : parentDir == "Bearish" and upAttempt ? "Parent bearish KL DOWN break attempt: child warning only" : parentDir == "Bullish" and dnAttempt ? "Parent bullish KL UP break attempt: child warning only" : parentDir == "Bearish" ? "Parent bearish continuation active" : parentDir == "Bullish" ? "Parent bullish continuation active" : parentDir == "Mixed" ? "Parent mixed / transition building" : "Parent structure building"
+f_recalcDirection(string hierarchyState) => str.contains(hierarchyState, "recalculates bullish") ? "Bullish rebuild" : str.contains(hierarchyState, "recalculates bearish") ? "Bearish rebuild" : str.contains(hierarchyState, "warning") ? "Warning only" : "No recalculation"
+f_brokenLevelRole(string hierarchyState) => str.contains(hierarchyState, "KL DOWN broken") ? "Broken KL DOWN = retest / HL decision area" : str.contains(hierarchyState, "KL UP broken") ? "Broken KL UP = retest / LH decision area" : str.contains(hierarchyState, "break attempt") ? "Break not validated; old parent story still active" : "No broken-level retest yet"
+f_childMission(string parentDir, string parentAnchor, string childState, float childC, float childH, float childL, string hierarchyState) =>
+    recalculatingBull = str.contains(hierarchyState, "recalculates bullish")
+    recalculatingBear = str.contains(hierarchyState, "recalculates bearish")
+    warningState = str.contains(hierarchyState, "warning")
+    childBreakUp = not na(childH) and childC > childH
+    childBreakDn = not na(childL) and childC < childL
+    llReaction = str.contains(parentAnchor, "LL reaction")
+    hhReaction = str.contains(parentAnchor, "HH reaction")
+    recalculatingBull ? "Child recalculating bullish transition from broken parent level" : recalculatingBear ? "Child recalculating bearish transition from broken parent level" : warningState ? "Child transition warning; parent break not validated" : parentDir == "Bearish" and llReaction and childState == "Bullish" ? "Pullback explanation from parent LL" : parentDir == "Bullish" and hhReaction and childState == "Bearish" ? "Pullback explanation from parent HH" : parentDir == "Bearish" and childState == "Bearish" ? "Supports bearish continuation" : parentDir == "Bullish" and childState == "Bullish" ? "Supports bullish continuation" : parentDir == "Bearish" and childBreakUp ? "Transition warning only, not parent reversal" : parentDir == "Bullish" and childBreakDn ? "Transition warning only, not parent reversal" : "Child explanation building"
+
+// Range and SD helpers
+f_rangeMid(float hi, float lo) => not na(hi) and not na(lo) ? (hi + lo) / 2.0 : na
+f_rangePos(float c, float hi, float lo, float atr) =>
+    nearHi = not na(hi) and math.abs(c - hi) <= atr * nearAtrMult
+    nearLo = not na(lo) and math.abs(c - lo) <= atr * nearAtrMult
+    c > hi ? "Above range high" : c < lo ? "Below range low" : nearHi ? "Near range high decision" : nearLo ? "Near range low decision" : "Range middle / noise"
+f_rangeStory(float c, float hi, float lo, float mid, float atr, string validation) =>
+    width = not na(hi) and not na(lo) ? math.abs(hi - lo) : na
+    active = not na(width) and width <= atr * rangeAtrMult
+    active and str.contains(validation, "Valid upside") ? "Validated range upside break pressure" : active and str.contains(validation, "Valid downside") ? "Validated range downside break pressure" : active and c > hi ? "Fakeout / upside break candidate above range" : active and c < lo ? "Fakeout / downside break candidate below range" : active and c > mid ? "Range rotation up toward high" : active and c < mid ? "Range rotation down toward low" : active ? "Range middle: low conviction" : "No clean range"
+f_demandLow() => math.min(open[1], close[1])
+f_demandHigh() => high[1]
+f_supplyHigh() => math.max(open[1], close[1])
+f_supplyLow() => low[1]
+f_bullImpulse(float atr) => close > open and f_rng(high, low) >= atr and close > high[1]
+f_bearImpulse(float atr) => close < open and f_rng(high, low) >= atr and close < low[1]
+f_lastDemandLow(float atr) => ta.valuewhen(f_bullImpulse(atr), f_demandLow(), 0)
+f_lastDemandHigh(float atr) => ta.valuewhen(f_bullImpulse(atr), f_demandHigh(), 0)
+f_lastSupplyHigh(float atr) => ta.valuewhen(f_bearImpulse(atr), f_supplyHigh(), 0)
+f_lastSupplyLow(float atr) => ta.valuewhen(f_bearImpulse(atr), f_supplyLow(), 0)
+f_sdState(float dLow, float dHigh, float sLow, float sHigh) =>
+    demandBroken = not na(dLow) and close < dLow
+    supplyBroken = not na(sHigh) and close > sHigh
+    demandBroken ? "Demand obsolete / broken" : supplyBroken ? "Supply obsolete / broken" : not na(dLow) and close >= dLow ? "Demand context active" : not na(sHigh) and close <= sHigh ? "Supply context active" : "SD building"
+
+// Final story
+f_finalStory(string hierarchyState, string child1, string rangeStory, string validation, string sdState) =>
+    str.contains(hierarchyState, "recalculates bullish") ? "Parent bearish hierarchy broken; child rebuilding bullish from retest" : str.contains(hierarchyState, "recalculates bearish") ? "Parent bullish hierarchy broken; child rebuilding bearish from retest" : str.contains(hierarchyState, "warning") ? "Parent break not validated; child remains warning/explanation" : str.contains(child1, "Pullback explanation from parent LL") ? "Parent bearish continuation; child explains pullback from parent LL" : str.contains(child1, "Pullback explanation from parent HH") ? "Parent bullish continuation; child explains pullback from parent HH" : str.contains(rangeStory, "Range") or str.contains(rangeStory, "range") ? "Range story active; trade edges, avoid middle" : "Story building / mixed; wait for cleaner structure"
+f_confidence(string finalStory, string validation, string sdState) => str.contains(finalStory, "rebuilding") ? "Recalculation" : str.contains(finalStory, "warning") ? "Warning" : str.contains(validation, "needs confirmation") ? "Needs confirmation" : str.contains(sdState, "obsolete") ? "Mixed" : "Building"
+
+// Requests
+s1C = request.security(syminfo.tickerid, tf1, close)
+s2C = request.security(syminfo.tickerid, tf2, close)
+s3C = request.security(syminfo.tickerid, tf3, close)
+s4C = request.security(syminfo.tickerid, tf4, close)
+s1E = request.security(syminfo.tickerid, tf1, ta.ema(close, emaLen))
+s2E = request.security(syminfo.tickerid, tf2, ta.ema(close, emaLen))
+s3E = request.security(syminfo.tickerid, tf3, ta.ema(close, emaLen))
+s4E = request.security(syminfo.tickerid, tf4, ta.ema(close, emaLen))
+s1Atr = request.security(syminfo.tickerid, tf1, ta.atr(atrLen))
+
+s1H = request.security(syminfo.tickerid, tf1, f_pivH(0))
+s1L = request.security(syminfo.tickerid, tf1, f_pivL(0))
+s1PH = request.security(syminfo.tickerid, tf1, f_pivH(1))
+s1PL = request.security(syminfo.tickerid, tf1, f_pivL(1))
+s2H = request.security(syminfo.tickerid, tf2, f_pivH(0))
+s2L = request.security(syminfo.tickerid, tf2, f_pivL(0))
+s2PH = request.security(syminfo.tickerid, tf2, f_pivH(1))
+s2PL = request.security(syminfo.tickerid, tf2, f_pivL(1))
+s3H = request.security(syminfo.tickerid, tf3, f_pivH(0))
+s3L = request.security(syminfo.tickerid, tf3, f_pivL(0))
+s3PH = request.security(syminfo.tickerid, tf3, f_pivH(1))
+s3PL = request.security(syminfo.tickerid, tf3, f_pivL(1))
+s4H = request.security(syminfo.tickerid, tf4, f_pivH(0))
+s4L = request.security(syminfo.tickerid, tf4, f_pivL(0))
+
+s1Dir = f_parentDirection(s1H, s1PH, s1L, s1PL)
+s2Dir = f_parentDirection(s2H, s2PH, s2L, s2PL)
+s3Dir = f_parentDirection(s3H, s3PH, s3L, s3PL)
+s2State = f_ctx(s2C, s2E)
+s3State = f_ctx(s3C, s3E)
+s4State = f_ctx(s4C, s4E)
+s1Validation = request.security(syminfo.tickerid, tf1, f_validationText(f_pivH(0), f_pivL(0), ta.atr(atrLen)))
+s2Validation = request.security(syminfo.tickerid, tf2, f_validationText(f_pivH(0), f_pivL(0), ta.atr(atrLen)))
+s3Validation = request.security(syminfo.tickerid, tf3, f_validationText(f_pivH(0), f_pivL(0), ta.atr(atrLen)))
+
+masterState = f_masterState(s1C, s1H, s1PH, s1L, s1PL, s1Atr)
+masterAnchor = f_eventAnchor(s1C, s1H, s1L, s1Atr, masterState)
+h12 = f_hierarchyState(s1Dir, s1C, s1H, s1L, s1Validation)
+h23 = f_hierarchyState(s2Dir, s2C, s2H, s2L, s2Validation)
+h34 = f_hierarchyState(s3Dir, s3C, s3H, s3L, s3Validation)
+child1Role = f_childMission(s1Dir, masterAnchor, s2State, s2C, s2H, s2L, h12)
+child2Role = f_childMission(s2Dir, child1Role, s3State, s3C, s3H, s3L, h23)
+child3Role = f_childMission(s3Dir, child2Role, s4State, s4C, s4H, s4L, h34)
+activeHierarchy = f_sameTf(tf4) ? h34 : f_sameTf(tf3) ? h23 : f_sameTf(tf2) ? h12 : h12
+activeRecalc = f_recalcDirection(activeHierarchy)
+activeBrokenRole = f_brokenLevelRole(activeHierarchy)
+
+chartH = f_pivH(0)
+chartL = f_pivL(0)
+chartMid = f_rangeMid(chartH, chartL)
+chartAtr = ta.atr(atrLen)
+chartValidation = f_validationText(chartH, chartL, chartAtr)
+chartRangeStory = f_rangeStory(close, chartH, chartL, chartMid, chartAtr, chartValidation)
+chartRangePos = f_rangePos(close, chartH, chartL, chartAtr)
+chartDLow = f_lastDemandLow(chartAtr)
+chartDHigh = f_lastDemandHigh(chartAtr)
+chartSLow = f_lastSupplyLow(chartAtr)
+chartSHigh = f_lastSupplyHigh(chartAtr)
+chartSDState = f_sdState(chartDLow, chartDHigh, chartSLow, chartSHigh)
+finalStory = f_finalStory(activeHierarchy, child1Role, chartRangeStory, chartValidation, chartSDState)
+storyConfidence = f_confidence(finalStory, chartValidation, chartSDState)
+
+// Panel
+var table t = table.new(f_pos(panelPos), 2, 16, border_width=1)
+f_cell(int c, int r, string s, color bg) => table.cell(t, c, r, s, bgcolor=bg, text_color=txt, text_size=panelMode == "Mobile Compact" ? size.tiny : size.small)
+if barstate.islast and showPanel
+    table.clear(t, 0, 0, 1, 15)
+    f_cell(0, 0, "NCI Story", headBg)
+    f_cell(1, 0, "v1.2", headBg)
+    if panelMode == "Mobile Compact"
+        f_cell(0, 1, "Final", altBg)
+        f_cell(1, 1, finalStory, altBg)
+        f_cell(0, 2, "Confidence", rowBg)
+        f_cell(1, 2, storyConfidence, rowBg)
+        f_cell(0, 3, "Hierarchy", rowBg)
+        f_cell(1, 3, activeHierarchy, rowBg)
+        f_cell(0, 4, "Child", rowBg)
+        f_cell(1, 4, child1Role, rowBg)
+        f_cell(0, 5, "Recalc", rowBg)
+        f_cell(1, 5, activeRecalc + " | " + activeBrokenRole, rowBg)
+        f_cell(0, 6, "NCI", rowBg)
+        f_cell(1, 6, chartValidation, rowBg)
+    else
+        f_cell(0, 1, "Final Story", altBg)
+        f_cell(1, 1, finalStory, altBg)
+        f_cell(0, 2, "4H->1H", rowBg)
+        f_cell(1, 2, h12, rowBg)
+        f_cell(0, 3, "1H->15M", rowBg)
+        f_cell(1, 3, h23, rowBg)
+        f_cell(0, 4, "15M->5M", rowBg)
+        f_cell(1, 4, h34, rowBg)
+        f_cell(0, 5, "Child Missions", rowBg)
+        f_cell(1, 5, child1Role + " | " + child2Role + " | " + child3Role, rowBg)
+        f_cell(0, 6, "Range / SD", rowBg)
+        f_cell(1, 6, chartRangeStory + " | " + chartSDState, rowBg)
+
+// Lines, zones, labels
+var line cUp = na
+var line cDn = na
+var line rMid = na
+var line mUp = na
+var line mDn = na
+var label cUpL = na
+var label cDnL = na
+var label rMidL = na
+var label mUpL = na
+var label mDnL = na
+var box dBox = na
+var box sBox = na
+var label dLab = na
+var label sLab = na
+
+if barstate.islast
+    line.delete(cUp)
+    line.delete(cDn)
+    line.delete(rMid)
+    line.delete(mUp)
+    line.delete(mDn)
+    label.delete(cUpL)
+    label.delete(cDnL)
+    label.delete(rMidL)
+    label.delete(mUpL)
+    label.delete(mDnL)
+    label.delete(dLab)
+    label.delete(sLab)
+    box.delete(dBox)
+    box.delete(sBox)
+
+    if showChartLayer and showChartKL
+        if not na(chartL)
+            cUp := line.new(bar_index - lineLen, chartL, bar_index, chartL, extend=extend.right, width=1, color=color.new(color.green, 20))
+            cUpL := label.new(bar_index, chartL, "Range/KL LOW\n" + f_price(chartL), style=label.style_label_left, textcolor=color.white, color=color.new(color.green, 10), size=size.tiny)
+        if not na(chartH)
+            cDn := line.new(bar_index - lineLen, chartH, bar_index, chartH, extend=extend.right, width=1, color=color.new(color.red, 20))
+            cDnL := label.new(bar_index, chartH, "Range/KL HIGH\n" + f_price(chartH), style=label.style_label_left, textcolor=color.white, color=color.new(color.red, 10), size=size.tiny)
+        if not na(chartMid)
+            rMid := line.new(bar_index - lineLen, chartMid, bar_index, chartMid, extend=extend.right, width=1, style=line.style_dotted, color=color.new(color.gray, 20))
+            rMidL := label.new(bar_index, chartMid, "Range MID", style=label.style_label_left, textcolor=color.black, color=color.new(color.silver, 55), size=size.tiny)
+    if showMasterKL
+        if not na(s1L)
+            mUp := line.new(bar_index - masterLineLen, s1L, bar_index, s1L, extend=extend.right, width=2, color=color.new(color.green, 45))
+            mUpL := label.new(bar_index, s1L, f_tfLabel(tf1) + " MASTER KL UP\n" + f_price(s1L), style=label.style_label_left, textcolor=color.black, color=color.new(color.green, 65), size=size.tiny)
+        if not na(s1H)
+            mDn := line.new(bar_index - masterLineLen, s1H, bar_index, s1H, extend=extend.right, width=2, color=color.new(color.red, 45))
+            mDnL := label.new(bar_index, s1H, f_tfLabel(tf1) + " MASTER KL DOWN\n" + f_price(s1H), style=label.style_label_left, textcolor=color.black, color=color.new(color.red, 65), size=size.tiny)
+    if showSDZones
+        if not na(chartDLow) and not na(chartDHigh)
+            dBox := box.new(left=bar_index - 80, top=chartDHigh, right=bar_index, bottom=chartDLow, bgcolor=color.new(color.green, 86), border_color=color.new(color.green, 35), extend=extend.right)
+            dLab := label.new(bar_index, chartDHigh, "Demand candidate", style=label.style_label_left, textcolor=color.black, color=color.new(color.green, 70), size=size.tiny)
+        if not na(chartSLow) and not na(chartSHigh)
+            sBox := box.new(left=bar_index - 80, top=chartSHigh, right=bar_index, bottom=chartSLow, bgcolor=color.new(color.red, 86), border_color=color.new(color.red, 35), extend=extend.right)
+            sLab := label.new(bar_index, chartSLow, "Supply candidate", style=label.style_label_left, textcolor=color.black, color=color.new(color.red, 70), size=size.tiny)
+    if showDebug
+        label.new(bar_index, low, "DEBUG v1.2\n" + finalStory + "\n" + activeHierarchy, style=label.style_label_up, textcolor=txt, color=rowBg, size=size.tiny)
+
+// Next: v1.3 SMC Context Layer, v1.4 SATS Trend Quality Layer.

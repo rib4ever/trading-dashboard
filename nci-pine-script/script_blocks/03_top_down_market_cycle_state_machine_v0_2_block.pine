@@ -1,0 +1,297 @@
+//@version=6
+indicator(title="NCI v0.2 Block — Top-Down Market Cycle State Machine", shorttitle="NCI TDMC v0.2", overlay=true, max_labels_count=500, max_lines_count=300, max_boxes_count=100)
+
+//=============================================================================
+// NCI v0.2 SCRIPT BLOCK — TOP-DOWN MARKET CYCLE STATE MACHINE
+//=============================================================================
+// Purpose:
+// - Enforce Ravi's confirmed NCI top-down sequence:
+//      H4 → H1 → M15 → M5
+// - Do NOT display all random key levels from all timeframes.
+// - Each lower timeframe is checked only from the higher timeframe context.
+// - This is a framework block. Key-level precision will improve after wave logic
+//   is validated against NCI standards and Ravi's manual examples.
+//=============================================================================
+
+//=============================================================================
+// 1. INPUTS
+//=============================================================================
+
+groupTF     = "01. Top-Down Timeframes"
+groupCandle = "02. NCI Candle / Wave Base"
+groupState  = "03. State Machine Settings"
+groupVisual = "04. Visuals"
+
+h4Tf  = input.timeframe("240", "Layer 1 — H4", group=groupTF)
+h1Tf  = input.timeframe("60",  "Layer 2 — H1", group=groupTF)
+m15Tf = input.timeframe("15",  "Layer 3 — M15", group=groupTF)
+m5Tf  = input.timeframe("5",   "Layer 4 — M5", group=groupTF)
+
+strictMode = input.bool(true, "Strict NCI Rules", group=groupCandle)
+maruRatioInput = input.float(0.70, "Maru Body Ratio", minval=0.50, maxval=0.95, step=0.01, group=groupCandle)
+atrLength = input.int(14, "ATR Length", minval=5, maxval=100, group=groupCandle)
+minAtrRatio = input.float(0.35, "Min Candle Size vs ATR", minval=0.05, maxval=2.00, step=0.05, group=groupCandle)
+similarityThreshold = input.float(0.70, "Two-Maru Similarity", minval=0.50, maxval=1.00, step=0.01, group=groupCandle)
+smallCandleRatio = input.float(0.30, "Small Candle Max vs Big Maru", minval=0.10, maxval=0.60, step=0.01, group=groupCandle)
+
+showDashboard = input.bool(true, "Show Top-Down Dashboard", group=groupVisual)
+showOnlyActiveLayer = input.bool(true, "Show Only Current Active Analysis Layer", group=groupVisual)
+showH4 = input.bool(true, "Show H4 Layer", group=groupVisual)
+showH1 = input.bool(true, "Show H1 Layer", group=groupVisual)
+showM15 = input.bool(true, "Show M15 Layer", group=groupVisual)
+showM5 = input.bool(true, "Show M5 Layer", group=groupVisual)
+
+//=============================================================================
+// 2. NCI HELPER FUNCTIONS
+//=============================================================================
+
+f_bodyRatio(_o, _c, _h, _l) =>
+    _r = _h - _l
+    _r > 0 ? math.abs(_c - _o) / _r : 0.0
+
+f_isBullMaru(_o, _c, _h, _l, _atr, _maruRatio, _minAtrRatio) =>
+    _range = _h - _l
+    _bodyRatio = f_bodyRatio(_o, _c, _h, _l)
+    _c > _o and _bodyRatio >= _maruRatio and _range >= _atr * _minAtrRatio
+
+f_isBearMaru(_o, _c, _h, _l, _atr, _maruRatio, _minAtrRatio) =>
+    _range = _h - _l
+    _bodyRatio = f_bodyRatio(_o, _c, _h, _l)
+    _c < _o and _bodyRatio >= _maruRatio and _range >= _atr * _minAtrRatio
+
+f_rangeSimilarity(_r1, _r2) =>
+    math.max(_r1, _r2) > 0 ? math.min(_r1, _r2) / math.max(_r1, _r2) : 0.0
+
+//=============================================================================
+// 3. PER-TIMEFRAME LAYER CALCULATION
+//=============================================================================
+// This first state-machine version uses NCI candle/wave base as a conservative
+// proxy. Final KL creation will later be tied to validated full wave logic.
+//=============================================================================
+
+f_layer(_tf) =>
+    _o  = request.security(syminfo.tickerid, _tf, open,  barmerge.gaps_off, barmerge.lookahead_off)
+    _h  = request.security(syminfo.tickerid, _tf, high,  barmerge.gaps_off, barmerge.lookahead_off)
+    _l  = request.security(syminfo.tickerid, _tf, low,   barmerge.gaps_off, barmerge.lookahead_off)
+    _c  = request.security(syminfo.tickerid, _tf, close, barmerge.gaps_off, barmerge.lookahead_off)
+    _o1 = request.security(syminfo.tickerid, _tf, open[1],  barmerge.gaps_off, barmerge.lookahead_off)
+    _h1 = request.security(syminfo.tickerid, _tf, high[1],  barmerge.gaps_off, barmerge.lookahead_off)
+    _l1 = request.security(syminfo.tickerid, _tf, low[1],   barmerge.gaps_off, barmerge.lookahead_off)
+    _c1 = request.security(syminfo.tickerid, _tf, close[1], barmerge.gaps_off, barmerge.lookahead_off)
+    _atr = request.security(syminfo.tickerid, _tf, ta.atr(atrLength), barmerge.gaps_off, barmerge.lookahead_off)
+    _range = _h - _l
+    _range1 = _h1 - _l1
+    _maruRatio = strictMode ? math.max(maruRatioInput, 0.70) : maruRatioInput
+    _bullMaru = f_isBullMaru(_o, _c, _h, _l, _atr, _maruRatio, minAtrRatio)
+    _bearMaru = f_isBearMaru(_o, _c, _h, _l, _atr, _maruRatio, minAtrRatio)
+    _bullMaru1 = f_isBullMaru(_o1, _c1, _h1, _l1, _atr, _maruRatio, minAtrRatio)
+    _bearMaru1 = f_isBearMaru(_o1, _c1, _h1, _l1, _atr, _maruRatio, minAtrRatio)
+    _sim = f_rangeSimilarity(_range, _range1)
+
+    // NCI pullback standard proxy: two Maru direction candles.
+    _bullPBW = _bullMaru and _bullMaru1 and _c > _c1 and _sim >= similarityThreshold
+    _bearPBW = _bearMaru and _bearMaru1 and _c < _c1 and _sim >= similarityThreshold
+
+    // Big Maru + small candle proxy.
+    _smallAfterBull = _bullMaru1 and _range <= _range1 * smallCandleRatio and _l > ((_h1 + _l1) / 2.0)
+    _smallAfterBear = _bearMaru1 and _range <= _range1 * smallCandleRatio and _h < ((_h1 + _l1) / 2.0)
+    _bullPBW := _bullPBW or _smallAfterBull
+    _bearPBW := _bearPBW or _smallAfterBear
+
+    // Conservative state proxy.
+    _state = _bullPBW ? "UP" : _bearPBW ? "DOWN" : "WAIT"
+    _klUp = _bullPBW ? math.min(_l, _l1) : na
+    _klDown = _bearPBW ? math.max(_h, _h1) : na
+    [_state, _klUp, _klDown, _bullPBW, _bearPBW, _c]
+
+[h4StateRaw, h4KLUpNew, h4KLDownNew, h4BullPBW, h4BearPBW, h4Close] = f_layer(h4Tf)
+[h1StateRaw, h1KLUpNew, h1KLDownNew, h1BullPBW, h1BearPBW, h1Close] = f_layer(h1Tf)
+[m15StateRaw, m15KLUpNew, m15KLDownNew, m15BullPBW, m15BearPBW, m15Close] = f_layer(m15Tf)
+[m5StateRaw, m5KLUpNew, m5KLDownNew, m5BullPBW, m5BearPBW, m5Close] = f_layer(m5Tf)
+
+//=============================================================================
+// 4. STATE MEMORY — LATEST VALID PULLBACK REPLACES KL PER TIMEFRAME
+//=============================================================================
+
+var string h4State = "WAIT"
+var string h1State = "LOCKED"
+var string m15State = "LOCKED"
+var string m5State = "LOCKED"
+
+var float h4KLUp = na
+var float h4KLDown = na
+var float h1KLUp = na
+var float h1KLDown = na
+var float m15KLUp = na
+var float m15KLDown = na
+var float m5KLUp = na
+var float m5KLDown = na
+
+// H4 is always the first layer.
+if h4StateRaw != "WAIT"
+    h4State := h4StateRaw
+    if h4BullPBW
+        h4KLUp := h4KLUpNew
+    if h4BearPBW
+        h4KLDown := h4KLDownNew
+
+// H1 only unlocks after H4 has valid context.
+h4Resolved = h4State == "UP" or h4State == "DOWN"
+if h4Resolved
+    h1State := h1StateRaw == "WAIT" ? "WAIT" : h1StateRaw
+    if h1BullPBW
+        h1KLUp := h1KLUpNew
+    if h1BearPBW
+        h1KLDown := h1KLDownNew
+else
+    h1State := "LOCKED"
+
+// M15 only unlocks after H1 has valid context.
+h1Resolved = h1State == "UP" or h1State == "DOWN"
+if h1Resolved
+    m15State := m15StateRaw == "WAIT" ? "WAIT" : m15StateRaw
+    if m15BullPBW
+        m15KLUp := m15KLUpNew
+    if m15BearPBW
+        m15KLDown := m15KLDownNew
+else
+    m15State := "LOCKED"
+
+// M5 only unlocks after M15 has valid context.
+m15Resolved = m15State == "UP" or m15State == "DOWN"
+if m15Resolved
+    m5State := m5StateRaw == "WAIT" ? "WAIT" : m5StateRaw
+    if m5BullPBW
+        m5KLUp := m5KLUpNew
+    if m5BearPBW
+        m5KLDown := m5KLDownNew
+else
+    m5State := "LOCKED"
+
+activeLayer = not h4Resolved ? "H4" : not h1Resolved ? "H1" : not m15Resolved ? "M15" : "M5"
+
+//=============================================================================
+// 5. BROKEN KL PROXY
+//=============================================================================
+// Proxy only. Final broken KL must use validated NCI breakout standards.
+//=============================================================================
+
+h4KLUpBroken = not na(h4KLUp) and h4Close < h4KLUp
+h4KLDownBroken = not na(h4KLDown) and h4Close > h4KLDown
+h1KLUpBroken = not na(h1KLUp) and h1Close < h1KLUp
+h1KLDownBroken = not na(h1KLDown) and h1Close > h1KLDown
+m15KLUpBroken = not na(m15KLUp) and m15Close < m15KLUp
+m15KLDownBroken = not na(m15KLDown) and m15Close > m15KLDown
+
+//=============================================================================
+// 6. VISUAL LAYER — SHOW ONLY SEQUENTIAL CONTEXT
+//=============================================================================
+
+var line h4Line = na
+var line h1Line = na
+var line m15Line = na
+var line m5Line = na
+var label h4Label = na
+var label h1Label = na
+var label m15Label = na
+var label m5Label = na
+
+f_showLayer(_layerName) =>
+    not showOnlyActiveLayer or activeLayer == _layerName or (_layerName == "H4" and h4Resolved) or (_layerName == "H1" and h1Resolved) or (_layerName == "M15" and m15Resolved)
+
+if barstate.islast
+    line.delete(h4Line), label.delete(h4Label)
+    line.delete(h1Line), label.delete(h1Label)
+    line.delete(m15Line), label.delete(m15Label)
+    line.delete(m5Line), label.delete(m5Label)
+
+    if showH4 and f_showLayer("H4") and (not na(h4KLUp) or not na(h4KLDown))
+        _h4Level = h4State == "UP" ? h4KLUp : h4KLDown
+        _h4Text = h4State == "UP" ? "H4 KL UP" : "H4 KL DOWN"
+        _h4Color = h4State == "UP" ? color.teal : color.fuchsia
+        h4Line := line.new(bar_index - 100, _h4Level, bar_index + 50, _h4Level, extend=extend.right, color=color.new(_h4Color, 0), width=3)
+        h4Label := label.new(bar_index, _h4Level, _h4Text, style=label.style_label_left, color=color.new(_h4Color, 70), textcolor=color.black, size=size.small)
+
+    if showH1 and f_showLayer("H1") and h4Resolved and (not na(h1KLUp) or not na(h1KLDown))
+        _h1Level = h1State == "UP" ? h1KLUp : h1KLDown
+        _h1Text = h1State == "UP" ? "H1 KL UP" : "H1 KL DOWN"
+        _h1Color = h1State == "UP" ? color.aqua : color.orange
+        h1Line := line.new(bar_index - 80, _h1Level, bar_index + 50, _h1Level, extend=extend.right, color=color.new(_h1Color, 0), width=2)
+        h1Label := label.new(bar_index, _h1Level, _h1Text, style=label.style_label_left, color=color.new(_h1Color, 70), textcolor=color.black, size=size.small)
+
+    if showM15 and f_showLayer("M15") and h1Resolved and (not na(m15KLUp) or not na(m15KLDown))
+        _m15Level = m15State == "UP" ? m15KLUp : m15KLDown
+        _m15Text = m15State == "UP" ? "M15 KL UP" : "M15 KL DOWN"
+        _m15Color = m15State == "UP" ? color.green : color.red
+        m15Line := line.new(bar_index - 60, _m15Level, bar_index + 50, _m15Level, extend=extend.right, color=color.new(_m15Color, 0), width=1)
+        m15Label := label.new(bar_index, _m15Level, _m15Text, style=label.style_label_left, color=color.new(_m15Color, 75), textcolor=color.black, size=size.tiny)
+
+    if showM5 and f_showLayer("M5") and m15Resolved and (not na(m5KLUp) or not na(m5KLDown))
+        _m5Level = m5State == "UP" ? m5KLUp : m5KLDown
+        _m5Text = m5State == "UP" ? "M5 Opp KL UP" : "M5 Opp KL DOWN"
+        _m5Color = m5State == "UP" ? color.lime : color.maroon
+        m5Line := line.new(bar_index - 40, _m5Level, bar_index + 50, _m5Level, extend=extend.right, color=color.new(_m5Color, 0), width=1)
+        m5Label := label.new(bar_index, _m5Level, _m5Text, style=label.style_label_left, color=color.new(_m5Color, 80), textcolor=color.black, size=size.tiny)
+
+//=============================================================================
+// 7. DASHBOARD
+//=============================================================================
+
+f_bgState(_state) =>
+    _state == "UP" ? color.new(color.green, 20) : _state == "DOWN" ? color.new(color.red, 20) : _state == "LOCKED" ? color.new(color.gray, 40) : color.new(color.orange, 35)
+
+f_fmt(_v) =>
+    na(_v) ? "None" : str.tostring(_v, format.mintick)
+
+var table dash = table.new(position.top_right, 3, 10, border_width=1)
+
+if barstate.islast and showDashboard
+    table.cell(dash, 0, 0, "NCI v0.2", text_color=color.white, bgcolor=color.new(color.black, 0))
+    table.cell(dash, 1, 0, "Top-Down", text_color=color.white, bgcolor=color.new(color.black, 0))
+    table.cell(dash, 2, 0, activeLayer, text_color=color.white, bgcolor=color.new(color.blue, 30))
+
+    table.cell(dash, 0, 1, "Layer", text_color=color.white, bgcolor=color.new(color.gray, 70))
+    table.cell(dash, 1, 1, "State", text_color=color.white, bgcolor=color.new(color.gray, 70))
+    table.cell(dash, 2, 1, "Active KL", text_color=color.white, bgcolor=color.new(color.gray, 70))
+
+    table.cell(dash, 0, 2, "H4", text_color=color.white, bgcolor=color.new(color.gray, 70))
+    table.cell(dash, 1, 2, h4State, text_color=color.white, bgcolor=f_bgState(h4State))
+    table.cell(dash, 2, 2, h4State == "UP" ? f_fmt(h4KLUp) : h4State == "DOWN" ? f_fmt(h4KLDown) : "None", text_color=color.white, bgcolor=color.new(color.gray, 80))
+
+    table.cell(dash, 0, 3, "H4 Broken", text_color=color.white, bgcolor=color.new(color.gray, 70))
+    table.cell(dash, 1, 3, h4KLUpBroken ? "UP KL Broken" : h4KLDownBroken ? "DOWN KL Broken" : "No", text_color=color.white, bgcolor=h4KLUpBroken or h4KLDownBroken ? color.new(color.orange, 20) : color.new(color.gray, 80))
+    table.cell(dash, 2, 3, "Proxy", text_color=color.white, bgcolor=color.new(color.gray, 80))
+
+    table.cell(dash, 0, 4, "H1", text_color=color.white, bgcolor=color.new(color.gray, 70))
+    table.cell(dash, 1, 4, h1State, text_color=color.white, bgcolor=f_bgState(h1State))
+    table.cell(dash, 2, 4, h1State == "UP" ? f_fmt(h1KLUp) : h1State == "DOWN" ? f_fmt(h1KLDown) : "None", text_color=color.white, bgcolor=color.new(color.gray, 80))
+
+    table.cell(dash, 0, 5, "H1 Broken", text_color=color.white, bgcolor=color.new(color.gray, 70))
+    table.cell(dash, 1, 5, h1KLUpBroken ? "UP KL Broken" : h1KLDownBroken ? "DOWN KL Broken" : "No", text_color=color.white, bgcolor=h1KLUpBroken or h1KLDownBroken ? color.new(color.orange, 20) : color.new(color.gray, 80))
+    table.cell(dash, 2, 5, "Proxy", text_color=color.white, bgcolor=color.new(color.gray, 80))
+
+    table.cell(dash, 0, 6, "M15", text_color=color.white, bgcolor=color.new(color.gray, 70))
+    table.cell(dash, 1, 6, m15State, text_color=color.white, bgcolor=f_bgState(m15State))
+    table.cell(dash, 2, 6, m15State == "UP" ? f_fmt(m15KLUp) : m15State == "DOWN" ? f_fmt(m15KLDown) : "None", text_color=color.white, bgcolor=color.new(color.gray, 80))
+
+    table.cell(dash, 0, 7, "M15 Broken", text_color=color.white, bgcolor=color.new(color.gray, 70))
+    table.cell(dash, 1, 7, m15KLUpBroken ? "UP KL Broken" : m15KLDownBroken ? "DOWN KL Broken" : "No", text_color=color.white, bgcolor=m15KLUpBroken or m15KLDownBroken ? color.new(color.orange, 20) : color.new(color.gray, 80))
+    table.cell(dash, 2, 7, "Proxy", text_color=color.white, bgcolor=color.new(color.gray, 80))
+
+    table.cell(dash, 0, 8, "M5", text_color=color.white, bgcolor=color.new(color.gray, 70))
+    table.cell(dash, 1, 8, m5State, text_color=color.white, bgcolor=f_bgState(m5State))
+    table.cell(dash, 2, 8, m5State == "UP" ? f_fmt(m5KLUp) : m5State == "DOWN" ? f_fmt(m5KLDown) : "None", text_color=color.white, bgcolor=color.new(color.gray, 80))
+
+    table.cell(dash, 0, 9, "Rule", text_color=color.white, bgcolor=color.new(color.gray, 70))
+    table.cell(dash, 1, 9, "H4→H1→M15→M5", text_color=color.white, bgcolor=color.new(color.blue, 70))
+    table.cell(dash, 2, 9, "Seq", text_color=color.white, bgcolor=color.new(color.blue, 70))
+
+//=============================================================================
+// 8. ALERTS
+//=============================================================================
+
+alertcondition(h4KLUpBroken or h4KLDownBroken, title="NCI H4 KL Broken Proxy", message="NCI H4 key level broken proxy. Validate with NCI breakout standard.")
+alertcondition(h1KLUpBroken or h1KLDownBroken, title="NCI H1 KL Broken Proxy", message="NCI H1 key level broken proxy. Validate with NCI breakout standard.")
+alertcondition(m15KLUpBroken or m15KLDownBroken, title="NCI M15 KL Broken Proxy", message="NCI M15 key level broken proxy. Validate with NCI breakout standard.")
+
+// END OF NCI TOP-DOWN MARKET CYCLE STATE MACHINE v0.2

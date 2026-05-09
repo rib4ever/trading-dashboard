@@ -1,0 +1,141 @@
+//@version=6
+indicator("NCI x SMC Market Story Visualizer [Ravi Custom] v0.0", shorttitle="NCIxSMC Story v0.0", overlay=true, max_boxes_count=500, max_lines_count=500, max_labels_count=500)
+
+// ============================================================================
+// NCI x SMC Market Story Visualizer [Ravi Custom]
+// v0.0 Skeleton
+// ============================================================================
+// Purpose:
+// Visual market story narrator, not an execution/signal indicator yet.
+//
+// Core hierarchy:
+// 4H  = master story
+// 1H  = -1 explanation of 4H
+// 15M = -1 explanation of 1H
+// 5M  = -1 explanation of 15M
+//
+// Current chart timeframe is an additional working layer when enabled.
+// ============================================================================
+
+// -----------------------------------------------------------------------------
+// 1. Inputs
+// -----------------------------------------------------------------------------
+
+grpTF = "01. Timeframe Story Stack"
+tfSlot1 = input.timeframe("240", "TF Slot 1 - Master Story", group=grpTF)
+tfSlot2 = input.timeframe("60", "TF Slot 2 - Explains Slot 1", group=grpTF)
+tfSlot3 = input.timeframe("15", "TF Slot 3 - Explains Slot 2", group=grpTF)
+tfSlot4 = input.timeframe("5", "TF Slot 4 - Explains Slot 3", group=grpTF)
+showChartTfLayer = input.bool(true, "Show Current Chart TF Working Layer", group=grpTF)
+autoAlignChartTf = input.bool(true, "Auto-align Current Chart TF into Story", group=grpTF)
+
+grpMode = "02. Mode"
+visualMode = input.string("Story", "Visual Mode", options=["Clean", "Story", "Debug"], group=grpMode)
+storyMode = input.string("Hybrid NCI + SMC", "Story Mode", options=["NCI Only", "SMC Context Only", "Hybrid NCI + SMC"], group=grpMode)
+
+grpDisplay = "03. Display"
+showStoryPanel = input.bool(true, "Show Story Panel", group=grpDisplay)
+showTfLabels = input.bool(true, "Show TF Role Labels", group=grpDisplay)
+showDebug = input.bool(false, "Debug Mode Visuals", group=grpDisplay)
+
+// -----------------------------------------------------------------------------
+// 2. Utility functions
+// -----------------------------------------------------------------------------
+
+f_tfLabel(string tf) =>
+    tf == "240" ? "4H" :
+     tf == "60" ? "1H" :
+     tf == "30" ? "30M" :
+     tf == "15" ? "15M" :
+     tf == "5" ? "5M" :
+     tf == "3" ? "3M" :
+     tf == "1" ? "1M" : tf
+
+f_body() => math.abs(close - open)
+f_range() => high - low
+f_bodyRatio() => f_range() > 0 ? f_body() / f_range() : 0.0
+
+// NCI candle classification - initial placeholder thresholds.
+f_isMaru() => f_bodyRatio() >= 0.70
+f_isPinbar() => f_bodyRatio() < 0.50 and f_range() > ta.sma(f_range(), 10)
+f_isDoji() => f_bodyRatio() <= 0.15
+f_isNormal() => not f_isMaru() and not f_isPinbar() and not f_isDoji()
+
+// -----------------------------------------------------------------------------
+// 3. HTF request placeholders
+// -----------------------------------------------------------------------------
+
+// These are intentionally simple in v0.0. Future versions will replace them with
+// full NCI connected structure detection and event-anchor logic.
+
+slot1Close = request.security(syminfo.tickerid, tfSlot1, close)
+slot2Close = request.security(syminfo.tickerid, tfSlot2, close)
+slot3Close = request.security(syminfo.tickerid, tfSlot3, close)
+slot4Close = request.security(syminfo.tickerid, tfSlot4, close)
+
+slot1Ema = request.security(syminfo.tickerid, tfSlot1, ta.ema(close, 20))
+slot2Ema = request.security(syminfo.tickerid, tfSlot2, ta.ema(close, 20))
+slot3Ema = request.security(syminfo.tickerid, tfSlot3, ta.ema(close, 20))
+slot4Ema = request.security(syminfo.tickerid, tfSlot4, ta.ema(close, 20))
+
+f_simpleState(float c, float e) =>
+    c > e ? "Bullish context" : c < e ? "Bearish context" : "Neutral"
+
+slot1State = f_simpleState(slot1Close, slot1Ema)
+slot2State = f_simpleState(slot2Close, slot2Ema)
+slot3State = f_simpleState(slot3Close, slot3Ema)
+slot4State = f_simpleState(slot4Close, slot4Ema)
+
+// -----------------------------------------------------------------------------
+// 4. Story panel
+// -----------------------------------------------------------------------------
+
+var table storyTbl = table.new(position.top_right, 2, 8, border_width=1)
+
+if barstate.islast and showStoryPanel
+    table.cell(storyTbl, 0, 0, "NCI x SMC Story", text_color=color.white, bgcolor=color.black)
+    table.cell(storyTbl, 1, 0, "v0.0 Skeleton", text_color=color.white, bgcolor=color.black)
+
+    table.cell(storyTbl, 0, 1, "TF Stack")
+    table.cell(storyTbl, 1, 1, f_tfLabel(tfSlot1) + " → " + f_tfLabel(tfSlot2) + " → " + f_tfLabel(tfSlot3) + " → " + f_tfLabel(tfSlot4))
+
+    table.cell(storyTbl, 0, 2, "Chart TF")
+    table.cell(storyTbl, 1, 2, timeframe.period)
+
+    table.cell(storyTbl, 0, 3, f_tfLabel(tfSlot1) + " Master")
+    table.cell(storyTbl, 1, 3, slot1State)
+
+    table.cell(storyTbl, 0, 4, f_tfLabel(tfSlot2) + " Explains")
+    table.cell(storyTbl, 1, 4, slot2State)
+
+    table.cell(storyTbl, 0, 5, f_tfLabel(tfSlot3) + " Explains")
+    table.cell(storyTbl, 1, 5, slot3State)
+
+    table.cell(storyTbl, 0, 6, f_tfLabel(tfSlot4) + " Reaction")
+    table.cell(storyTbl, 1, 6, slot4State)
+
+    table.cell(storyTbl, 0, 7, "Current Law")
+    table.cell(storyTbl, 1, 7, "Visual story only")
+
+// -----------------------------------------------------------------------------
+// 5. Debug candle labels placeholder
+// -----------------------------------------------------------------------------
+
+if showDebug and visualMode == "Debug"
+    candleTxt = f_isMaru() ? "Maru" : f_isPinbar() ? "Pinbar" : f_isDoji() ? "Doji" : "Normal"
+    label.new(bar_index, high, candleTxt, style=label.style_label_down, size=size.tiny)
+
+// -----------------------------------------------------------------------------
+// 6. Future modules placeholder
+// -----------------------------------------------------------------------------
+
+// TODO v0.1: Timeframe Role Engine
+// TODO v0.2: NCI Candle Engine refinement
+// TODO v0.3: Preliminary KL Engine
+// TODO v0.4: 4H Master Structure Engine
+// TODO v0.5: Event Anchor Engine
+// TODO v0.6: Fractal Child Structure Engine
+// TODO v0.7: Range Story Engine
+// TODO v0.8: NCI Breakout/Pullback Engine
+// TODO v0.9: NCI Supply/Demand Engine
+// TODO v1.0: Story Decision + Visual Engine

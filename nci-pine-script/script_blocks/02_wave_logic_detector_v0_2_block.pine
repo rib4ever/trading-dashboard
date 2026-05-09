@@ -1,0 +1,328 @@
+//@version=6
+indicator(title="NCI v0.2 Block — Wave Logic Detector", shorttitle="NCI Wave v0.2", overlay=true, max_labels_count=500, max_lines_count=300, max_boxes_count=100)
+
+//=============================================================================
+// NCI v0.2 SCRIPT BLOCK — WAVE LOGIC DETECTOR
+//=============================================================================
+// Purpose:
+// - Validate NCI wave logic BEFORE market structure and key-level drawing.
+// - Detect range first.
+// - If range exists, block PW/PBW classification until valid NCI breakout.
+// - Detect NCI pullback and breakout standards.
+//
+// IMPORTANT:
+// This is a testing block only. Do not merge into master until visually accepted.
+//=============================================================================
+
+//=============================================================================
+// 1. INPUTS
+//=============================================================================
+
+groupPreset = "01. Preset / Display Filter"
+groupCandle = "02. Candle Engine"
+groupWave   = "03. NCI Wave Standards"
+groupRange  = "04. Range Logic"
+groupVisual = "05. Visuals"
+
+presetMode = input.string("Universal", "Display Filter", options=["Universal", "BTCUSD", "XAUUSD", "Scalping", "Day Trading", "Swing Trading", "Manual Custom"], group=groupPreset)
+strictMode = input.bool(true, "Strict NCI Rules", group=groupPreset)
+
+manualMaruRatio = input.float(0.70, "Manual Maru Body Ratio", minval=0.50, maxval=0.95, step=0.01, group=groupCandle)
+manualDojiBodyRatio = input.float(0.12, "Manual Doji Max Body Ratio", minval=0.03, maxval=0.30, step=0.01, group=groupCandle)
+manualPinbarBodyRatio = input.float(0.40, "Manual Pinbar Max Body Ratio", minval=0.20, maxval=0.60, step=0.01, group=groupCandle)
+manualPinbarWickMultiplier = input.float(2.50, "Manual Pinbar Wick / Body Multiplier", minval=1.00, maxval=5.00, step=0.10, group=groupCandle)
+atrLength = input.int(14, "ATR Length", minval=5, maxval=100, group=groupCandle)
+minSignificantAtrRatio = input.float(0.35, "Minimum Candle Size vs ATR", minval=0.05, maxval=2.00, step=0.05, group=groupCandle)
+
+similarityThreshold = input.float(0.70, "Two-Maru Similar Length Threshold", minval=0.50, maxval=1.00, step=0.01, group=groupWave)
+smallCandleRatio = input.float(0.30, "Small Candle Max vs Big Maru", minval=0.10, maxval=0.60, step=0.01, group=groupWave)
+bigMaruLookback = input.int(5, "Big Maru Comparison Lookback", minval=3, maxval=20, group=groupWave)
+confirmationBars = input.int(4, "Pullback Confirmation Window", minval=1, maxval=10, group=groupWave)
+
+rangeLookback = input.int(5, "Range Check Lookback", minval=2, maxval=10, group=groupRange)
+rangeContainBodyOnly = input.bool(false, "Range Uses Close Inside Mother Candle Only", group=groupRange)
+showRangeBox = input.bool(true, "Show Active Range Box", group=groupRange)
+
+showCandleLabels = input.bool(false, "Show Candle Type Labels", group=groupVisual)
+showPullbackLabels = input.bool(true, "Show Pullback Standard Labels", group=groupVisual)
+showBreakoutLabels = input.bool(true, "Show Breakout Standard Labels", group=groupVisual)
+showWaveLabels = input.bool(true, "Show PW/PBW After Valid Gate", group=groupVisual)
+showDashboard = input.bool(true, "Show Dashboard", group=groupVisual)
+
+//=============================================================================
+// 2. DISPLAY FILTERS — ONLY FOR NOISE CONTROL
+//=============================================================================
+
+float presetMaruRatio = switch presetMode
+    "Universal" => 0.70
+    "BTCUSD" => 0.70
+    "XAUUSD" => 0.70
+    "Scalping" => 0.70
+    "Day Trading" => 0.70
+    "Swing Trading" => 0.68
+    "Manual Custom" => manualMaruRatio
+
+float presetDojiBodyRatio = switch presetMode
+    "Universal" => 0.12
+    "BTCUSD" => 0.10
+    "XAUUSD" => 0.12
+    "Scalping" => 0.10
+    "Day Trading" => 0.12
+    "Swing Trading" => 0.15
+    "Manual Custom" => manualDojiBodyRatio
+
+float presetPinbarBodyRatio = switch presetMode
+    "Universal" => 0.40
+    "BTCUSD" => 0.38
+    "XAUUSD" => 0.40
+    "Scalping" => 0.38
+    "Day Trading" => 0.40
+    "Swing Trading" => 0.45
+    "Manual Custom" => manualPinbarBodyRatio
+
+float presetPinbarWickMultiplier = switch presetMode
+    "Universal" => 2.50
+    "BTCUSD" => 2.80
+    "XAUUSD" => 2.50
+    "Scalping" => 2.70
+    "Day Trading" => 2.50
+    "Swing Trading" => 2.20
+    "Manual Custom" => manualPinbarWickMultiplier
+
+maruRatio = strictMode ? math.max(presetMaruRatio, 0.70) : presetMaruRatio
+dojiBodyRatio = strictMode ? math.min(presetDojiBodyRatio, 0.12) : presetDojiBodyRatio
+pinbarBodyRatio = strictMode ? math.min(presetPinbarBodyRatio, 0.40) : presetPinbarBodyRatio
+pinbarWickMultiple = strictMode ? math.max(presetPinbarWickMultiplier, 2.50) : presetPinbarWickMultiplier
+
+//=============================================================================
+// 3. CANDLE ENGINE
+//=============================================================================
+
+candleRange = high - low
+bodySize = math.abs(close - open)
+upperWick = high - math.max(open, close)
+lowerWick = math.min(open, close) - low
+bodyRatio = candleRange > 0 ? bodySize / candleRange : 0.0
+atrValue = ta.atr(atrLength)
+rangeAtrRatio = atrValue > 0 ? candleRange / atrValue : 0.0
+isSignificant = candleRange >= atrValue * minSignificantAtrRatio
+isBull = close > open
+isBear = close < open
+
+isBullMaru = isSignificant and isBull and bodyRatio >= maruRatio
+isBearMaru = isSignificant and isBear and bodyRatio >= maruRatio
+isMaru = isBullMaru or isBearMaru
+
+isDoji = bodyRatio <= dojiBodyRatio and rangeAtrRatio <= 0.65
+hasBullPinWick = lowerWick >= bodySize * pinbarWickMultiple and lowerWick > upperWick
+hasBearPinWick = upperWick >= bodySize * pinbarWickMultiple and upperWick > lowerWick
+isBullPinbar = not isDoji and not isMaru and isSignificant and bodyRatio < pinbarBodyRatio and hasBullPinWick
+isBearPinbar = not isDoji and not isMaru and isSignificant and bodyRatio < pinbarBodyRatio and hasBearPinWick
+isPinbar = isBullPinbar or isBearPinbar
+isNormal = not isMaru and not isDoji and not isPinbar
+
+plotshape(showCandleLabels and isBullMaru, title="Bull Maru", style=shape.triangleup, location=location.belowbar, text="M+", size=size.tiny, color=color.new(color.green, 0), textcolor=color.black)
+plotshape(showCandleLabels and isBearMaru, title="Bear Maru", style=shape.triangledown, location=location.abovebar, text="M-", size=size.tiny, color=color.new(color.red, 0), textcolor=color.black)
+plotshape(showCandleLabels and isDoji, title="Doji", style=shape.xcross, location=location.abovebar, text="DJ", size=size.tiny, color=color.new(color.gray, 0), textcolor=color.black)
+plotshape(showCandleLabels and isBullPinbar, title="Bull Pinbar", style=shape.circle, location=location.belowbar, text="PB+", size=size.tiny, color=color.new(color.blue, 0), textcolor=color.black)
+plotshape(showCandleLabels and isBearPinbar, title="Bear Pinbar", style=shape.circle, location=location.abovebar, text="PB-", size=size.tiny, color=color.new(color.orange, 0), textcolor=color.black)
+
+//=============================================================================
+// 4. RANGE DETECTOR — RANGE BLOCKS PW/PBW UNTIL VALID BREAKOUT
+//=============================================================================
+// NCI: if price is in range, wait for breakout standard before wave classification.
+// Practical detector:
+// - Use mother candle at rangeLookback bars ago.
+// - If closes or full candles remain inside mother candle for 2-5 bars, range is active.
+//=============================================================================
+
+motherHigh = high[rangeLookback]
+motherLow = low[rangeLookback]
+insideMother(_i) => rangeContainBodyOnly ? close[_i] <= motherHigh and close[_i] >= motherLow : high[_i] <= motherHigh and low[_i] >= motherLow
+
+insideCount = 0
+for i = 0 to rangeLookback - 1
+    insideCount += insideMother(i) ? 1 : 0
+
+rangeActive = not na(motherHigh) and insideCount >= math.max(2, rangeLookback - 1)
+rangeHigh = motherHigh
+rangeLow = motherLow
+
+var box rangeBox = na
+if showRangeBox and rangeActive
+    box.delete(rangeBox)
+    rangeBox := box.new(left=bar_index - rangeLookback, top=rangeHigh, right=bar_index, bottom=rangeLow, bgcolor=color.new(color.yellow, 88), border_color=color.new(color.orange, 20))
+else if not rangeActive
+    box.delete(rangeBox)
+    rangeBox := na
+
+//=============================================================================
+// 5. NCI PULLBACK STANDARDS
+//=============================================================================
+
+safeRange1 = candleRange[1] > 0 ? candleRange[1] : candleRange
+rangeSimilarity = math.min(candleRange, safeRange1) / math.max(candleRange, safeRange1)
+
+// Standard 1: Two Maru candles.
+bullTwoMaruPullback = not rangeActive and isBullMaru and isBullMaru[1] and close > close[1] and rangeSimilarity >= similarityThreshold
+bearTwoMaruPullback = not rangeActive and isBearMaru and isBearMaru[1] and close < close[1] and rangeSimilarity >= similarityThreshold
+
+// Standard 2: Big Maru + small candle.
+avgRange = ta.sma(candleRange, bigMaruLookback)
+priorBigBullMaru = isBullMaru[1] and candleRange[1] >= avgRange[1]
+priorBigBearMaru = isBearMaru[1] and candleRange[1] >= avgRange[1]
+smallSecondCandle = candleRange <= candleRange[1] * smallCandleRatio
+priorMid = (high[1] + low[1]) / 2.0
+bullSecondAbove50 = low > priorMid
+bearSecondBelow50 = high < priorMid
+
+bullBigSmallPullback = not rangeActive and priorBigBullMaru and smallSecondCandle and bullSecondAbove50
+bearBigSmallPullback = not rangeActive and priorBigBearMaru and smallSecondCandle and bearSecondBelow50
+
+// One-condition-failed confirmation candidates.
+bullPatternHigh = math.max(high, high[1])
+bullPatternLow = math.min(low, low[1])
+bearPatternHigh = math.max(high, high[1])
+bearPatternLow = math.min(low, low[1])
+
+bullAlmostPullback = not rangeActive and ((isBullMaru and isBullMaru[1] and close > close[1]) or (priorBigBullMaru and smallSecondCandle)) and not (bullTwoMaruPullback or bullBigSmallPullback)
+bearAlmostPullback = not rangeActive and ((isBearMaru and isBearMaru[1] and close < close[1]) or (priorBigBearMaru and smallSecondCandle)) and not (bearTwoMaruPullback or bearBigSmallPullback)
+
+var int bullConfirmDeadline = na
+var float bullConfirmLevel = na
+var int bearConfirmDeadline = na
+var float bearConfirmLevel = na
+
+if bullAlmostPullback
+    bullConfirmDeadline := bar_index + confirmationBars
+    bullConfirmLevel := bullPatternHigh
+
+if bearAlmostPullback
+    bearConfirmDeadline := bar_index + confirmationBars
+    bearConfirmLevel := bearPatternLow
+
+bullPullbackConfirmed = not na(bullConfirmDeadline) and bar_index <= bullConfirmDeadline and close > bullConfirmLevel and (isNormal or isMaru)
+bearPullbackConfirmed = not na(bearConfirmDeadline) and bar_index <= bearConfirmDeadline and close < bearConfirmLevel and (isNormal or isMaru)
+
+if bullPullbackConfirmed or (not na(bullConfirmDeadline) and bar_index > bullConfirmDeadline)
+    bullConfirmDeadline := na
+    bullConfirmLevel := na
+
+if bearPullbackConfirmed or (not na(bearConfirmDeadline) and bar_index > bearConfirmDeadline)
+    bearConfirmDeadline := na
+    bearConfirmLevel := na
+
+bullValidPullback = bullTwoMaruPullback or bullBigSmallPullback or bullPullbackConfirmed
+bearValidPullback = bearTwoMaruPullback or bearBigSmallPullback or bearPullbackConfirmed
+
+plotshape(showPullbackLabels and bullTwoMaruPullback, title="Bull Two Maru Pullback", style=shape.labelup, location=location.belowbar, text="2M PBW+", size=size.tiny, color=color.new(color.teal, 0), textcolor=color.black)
+plotshape(showPullbackLabels and bearTwoMaruPullback, title="Bear Two Maru Pullback", style=shape.labeldown, location=location.abovebar, text="2M PBW-", size=size.tiny, color=color.new(color.purple, 0), textcolor=color.white)
+plotshape(showPullbackLabels and bullBigSmallPullback, title="Bull Big Small Pullback", style=shape.labelup, location=location.belowbar, text="BS PBW+", size=size.tiny, color=color.new(color.aqua, 0), textcolor=color.black)
+plotshape(showPullbackLabels and bearBigSmallPullback, title="Bear Big Small Pullback", style=shape.labeldown, location=location.abovebar, text="BS PBW-", size=size.tiny, color=color.new(color.fuchsia, 0), textcolor=color.white)
+plotshape(showPullbackLabels and bullPullbackConfirmed, title="Bull Pullback Confirmed", style=shape.labelup, location=location.belowbar, text="C PBW+", size=size.tiny, color=color.new(color.green, 0), textcolor=color.black)
+plotshape(showPullbackLabels and bearPullbackConfirmed, title="Bear Pullback Confirmed", style=shape.labeldown, location=location.abovebar, text="C PBW-", size=size.tiny, color=color.new(color.red, 0), textcolor=color.white)
+
+//=============================================================================
+// 6. NCI BREAKOUT STANDARDS
+//=============================================================================
+// Range breakout line = range high/low when range is active.
+// If no range is active, the detector still calculates BO against latest range levels.
+//=============================================================================
+
+var float lastRangeHigh = na
+var float lastRangeLow = na
+if rangeActive
+    lastRangeHigh := rangeHigh
+    lastRangeLow := rangeLow
+
+boHighLine = lastRangeHigh
+boLowLine = lastRangeLow
+
+// Standard 1: Two Maru breakout.
+bullTwoMaruBreakout = not na(boHighLine) and isBullMaru and isBullMaru[1] and close > close[1] and close > boHighLine and close[1] > boHighLine and rangeSimilarity >= similarityThreshold
+bearTwoMaruBreakout = not na(boLowLine) and isBearMaru and isBearMaru[1] and close < close[1] and close < boLowLine and close[1] < boLowLine and rangeSimilarity >= similarityThreshold
+
+// Standard 2: Big Maru + small candle breakout.
+bodyTop1 = math.max(open[1], close[1])
+bodyBottom1 = math.min(open[1], close[1])
+bodyLen1 = math.abs(close[1] - open[1])
+bullBodyAboveBO = not na(boHighLine) and bodyLen1 > 0 ? math.max(0.0, bodyTop1 - math.max(bodyBottom1, boHighLine)) / bodyLen1 : 0.0
+bearBodyBelowBO = not na(boLowLine) and bodyLen1 > 0 ? math.max(0.0, math.min(bodyTop1, boLowLine) - bodyBottom1) / bodyLen1 : 0.0
+
+bullBigSmallBreakout = not na(boHighLine) and priorBigBullMaru and smallSecondCandle and bullSecondAbove50 and bullBodyAboveBO >= 0.30
+bearBigSmallBreakout = not na(boLowLine) and priorBigBearMaru and smallSecondCandle and bearSecondBelow50 and bearBodyBelowBO >= 0.30
+
+bullValidBreakout = bullTwoMaruBreakout or bullBigSmallBreakout
+bearValidBreakout = bearTwoMaruBreakout or bearBigSmallBreakout
+validRangeBreakout = bullValidBreakout or bearValidBreakout
+
+plotshape(showBreakoutLabels and bullTwoMaruBreakout, title="Bull Two Maru Breakout", style=shape.diamond, location=location.belowbar, text="2M BO+", size=size.tiny, color=color.new(color.green, 0), textcolor=color.black)
+plotshape(showBreakoutLabels and bearTwoMaruBreakout, title="Bear Two Maru Breakout", style=shape.diamond, location=location.abovebar, text="2M BO-", size=size.tiny, color=color.new(color.red, 0), textcolor=color.white)
+plotshape(showBreakoutLabels and bullBigSmallBreakout, title="Bull Big Small Breakout", style=shape.diamond, location=location.belowbar, text="BS BO+", size=size.tiny, color=color.new(color.lime, 0), textcolor=color.black)
+plotshape(showBreakoutLabels and bearBigSmallBreakout, title="Bear Big Small Breakout", style=shape.diamond, location=location.abovebar, text="BS BO-", size=size.tiny, color=color.new(color.maroon, 0), textcolor=color.white)
+
+//=============================================================================
+// 7. RANGE → VALID BREAKOUT GATE → WAVE CLASSIFICATION
+//=============================================================================
+// In range: block wave labels.
+// After valid breakout: allow PW classification.
+// PBW classification remains pullback-standard based when no range is active.
+//=============================================================================
+
+bullPulseAfterRange = showWaveLabels and bullValidBreakout
+bearPulseAfterRange = showWaveLabels and bearValidBreakout
+bullPullbackWave = showWaveLabels and not rangeActive and bullValidPullback
+bearPullbackWave = showWaveLabels and not rangeActive and bearValidPullback
+
+plotshape(bullPulseAfterRange, title="NCI Bull Pulse After Range BO", style=shape.arrowup, location=location.belowbar, text="PW+", size=size.small, color=color.new(color.green, 0), textcolor=color.black)
+plotshape(bearPulseAfterRange, title="NCI Bear Pulse After Range BO", style=shape.arrowdown, location=location.abovebar, text="PW-", size=size.small, color=color.new(color.red, 0), textcolor=color.black)
+plotshape(bullPullbackWave, title="NCI Bull Pullback Wave", style=shape.flag, location=location.belowbar, text="PBW+", size=size.tiny, color=color.new(color.teal, 0), textcolor=color.black)
+plotshape(bearPullbackWave, title="NCI Bear Pullback Wave", style=shape.flag, location=location.abovebar, text="PBW-", size=size.tiny, color=color.new(color.purple, 0), textcolor=color.white)
+
+//=============================================================================
+// 8. DASHBOARD
+//=============================================================================
+
+string waveGateState = rangeActive ? "RANGE: wait BO" : validRangeBreakout ? "BO valid: wave allowed" : "No range gate"
+string lastDetected = bullValidBreakout ? "Bull BO" : bearValidBreakout ? "Bear BO" : bullValidPullback ? "Bull PBW" : bearValidPullback ? "Bear PBW" : rangeActive ? "Range" : "None"
+
+var table dash = table.new(position.top_right, 2, 12, border_width=1)
+f_stateBg(_s) => str.contains(_s, "Bull") ? color.new(color.green, 25) : str.contains(_s, "Bear") ? color.new(color.red, 25) : str.contains(_s, "RANGE") or str.contains(_s, "Range") ? color.new(color.orange, 25) : color.new(color.gray, 75)
+
+if barstate.islast and showDashboard
+    table.cell(dash, 0, 0, "NCI v0.2", text_color=color.white, bgcolor=color.new(color.black, 0))
+    table.cell(dash, 1, 0, "Wave Detector", text_color=color.white, bgcolor=color.new(color.black, 0))
+    table.cell(dash, 0, 1, "Filter", text_color=color.white, bgcolor=color.new(color.gray, 70))
+    table.cell(dash, 1, 1, presetMode, text_color=color.white, bgcolor=color.new(color.gray, 70))
+    table.cell(dash, 0, 2, "Range", text_color=color.white, bgcolor=color.new(color.gray, 70))
+    table.cell(dash, 1, 2, rangeActive ? "ACTIVE" : "NO", text_color=color.white, bgcolor=rangeActive ? color.new(color.orange, 20) : color.new(color.gray, 80))
+    table.cell(dash, 0, 3, "Gate", text_color=color.white, bgcolor=color.new(color.gray, 70))
+    table.cell(dash, 1, 3, waveGateState, text_color=color.white, bgcolor=f_stateBg(waveGateState))
+    table.cell(dash, 0, 4, "Last Event", text_color=color.white, bgcolor=color.new(color.gray, 70))
+    table.cell(dash, 1, 4, lastDetected, text_color=color.white, bgcolor=f_stateBg(lastDetected))
+    table.cell(dash, 0, 5, "2M PBW+/-", text_color=color.white, bgcolor=color.new(color.gray, 70))
+    table.cell(dash, 1, 5, (bullTwoMaruPullback ? "Bull" : bearTwoMaruPullback ? "Bear" : "NO"), text_color=color.white, bgcolor=color.new(color.gray, 80))
+    table.cell(dash, 0, 6, "BS PBW+/-", text_color=color.white, bgcolor=color.new(color.gray, 70))
+    table.cell(dash, 1, 6, (bullBigSmallPullback ? "Bull" : bearBigSmallPullback ? "Bear" : "NO"), text_color=color.white, bgcolor=color.new(color.gray, 80))
+    table.cell(dash, 0, 7, "C PBW+/-", text_color=color.white, bgcolor=color.new(color.gray, 70))
+    table.cell(dash, 1, 7, (bullPullbackConfirmed ? "Bull" : bearPullbackConfirmed ? "Bear" : "NO"), text_color=color.white, bgcolor=color.new(color.gray, 80))
+    table.cell(dash, 0, 8, "2M BO+/-", text_color=color.white, bgcolor=color.new(color.gray, 70))
+    table.cell(dash, 1, 8, (bullTwoMaruBreakout ? "Bull" : bearTwoMaruBreakout ? "Bear" : "NO"), text_color=color.white, bgcolor=color.new(color.gray, 80))
+    table.cell(dash, 0, 9, "BS BO+/-", text_color=color.white, bgcolor=color.new(color.gray, 70))
+    table.cell(dash, 1, 9, (bullBigSmallBreakout ? "Bull" : bearBigSmallBreakout ? "Bear" : "NO"), text_color=color.white, bgcolor=color.new(color.gray, 80))
+    table.cell(dash, 0, 10, "Range High", text_color=color.white, bgcolor=color.new(color.gray, 70))
+    table.cell(dash, 1, 10, na(lastRangeHigh) ? "None" : str.tostring(lastRangeHigh, format.mintick), text_color=color.white, bgcolor=color.new(color.gray, 80))
+    table.cell(dash, 0, 11, "Range Low", text_color=color.white, bgcolor=color.new(color.gray, 70))
+    table.cell(dash, 1, 11, na(lastRangeLow) ? "None" : str.tostring(lastRangeLow, format.mintick), text_color=color.white, bgcolor=color.new(color.gray, 80))
+
+//=============================================================================
+// 9. ALERTS
+//=============================================================================
+
+alertcondition(rangeActive, title="NCI Range Active", message="NCI range active. Wait for valid breakout before PW/PBW classification.")
+alertcondition(bullValidBreakout, title="NCI Bull Valid Breakout", message="NCI bullish valid breakout detected after range/BOI.")
+alertcondition(bearValidBreakout, title="NCI Bear Valid Breakout", message="NCI bearish valid breakout detected after range/BOI.")
+alertcondition(bullValidPullback, title="NCI Bull Pullback Wave", message="NCI bullish pullback wave standard detected.")
+alertcondition(bearValidPullback, title="NCI Bear Pullback Wave", message="NCI bearish pullback wave standard detected.")
+
+// END OF NCI WAVE LOGIC DETECTOR v0.2

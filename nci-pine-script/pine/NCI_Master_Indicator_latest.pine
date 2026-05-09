@@ -1,14 +1,12 @@
 //@version=6
-indicator(title="NCI Master Indicator v0.1.2 — Candle Engine + Debug", shorttitle="NCI v0.1.2", overlay=true, max_labels_count=500, max_lines_count=100, max_boxes_count=100)
+indicator(title="NCI Master Indicator v0.1.3 — Candle Engine + Debug", shorttitle="NCI v0.1.3", overlay=true, max_labels_count=500, max_lines_count=100, max_boxes_count=100)
 
 groupPreset = "01. NCI Preset Engine"
 groupCandle = "02. Candle Engine Settings"
 groupVisual = "03. Visual Settings"
-groupDebug  = "04. Debug Mode"
 
 presetMode = input.string(defval="Universal", title="NCI Preset", options=["Universal", "Scalping", "Day Trading", "Swing Trading", "BTCUSD", "XAUUSD", "Manual Custom"], group=groupPreset)
 strictMode = input.bool(defval=true, title="Strict NCI Rules", group=groupPreset)
-
 manualMaruRatio = input.float(defval=0.70, title="Manual Marubozu Body Ratio", minval=0.50, maxval=0.95, step=0.01, group=groupCandle)
 manualSpecialMaruRatio = input.float(defval=0.55, title="Manual Special Maru Body Ratio", minval=0.40, maxval=0.90, step=0.01, group=groupCandle)
 manualCloseNearExtreme = input.float(defval=0.92, title="Manual Special Maru Close Near Extreme", minval=0.70, maxval=0.99, step=0.01, group=groupCandle)
@@ -21,7 +19,6 @@ minSignificantAtrRatio = input.float(defval=0.35, title="Minimum Candle Size vs 
 showCandleMarkers = input.bool(defval=true, title="Show Candle Type Markers", group=groupVisual)
 showNormalCandles = input.bool(defval=false, title="Show Normal Candle Markers", group=groupVisual)
 showDashboard = input.bool(defval=true, title="Show NCI Dashboard", group=groupVisual)
-debugMode = input.bool(defval=true, title="Debug Mode", group=groupDebug)
 
 float presetMaruRatio = switch presetMode
     "Universal" => 0.70
@@ -31,7 +28,6 @@ float presetMaruRatio = switch presetMode
     "BTCUSD" => 0.70
     "XAUUSD" => 0.70
     "Manual Custom" => manualMaruRatio
-
 float presetSpecialMaruRatio = switch presetMode
     "Universal" => 0.55
     "Scalping" => 0.56
@@ -40,7 +36,6 @@ float presetSpecialMaruRatio = switch presetMode
     "BTCUSD" => 0.56
     "XAUUSD" => 0.55
     "Manual Custom" => manualSpecialMaruRatio
-
 float presetCloseNearExtreme = switch presetMode
     "Universal" => 0.92
     "Scalping" => 0.93
@@ -49,7 +44,6 @@ float presetCloseNearExtreme = switch presetMode
     "BTCUSD" => 0.93
     "XAUUSD" => 0.92
     "Manual Custom" => manualCloseNearExtreme
-
 float presetDojiBodyRatio = switch presetMode
     "Universal" => 0.12
     "Scalping" => 0.10
@@ -58,7 +52,6 @@ float presetDojiBodyRatio = switch presetMode
     "BTCUSD" => 0.10
     "XAUUSD" => 0.12
     "Manual Custom" => manualDojiBodyRatio
-
 float presetDojiMaxAtrRatio = switch presetMode
     "Universal" => 0.55
     "Scalping" => 0.50
@@ -67,7 +60,6 @@ float presetDojiMaxAtrRatio = switch presetMode
     "BTCUSD" => 0.55
     "XAUUSD" => 0.55
     "Manual Custom" => manualDojiMaxAtrRatio
-
 float presetPinbarBodyRatio = switch presetMode
     "Universal" => 0.40
     "Scalping" => 0.38
@@ -76,7 +68,6 @@ float presetPinbarBodyRatio = switch presetMode
     "BTCUSD" => 0.38
     "XAUUSD" => 0.40
     "Manual Custom" => manualPinbarBodyRatio
-
 float presetPinbarWickMultiplier = switch presetMode
     "Universal" => 2.50
     "Scalping" => 2.70
@@ -111,38 +102,34 @@ isBear = close < open
 isBullMaru = isSignificantCandle and isBull and bodyRatio >= maruRatio
 isBearMaru = isSignificantCandle and isBear and bodyRatio >= maruRatio
 isMaru = isBullMaru or isBearMaru
-
 isDoji = bodyRatio <= dojiBodyRatio and rangeAtrRatio <= dojiMaxAtrRatio
-
 bullSpecialWickOK = lowerWick >= bodySize * specialDominantWickVsBody and lowerWick >= upperWick * specialDominantWickVsOpposite
 bearSpecialWickOK = upperWick >= bodySize * specialDominantWickVsBody and upperWick >= lowerWick * specialDominantWickVsOpposite
 isBullSpecialMaru = not isMaru and not isDoji and isSignificantCandle and isBull and bodyRatio >= specialMaruRatio and closePosition >= closeNearExtreme and bullSpecialWickOK
 isBearSpecialMaru = not isMaru and not isDoji and isSignificantCandle and isBear and bodyRatio >= specialMaruRatio and closePosition <= 1.0 - closeNearExtreme and bearSpecialWickOK
 isSpecialMaru = isBullSpecialMaru or isBearSpecialMaru
-
 hasBullishPinWick = lowerWick >= bodySize * pinbarWickMultiple and lowerWick > upperWick
 hasBearishPinWick = upperWick >= bodySize * pinbarWickMultiple and upperWick > lowerWick
 isBullPinbar = not isDoji and not isMaru and not isSpecialMaru and isSignificantCandle and bodyRatio < pinbarBodyRatio and hasBullishPinWick
 isBearPinbar = not isDoji and not isMaru and not isSpecialMaru and isSignificantCandle and bodyRatio < pinbarBodyRatio and hasBearishPinWick
 isPinbar = isBullPinbar or isBearPinbar
 isNormalCandle = not isMaru and not isDoji and not isSpecialMaru and not isPinbar
-
 string candleClass = isBullMaru ? "Bull Maru" : isBearMaru ? "Bear Maru" : isDoji ? "Doji" : isBullSpecialMaru ? "Bull Special Maru" : isBearSpecialMaru ? "Bear Special Maru" : isBullPinbar ? "Bull Pinbar" : isBearPinbar ? "Bear Pinbar" : "Normal"
 
-plotshape(showCandleMarkers and isBullMaru, title="NCI Bull Maru", style=shape.triangleup, location=location.belowbar, text="M+", size=size.tiny, color=color.new(color.green, 0), textcolor=color.white)
-plotshape(showCandleMarkers and isBearMaru, title="NCI Bear Maru", style=shape.triangledown, location=location.abovebar, text="M-", size=size.tiny, color=color.new(color.red, 0), textcolor=color.white)
-plotshape(showCandleMarkers and isDoji, title="NCI Doji", style=shape.xcross, location=location.abovebar, text="DJ", size=size.tiny, color=color.new(color.gray, 0), textcolor=color.white)
+plotshape(showCandleMarkers and isBullMaru, title="NCI Bull Maru", style=shape.triangleup, location=location.belowbar, text="M+", size=size.tiny, color=color.new(color.green, 0), textcolor=color.black)
+plotshape(showCandleMarkers and isBearMaru, title="NCI Bear Maru", style=shape.triangledown, location=location.abovebar, text="M-", size=size.tiny, color=color.new(color.red, 0), textcolor=color.black)
+plotshape(showCandleMarkers and isDoji, title="NCI Doji", style=shape.xcross, location=location.abovebar, text="DJ", size=size.tiny, color=color.new(color.gray, 0), textcolor=color.black)
 plotshape(showCandleMarkers and isBullSpecialMaru, title="NCI Bull Special Maru", style=shape.labelup, location=location.belowbar, text="SM+", size=size.tiny, color=color.new(color.lime, 0), textcolor=color.black)
 plotshape(showCandleMarkers and isBearSpecialMaru, title="NCI Bear Special Maru", style=shape.labeldown, location=location.abovebar, text="SM-", size=size.tiny, color=color.new(color.maroon, 0), textcolor=color.white)
-plotshape(showCandleMarkers and isBullPinbar, title="NCI Bull Pinbar", style=shape.circle, location=location.belowbar, text="PB+", size=size.tiny, color=color.new(color.blue, 0), textcolor=color.white)
+plotshape(showCandleMarkers and isBullPinbar, title="NCI Bull Pinbar", style=shape.circle, location=location.belowbar, text="PB+", size=size.tiny, color=color.new(color.blue, 0), textcolor=color.black)
 plotshape(showCandleMarkers and isBearPinbar, title="NCI Bear Pinbar", style=shape.circle, location=location.abovebar, text="PB-", size=size.tiny, color=color.new(color.orange, 0), textcolor=color.black)
-plotshape(showCandleMarkers and showNormalCandles and isNormalCandle, title="NCI Normal Candle", style=shape.square, location=location.bottom, text="N", size=size.tiny, color=color.new(color.black, 70), textcolor=color.white)
+plotshape(showCandleMarkers and showNormalCandles and isNormalCandle, title="NCI Normal Candle", style=shape.square, location=location.bottom, text="N", size=size.tiny, color=color.new(color.black, 70), textcolor=color.black)
 
 var table dash = table.new(position.top_right, 2, 15, border_width=1)
 f_boolText(_condition) => _condition ? "PASS" : "FAIL"
 f_boolColor(_condition) => _condition ? color.new(color.green, 20) : color.new(color.red, 20)
 if barstate.islast and showDashboard
-    table.cell(dash, 0, 0, "NCI v0.1.2", text_color=color.white, bgcolor=color.new(color.black, 0))
+    table.cell(dash, 0, 0, "NCI v0.1.3", text_color=color.white, bgcolor=color.new(color.black, 0))
     table.cell(dash, 1, 0, "Candle Engine", text_color=color.white, bgcolor=color.new(color.black, 0))
     table.cell(dash, 0, 1, "Preset", text_color=color.white, bgcolor=color.new(color.gray, 70))
     table.cell(dash, 1, 1, presetMode, text_color=color.white, bgcolor=color.new(color.gray, 70))

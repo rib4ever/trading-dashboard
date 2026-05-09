@@ -1,5 +1,5 @@
 //@version=6
-indicator(title="NCI v0.2.1 Block — Structure Line + KL Boxes", shorttitle="NCI Visual v0.2.1", overlay=true, max_labels_count=500, max_lines_count=500, max_boxes_count=200)
+indicator(title="NCI v0.2.1 Block — Structure Line + KL Boxes", shorttitle="NCI v021", overlay=true, max_labels_count=500, max_lines_count=500, max_boxes_count=200)
 
 //=============================================================================
 // NCI v0.2.1 SCRIPT BLOCK — STRUCTURE LINE + KEY LEVEL BOX VISUAL ENGINE
@@ -11,10 +11,10 @@ indicator(title="NCI v0.2.1 Block — Structure Line + KL Boxes", shorttitle="NC
 // - Draw broken KL box when key level is broken.
 // - Keep raw wave labels available only in Debug Mode.
 //
-// Important:
-// - This is a VISUAL FRAMEWORK block.
-// - Final structure points must still be refined with full NCI market-cycle logic.
-// - The goal of this block is to match Ravi's manual drawing style first.
+// IMPORTANT:
+// - This is a visual framework block.
+// - It is designed to match Ravi's manual drawing style first.
+// - Final turning points must later be validated with strict NCI PW/PBW logic.
 //=============================================================================
 
 //=============================================================================
@@ -39,7 +39,6 @@ showBrokenKL = input.bool(true, "Show Broken KL Box", group=groupVisual)
 showDashboard = input.bool(true, "Show Dashboard", group=groupVisual)
 structureLineWidth = input.int(3, "Structure Line Width", minval=1, maxval=5, group=groupVisual)
 
-// Debug must stay OFF by default.
 debugMode = input.bool(false, "Debug Mode — Show Raw Structure Events", group=groupDebug)
 showRawPivots = input.bool(false, "Debug: Show Raw Turning Points", group=groupDebug)
 
@@ -59,9 +58,6 @@ string tfLabel = analysisTfLabel == "Auto" ? f_autoTfLabel() : analysisTfLabel
 //=============================================================================
 // 3. BASIC STRUCTURE POINT DETECTION
 //=============================================================================
-// This block uses filtered confirmed pivots to draw the market-cycle visual line.
-// Later, the pivot approval must be replaced/confirmed by full NCI PW/PBW logic.
-//=============================================================================
 
 atrValue = ta.atr(atrLength)
 pivH = ta.pivothigh(high, pivotLen, pivotLen)
@@ -69,14 +65,12 @@ pivL = ta.pivotlow(low, pivotLen, pivotLen)
 
 var float lastPointPrice = na
 var int lastPointIndex = na
-var int lastPointType = 0      // 1 = high, -1 = low
+var int lastPointType = 0
 var string cycleState = "WAIT"
 var string activeDirection = "NONE"
 
-var line lastStructureLine = na
 var array<line> structureLines = array.new_line()
 
-// KL objects.
 var box activeKLBox = na
 var label activeKLLabel = na
 var box brokenKLBox = na
@@ -84,21 +78,19 @@ var label brokenKLLabel = na
 
 var float activeKLTop = na
 var float activeKLBottom = na
-var string activeKLDirection = "NONE"   // UP / DOWN
+var string activeKLDirection = "NONE"
 var string lastBrokenText = "None"
 
-// Candidate points confirmed pivotLen bars after occurrence.
 newHigh = not na(pivH)
 newLow = not na(pivL)
 newPointIndexHigh = bar_index - pivotLen
 newPointIndexLow = bar_index - pivotLen
 
-// Debug pivot marks.
 plotshape(debugMode and showRawPivots and newHigh, title="Raw Structure High", style=shape.triangledown, location=location.abovebar, offset=-pivotLen, text="SH", size=size.tiny, color=color.new(color.orange, 0), textcolor=color.black)
 plotshape(debugMode and showRawPivots and newLow, title="Raw Structure Low", style=shape.triangleup, location=location.belowbar, offset=-pivotLen, text="SL", size=size.tiny, color=color.new(color.aqua, 0), textcolor=color.black)
 
 //=============================================================================
-// 4. STRUCTURE LINE + MARKET CYCLE STATE UPDATE
+// 4. HELPER LOGIC
 //=============================================================================
 
 f_validLeg(_newPrice) =>
@@ -106,75 +98,72 @@ f_validLeg(_newPrice) =>
 
 f_addStructureLine(_x1, _y1, _x2, _y2) =>
     if showStructureLine and not na(_x1) and not na(_y1)
-        _ln = line.new(_x1, _y1, _x2, _y2, xloc=xloc.bar_index, extend=extend.none, color=color.new(color.teal, 0), width=structureLineWidth)
-        array.push(structureLines, _ln)
+        line newLine = line.new(_x1, _y1, _x2, _y2, xloc=xloc.bar_index, extend=extend.none, color=color.new(color.teal, 0), width=structureLineWidth)
+        array.push(structureLines, newLine)
         if array.size(structureLines) > 20
             line.delete(array.shift(structureLines))
 
-f_deleteActiveKL() =>
-    box.delete(activeKLBox)
-    label.delete(activeKLLabel)
+f_stateBg(_state) =>
+    str.contains(_state, "UP") and not str.contains(_state, "BROKEN") ? color.new(color.green, 25) :
+     str.contains(_state, "DOWN") and not str.contains(_state, "BROKEN") ? color.new(color.red, 25) :
+     str.contains(_state, "BROKEN") ? color.new(color.orange, 25) : color.new(color.gray, 75)
 
-f_makeKLBox(_direction, _pivotIndex, _levelPrice, _tfLabel) =>
-    _height = atrValue * klBoxHeightAtr
-    _top = _direction == "UP" ? _levelPrice + _height : _levelPrice + _height
-    _bottom = _direction == "UP" ? _levelPrice - _height : _levelPrice - _height
-    _bg = _direction == "UP" ? color.new(color.aqua, 84) : color.new(color.fuchsia, 86)
-    _border = _direction == "UP" ? color.new(color.teal, 0) : color.new(color.rgb(255, 105, 180), 0)
-    _txt = _direction == "UP" ? _tfLabel + " KL UP" : _tfLabel + " KL DOWN"
-    _style = _direction == "UP" ? label.style_label_left : label.style_label_left
-    _b = box.new(left=_pivotIndex, top=_top, right=bar_index + klBoxBars, bottom=_bottom, xloc=xloc.bar_index, bgcolor=_bg, border_color=_border, border_width=2)
-    _l = label.new(bar_index + math.min(klBoxBars, 50), (_top + _bottom) / 2.0, _txt, xloc=xloc.bar_index, style=_style, color=color.new(_direction == "UP" ? color.aqua : color.rgb(255, 105, 180), 78), textcolor=color.black, size=size.small)
-    [_b, _l, _top, _bottom]
+//=============================================================================
+// 5. STRUCTURE LINE + MARKET CYCLE STATE UPDATE
+//=============================================================================
 
-f_makeBrokenBox(_direction, _tfLabel, _top, _bottom) =>
-    _txt = "KL " + _tfLabel + " Broken"
-    _b = box.new(left=bar_index - pivotLen, top=_top, right=bar_index + math.min(klBoxBars, 60), bottom=_bottom, xloc=xloc.bar_index, bgcolor=color.new(color.orange, 86), border_color=color.new(color.orange, 0), border_width=2)
-    _l = label.new(bar_index, (_top + _bottom) / 2.0, _txt, xloc=xloc.bar_index, style=label.style_label_left, color=color.new(color.orange, 78), textcolor=color.black, size=size.small)
-    [_b, _l, _txt]
-
-// Process structure high.
 if newHigh and f_validLeg(pivH)
-    // Accept alternating turning points only, to avoid noisy same-side points.
     if lastPointType != 1
         f_addStructureLine(lastPointIndex, lastPointPrice, newPointIndexHigh, pivH)
-        // If market moved from low to high, we have bullish cycle leg.
+
         if lastPointType == -1
             cycleState := "UP CYCLE"
             activeDirection := "UP"
-            // KL UP is based near the last pullback low / last low point.
+
             if showKLBoxes and not na(lastPointPrice)
                 if showOnlyLatestKL
-                    f_deleteActiveKL()
-                [activeKLBox, activeKLLabel, activeKLTop, activeKLBottom] = f_makeKLBox("UP", lastPointIndex, lastPointPrice, tfLabel)
+                    box.delete(activeKLBox)
+                    label.delete(activeKLLabel)
+
+                float boxHeightUp = atrValue * klBoxHeightAtr
+                activeKLTop := lastPointPrice + boxHeightUp
+                activeKLBottom := lastPointPrice - boxHeightUp
                 activeKLDirection := "UP"
+
+                activeKLBox := box.new(left=lastPointIndex, top=activeKLTop, right=bar_index + klBoxBars, bottom=activeKLBottom, xloc=xloc.bar_index, bgcolor=color.new(color.aqua, 84), border_color=color.new(color.teal, 0), border_width=2)
+                activeKLLabel := label.new(bar_index + math.min(klBoxBars, 50), (activeKLTop + activeKLBottom) / 2.0, tfLabel + " KL UP", xloc=xloc.bar_index, style=label.style_label_left, color=color.new(color.aqua, 78), textcolor=color.black, size=size.small)
+
         lastPointPrice := pivH
         lastPointIndex := newPointIndexHigh
         lastPointType := 1
 
-// Process structure low.
 if newLow and f_validLeg(pivL)
     if lastPointType != -1
         f_addStructureLine(lastPointIndex, lastPointPrice, newPointIndexLow, pivL)
-        // If market moved from high to low, we have bearish cycle leg.
+
         if lastPointType == 1
             cycleState := "DOWN CYCLE"
             activeDirection := "DOWN"
-            // KL DOWN is based near the last pullback high / last high point.
+
             if showKLBoxes and not na(lastPointPrice)
                 if showOnlyLatestKL
-                    f_deleteActiveKL()
-                [activeKLBox, activeKLLabel, activeKLTop, activeKLBottom] = f_makeKLBox("DOWN", lastPointIndex, lastPointPrice, tfLabel)
+                    box.delete(activeKLBox)
+                    label.delete(activeKLLabel)
+
+                float boxHeightDown = atrValue * klBoxHeightAtr
+                activeKLTop := lastPointPrice + boxHeightDown
+                activeKLBottom := lastPointPrice - boxHeightDown
                 activeKLDirection := "DOWN"
+
+                activeKLBox := box.new(left=lastPointIndex, top=activeKLTop, right=bar_index + klBoxBars, bottom=activeKLBottom, xloc=xloc.bar_index, bgcolor=color.new(color.fuchsia, 86), border_color=color.new(color.rgb(255, 105, 180), 0), border_width=2)
+                activeKLLabel := label.new(bar_index + math.min(klBoxBars, 50), (activeKLTop + activeKLBottom) / 2.0, tfLabel + " KL DOWN", xloc=xloc.bar_index, style=label.style_label_left, color=color.new(color.rgb(255, 105, 180), 78), textcolor=color.black, size=size.small)
+
         lastPointPrice := pivL
         lastPointIndex := newPointIndexLow
         lastPointType := -1
 
 //=============================================================================
-// 5. BROKEN KL VISUAL
-//=============================================================================
-// This uses simple close-through-box logic as a VISUAL placeholder.
-// Later it must be replaced with NCI valid breakout standards.
+// 6. BROKEN KL VISUAL
 //=============================================================================
 
 upKLBroken = showBrokenKL and activeKLDirection == "UP" and not na(activeKLBottom) and close < activeKLBottom
@@ -183,18 +172,17 @@ downKLBroken = showBrokenKL and activeKLDirection == "DOWN" and not na(activeKLT
 if upKLBroken or downKLBroken
     box.delete(brokenKLBox)
     label.delete(brokenKLLabel)
-    [brokenKLBox, brokenKLLabel, lastBrokenText] = f_makeBrokenBox(activeKLDirection, tfLabel, activeKLTop, activeKLBottom)
+
+    brokenKLBox := box.new(left=bar_index - pivotLen, top=activeKLTop, right=bar_index + math.min(klBoxBars, 60), bottom=activeKLBottom, xloc=xloc.bar_index, bgcolor=color.new(color.orange, 86), border_color=color.new(color.orange, 0), border_width=2)
+    lastBrokenText := "KL " + tfLabel + " Broken"
+    brokenKLLabel := label.new(bar_index, (activeKLTop + activeKLBottom) / 2.0, lastBrokenText, xloc=xloc.bar_index, style=label.style_label_left, color=color.new(color.orange, 78), textcolor=color.black, size=size.small)
+
     activeKLDirection := "BROKEN"
     cycleState := activeDirection == "UP" ? "UP KL BROKEN" : activeDirection == "DOWN" ? "DOWN KL BROKEN" : "KL BROKEN"
 
 //=============================================================================
-// 6. DASHBOARD
+// 7. DASHBOARD
 //=============================================================================
-
-f_stateBg(_state) =>
-    str.contains(_state, "UP") and not str.contains(_state, "BROKEN") ? color.new(color.green, 25) :
-     str.contains(_state, "DOWN") and not str.contains(_state, "BROKEN") ? color.new(color.red, 25) :
-     str.contains(_state, "BROKEN") ? color.new(color.orange, 25) : color.new(color.gray, 75)
 
 var table dash = table.new(position.top_right, 2, 7, border_width=1)
 
@@ -215,7 +203,7 @@ if barstate.islast and showDashboard
     table.cell(dash, 1, 6, "Cycle → KL Box", text_color=color.white, bgcolor=color.new(color.blue, 70))
 
 //=============================================================================
-// 7. ALERTS
+// 8. ALERTS
 //=============================================================================
 
 alertcondition(upKLBroken, title="NCI KL UP Broken Visual", message="NCI visual KL UP broken. Validate with NCI breakout standard.")

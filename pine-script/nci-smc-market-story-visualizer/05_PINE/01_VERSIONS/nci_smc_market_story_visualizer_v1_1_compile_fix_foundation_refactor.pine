@@ -1,0 +1,318 @@
+//@version=6
+indicator("NCI x SMC Market Story Visualizer [Ravi Custom] v1.1", shorttitle="NCIStory", overlay=true, max_boxes_count=500, max_lines_count=500, max_labels_count=500)
+
+// v1.1 Compile Fix + Foundation Refactor
+// Visual-only. No execution logic.
+// Fixes v1.0 compile issues: shorttitle, reserved name, string valuewhen.
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 1. Inputs
+// ─────────────────────────────────────────────────────────────────────────────
+grpTF = "01. Timeframe Story Stack"
+tf1 = input.timeframe("240", "TF Slot 1 - Master Story", group=grpTF)
+tf2 = input.timeframe("60", "TF Slot 2 - Explains Slot 1", group=grpTF)
+tf3 = input.timeframe("15", "TF Slot 3 - Explains Slot 2", group=grpTF)
+tf4 = input.timeframe("5", "TF Slot 4 - Explains Slot 3", group=grpTF)
+showChartLayer = input.bool(true, "Show Current Chart TF Working Layer", group=grpTF)
+
+grpView = "02. Theme / Display"
+themeMode = input.string("Light - Black Font", "Theme", options=["Light - Black Font", "Dark - White Font"], group=grpView)
+panelMode = input.string("Mobile Compact", "Panel Mode", options=["Mobile Compact", "Normal", "Full Debug"], group=grpView)
+panelPos = input.string("Top Right", "Panel Position", options=["Top Right", "Top Left", "Bottom Right", "Bottom Left"], group=grpView)
+showPanel = input.bool(true, "Show Story Panel", group=grpView)
+showChartKL = input.bool(true, "Show Chart TF KL / Range", group=grpView)
+showMasterKL = input.bool(true, "Show Master KL", group=grpView)
+showSDZones = input.bool(true, "Show SD Zones", group=grpView)
+showFinalStoryLabel = input.bool(false, "Show Final Story Label", group=grpView)
+showDebug = input.bool(false, "Debug", group=grpView)
+
+grpCalc = "03. Structure Settings"
+emaLen = input.int(20, "Temporary EMA Gauge", minval=1, group=grpCalc)
+atrLen = input.int(14, "ATR Length", minval=1, group=grpCalc)
+pLeft = input.int(3, "Pivot Left", minval=1, maxval=20, group=grpCalc)
+pRight = input.int(3, "Pivot Right", minval=1, maxval=20, group=grpCalc)
+rangeAtrMult = input.float(2.0, "Range Width ATR Multiplier", minval=0.5, maxval=10.0, step=0.25, group=grpCalc)
+nearAtrMult = input.float(0.35, "Near Edge ATR Multiplier", minval=0.05, maxval=2.0, step=0.05, group=grpCalc)
+lineLen = input.int(130, "Chart KL / Range Length", minval=20, maxval=500, group=grpCalc)
+masterLineLen = input.int(280, "Master KL Length", minval=50, maxval=1000, group=grpCalc)
+
+grpNCI = "04. NCI Validation"
+maruRatio = input.float(0.70, "Maru Body / Range", minval=0.50, maxval=0.95, step=0.05, group=grpNCI)
+bigMaruAtr = input.float(1.15, "Big Maru ATR Multiplier", minval=0.50, maxval=3.00, step=0.05, group=grpNCI)
+smallCandleMax = input.float(0.65, "Small Candle Max vs Big Candle", minval=0.20, maxval=1.00, step=0.05, group=grpNCI)
+minBodyBeyondLine = input.float(0.30, "Min Body Beyond Line", minval=0.05, maxval=0.80, step=0.05, group=grpNCI)
+
+grpSD = "05. NCI Supply / Demand"
+sdImpulseAtr = input.float(1.00, "SD Impulse ATR Multiplier", minval=0.20, maxval=3.00, step=0.05, group=grpSD)
+sdBoxLen = input.int(80, "SD Box Length", minval=20, maxval=300, group=grpSD)
+showOnlyRelevantSD = input.bool(true, "Show Only Story-Relevant SD", group=grpSD)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 2. Theme + general utility
+// ─────────────────────────────────────────────────────────────────────────────
+isLight = themeMode == "Light - Black Font"
+txt = isLight ? color.black : color.white
+headBg = isLight ? color.new(color.silver, 10) : color.new(color.black, 0)
+rowBg = isLight ? color.new(color.white, 72) : color.new(color.gray, 86)
+altBg = isLight ? color.new(color.silver, 80) : color.new(color.gray, 90)
+
+f_tfLabel(string tf) => tf == "240" ? "4H" : tf == "60" ? "1H" : tf == "30" ? "30M" : tf == "15" ? "15M" : tf == "5" ? "5M" : tf == "3" ? "3M" : tf == "1" ? "1M" : tf
+f_tfMin(string tf) => tf == "1" ? 1 : tf == "3" ? 3 : tf == "5" ? 5 : tf == "15" ? 15 : tf == "30" ? 30 : tf == "60" ? 60 : tf == "240" ? 240 : tf == "D" ? 1440 : tf == "W" ? 10080 : na
+f_chartMin() => timeframe.isminutes ? timeframe.multiplier : timeframe.isdaily ? 1440 * timeframe.multiplier : timeframe.isweekly ? 10080 * timeframe.multiplier : na
+f_sameTf(string tf) => tf == timeframe.period or f_tfMin(tf) == f_chartMin()
+f_chartRole() => f_sameTf(tf1) ? "Slot 1 Master" : f_sameTf(tf2) ? "Slot 2 explains Slot 1" : f_sameTf(tf3) ? "Slot 3 explains Slot 2" : f_sameTf(tf4) ? "Slot 4 reaction" : showChartLayer ? "Extra working layer" : "Hidden"
+f_pos(string p) => p == "Top Left" ? position.top_left : p == "Bottom Right" ? position.bottom_right : p == "Bottom Left" ? position.bottom_left : position.top_right
+f_price(float x) => na(x) ? "n/a" : str.tostring(x, format.mintick)
+f_ctx(float c, float e) => c > e ? "Bullish" : c < e ? "Bearish" : "Neutral"
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 3. Candle + NCI validation helpers
+// ─────────────────────────────────────────────────────────────────────────────
+f_body(float o, float c) => math.abs(c - o)
+f_rng(float h, float l) => h - l
+f_bodyRatio(float o, float h, float l, float c) => f_rng(h, l) > 0 ? f_body(o, c) / f_rng(h, l) : 0.0
+f_isBull(float o, float c) => c > o
+f_isBear(float o, float c) => c < o
+f_isMaru(float o, float h, float l, float c) => f_bodyRatio(o, h, l, c) >= maruRatio
+f_isBigMaru(float o, float h, float l, float c, float atr) => f_isMaru(o, h, l, c) and f_rng(h, l) >= atr * bigMaruAtr
+f_isSmallAfterBig(float h, float l, float h1, float l1) => f_rng(h, l) <= f_rng(h1, l1) * smallCandleMax
+f_bodyBeyondUp(float o, float c, float line) => math.max(o, c) > line and f_body(o, c) > 0 ? (math.max(o, c) - math.max(line, math.min(o, c))) / f_body(o, c) >= minBodyBeyondLine : false
+f_bodyBeyondDown(float o, float c, float line) => math.min(o, c) < line and f_body(o, c) > 0 ? (math.min(line, math.max(o, c)) - math.min(o, c)) / f_body(o, c) >= minBodyBeyondLine : false
+f_twoMaruBreakout(float line) => not na(line) and f_isBull(open[1], close[1]) and f_isBull(open, close) and f_isMaru(open[1], high[1], low[1], close[1]) and f_isMaru(open, high, low, close) and close[1] > line and close > line and close > close[1]
+f_twoMaruBreakdown(float line) => not na(line) and f_isBear(open[1], close[1]) and f_isBear(open, close) and f_isMaru(open[1], high[1], low[1], close[1]) and f_isMaru(open, high, low, close) and close[1] < line and close < line and close < close[1]
+f_bigSmallBreakout(float line, float atr) => not na(line) and f_isBull(open[1], close[1]) and f_isBigMaru(open[1], high[1], low[1], close[1], atr) and f_isSmallAfterBig(high, low, high[1], low[1]) and low > (low[1] + f_rng(high[1], low[1]) * 0.50) and close > line and f_bodyBeyondUp(open[1], close[1], line)
+f_bigSmallBreakdown(float line, float atr) => not na(line) and f_isBear(open[1], close[1]) and f_isBigMaru(open[1], high[1], low[1], close[1], atr) and f_isSmallAfterBig(high, low, high[1], low[1]) and high < (high[1] - f_rng(high[1], low[1]) * 0.50) and close < line and f_bodyBeyondDown(open[1], close[1], line)
+f_validationText(float highLine, float lowLine, float atr) =>
+    upTwo = f_twoMaruBreakout(highLine)
+    dnTwo = f_twoMaruBreakdown(lowLine)
+    upBig = f_bigSmallBreakout(highLine, atr)
+    dnBig = f_bigSmallBreakdown(lowLine, atr)
+    not na(highLine) and close > highLine and (upTwo or upBig) ? "Valid breakout pressure candidate" : not na(lowLine) and close < lowLine and (dnTwo or dnBig) ? "Valid breakdown pressure candidate" : not na(highLine) and close > highLine ? "Breakout candidate needs confirmation" : not na(lowLine) and close < lowLine ? "Breakdown candidate needs confirmation" : upTwo ? "Bullish pressure inside range" : dnTwo ? "Bearish pressure inside range" : "No valid break/pullback pressure yet"
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 4. Pivot / KL / master structure / child hierarchy
+// ─────────────────────────────────────────────────────────────────────────────
+f_pivH(int occ) =>
+    ph = ta.pivothigh(high, pLeft, pRight)
+    ta.valuewhen(not na(ph), ph, occ)
+f_pivL(int occ) =>
+    pl = ta.pivotlow(low, pLeft, pRight)
+    ta.valuewhen(not na(pl), pl, occ)
+f_klState(float ph, float pl) => na(ph) or na(pl) ? "KL building" : close > ph ? "Above prelim KL DOWN" : close < pl ? "Below prelim KL UP" : "Between prelim KLs"
+f_masterState(float c, float ph, float phPrev, float pl, float plPrev, float atr) =>
+    enough = not na(ph) and not na(phPrev) and not na(pl) and not na(plPrev)
+    hh = enough and ph > phPrev
+    hl = enough and pl > plPrev
+    lh = enough and ph < phPrev
+    ll = enough and pl < plPrev
+    width = not na(ph) and not na(pl) ? math.abs(ph - pl) : na
+    rangeCtx = not na(width) and width <= atr * rangeAtrMult
+    c > ph and enough ? "Breakout attempt above master KL DOWN" : c < pl and enough ? "Breakdown attempt below master KL UP" : hh and hl ? "Bullish continuation candidate" : lh and ll ? "Bearish continuation candidate" : rangeCtx ? "Master range candidate" : enough ? "Master transition / mixed" : "Master structure building"
+f_eventAnchor(float c, float ph, float pl, float atr, string st) =>
+    nearHigh = not na(ph) and math.abs(c - ph) <= atr * nearAtrMult
+    nearLow = not na(pl) and math.abs(c - pl) <= atr * nearAtrMult
+    c > ph ? "Breakout anchor above master KL DOWN" : c < pl ? "Breakdown anchor below master KL UP" : str.contains(st, "Bearish") and nearLow ? "Bearish LL reaction: child pullback explanation" : str.contains(st, "Bullish") and nearHigh ? "Bullish HH reaction: child pullback explanation" : str.contains(st, "Bearish") and nearHigh ? "Bearish LH / KL DOWN decision anchor" : str.contains(st, "Bullish") and nearLow ? "Bullish HL / KL UP decision anchor" : str.contains(st, "range") and nearHigh ? "Range high decision anchor" : str.contains(st, "range") and nearLow ? "Range low decision anchor" : "No active master event anchor"
+f_childRole(string parentState, string parentAnchor, string childState, float childC, float childH, float childL) =>
+    childBreakUp = not na(childH) and childC > childH
+    childBreakDn = not na(childL) and childC < childL
+    parentBear = str.contains(parentState, "Bearish")
+    parentBull = str.contains(parentState, "Bullish")
+    llReaction = str.contains(parentAnchor, "LL reaction")
+    hhReaction = str.contains(parentAnchor, "HH reaction")
+    parentRange = str.contains(parentState, "range") or str.contains(parentAnchor, "Range")
+    parentBear and llReaction and childState == "Bullish" ? "Pullback explanation from parent LL" : parentBull and hhReaction and childState == "Bearish" ? "Pullback explanation from parent HH" : parentBear and childState == "Bearish" ? "Supports bearish continuation" : parentBull and childState == "Bullish" ? "Supports bullish continuation" : parentBear and childBreakUp ? "Transition warning only, not HTF reversal" : parentBull and childBreakDn ? "Transition warning only, not HTF reversal" : parentRange ? "Range/internal rotation explanation" : "Child explanation building"
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 5. Range engine
+// ─────────────────────────────────────────────────────────────────────────────
+f_rangeMid(float hi, float lo) => not na(hi) and not na(lo) ? (hi + lo) / 2.0 : na
+f_rangeActive(float hi, float lo, float atr) => not na(hi) and not na(lo) and math.abs(hi - lo) <= atr * rangeAtrMult
+f_rangePos(float c, float hi, float lo, float atr) =>
+    nearHi = not na(hi) and math.abs(c - hi) <= atr * nearAtrMult
+    nearLo = not na(lo) and math.abs(c - lo) <= atr * nearAtrMult
+    c > hi ? "Above range high" : c < lo ? "Below range low" : nearHi ? "Near range high decision" : nearLo ? "Near range low decision" : "Range middle / noise"
+f_rangeStory(float c, float hi, float lo, float mid, float atr, string validation) =>
+    active = f_rangeActive(hi, lo, atr)
+    nearHi = not na(hi) and math.abs(c - hi) <= atr * nearAtrMult
+    nearLo = not na(lo) and math.abs(c - lo) <= atr * nearAtrMult
+    str.contains(validation, "Valid breakout") ? "Validated range breakout pressure" : str.contains(validation, "Valid breakdown") ? "Validated range breakdown pressure" : active and c > hi ? "Fakeout / breakout candidate above range" : active and c < lo ? "Fakeout / breakdown candidate below range" : active and nearHi ? "Range high decision: wait validation" : active and nearLo ? "Range low decision: wait validation" : active and c > mid ? "Range rotation up toward high" : active and c < mid ? "Range rotation down toward low" : active ? "Range middle: low conviction" : "No clean range"
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 6. NCI Supply / Demand engine
+// ─────────────────────────────────────────────────────────────────────────────
+f_demandLow() => math.min(open[1], close[1])
+f_demandHigh() => high[1]
+f_supplyHigh() => math.max(open[1], close[1])
+f_supplyLow() => low[1]
+f_bullImpulse(float atr) => close > open and f_rng(high, low) >= atr * sdImpulseAtr and close > high[1]
+f_bearImpulse(float atr) => close < open and f_rng(high, low) >= atr * sdImpulseAtr and close < low[1]
+f_strongBullImpulse(float atr) => f_bullImpulse(atr) and f_isMaru(open, high, low, close)
+f_strongBearImpulse(float atr) => f_bearImpulse(atr) and f_isMaru(open, high, low, close)
+f_lastDemandLow(float atr) => ta.valuewhen(f_bullImpulse(atr), f_demandLow(), 0)
+f_lastDemandHigh(float atr) => ta.valuewhen(f_bullImpulse(atr), f_demandHigh(), 0)
+f_lastSupplyHigh(float atr) => ta.valuewhen(f_bearImpulse(atr), f_supplyHigh(), 0)
+f_lastSupplyLow(float atr) => ta.valuewhen(f_bearImpulse(atr), f_supplyLow(), 0)
+f_lastDemandCode(float atr) => ta.valuewhen(f_bullImpulse(atr), f_strongBullImpulse(atr) ? 2.0 : 1.0, 0)
+f_lastSupplyCode(float atr) => ta.valuewhen(f_bearImpulse(atr), f_strongBearImpulse(atr) ? 2.0 : 1.0, 0)
+f_demandTypeText(float code) => code == 2.0 ? "Strongest demand candidate" : code == 1.0 ? "Demand candidate" : "Demand building"
+f_supplyTypeText(float code) => code == 2.0 ? "Strongest supply candidate" : code == 1.0 ? "Supply candidate" : "Supply building"
+f_sdState(float dLow, float dHigh, float sLow, float sHigh) =>
+    demandBroken = not na(dLow) and close < dLow
+    supplyBroken = not na(sHigh) and close > sHigh
+    demandActive = not na(dLow) and not na(dHigh) and close >= dLow
+    supplyActive = not na(sLow) and not na(sHigh) and close <= sHigh
+    demandBroken and supplyBroken ? "Both latest SD candidates broken / obsolete" : demandBroken ? "Demand obsolete / broken" : supplyBroken ? "Supply obsolete / broken" : demandActive and supplyActive ? "Demand and supply context active" : demandActive ? "Demand context active" : supplyActive ? "Supply context active" : "SD building"
+f_sdStory(string masterState, string rangeStory, string sdState) =>
+    str.contains(sdState, "obsolete") ? sdState : str.contains(masterState, "Bearish") and str.contains(sdState, "Supply") ? "Supply supports bearish story" : str.contains(masterState, "Bullish") and str.contains(sdState, "Demand") ? "Demand supports bullish story" : str.contains(rangeStory, "low") and str.contains(sdState, "Demand") ? "Demand near range low decision" : str.contains(rangeStory, "high") and str.contains(sdState, "Supply") ? "Supply near range high decision" : sdState
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 7. Final story decision
+// ─────────────────────────────────────────────────────────────────────────────
+f_finalStory(string masterState, string anchor, string child1, string rangeStory, string validation, string sdStory) =>
+    bear = str.contains(masterState, "Bearish")
+    bull = str.contains(masterState, "Bullish")
+    rangeCtx = str.contains(masterState, "range") or str.contains(rangeStory, "Range")
+    validBreak = str.contains(validation, "Valid breakout")
+    validDown = str.contains(validation, "Valid breakdown")
+    sdBull = str.contains(sdStory, "Demand supports bullish") or str.contains(sdStory, "Demand near")
+    sdBear = str.contains(sdStory, "Supply supports bearish") or str.contains(sdStory, "Supply near")
+    pullbackFromLL = str.contains(child1, "Pullback explanation from parent LL")
+    pullbackFromHH = str.contains(child1, "Pullback explanation from parent HH")
+    warning = str.contains(child1, "Transition warning")
+    bear and pullbackFromLL ? "4H bearish continuation; 1H explains pullback from 4H LL" : bull and pullbackFromHH ? "4H bullish continuation; 1H explains pullback from 4H HH" : bear and sdBear and validDown ? "Bearish continuation supported by SD + NCI breakdown pressure" : bull and sdBull and validBreak ? "Bullish continuation supported by SD + NCI breakout pressure" : rangeCtx and validBreak ? "Range breakout pressure forming; wait parent validation" : rangeCtx and validDown ? "Range breakdown pressure forming; wait parent validation" : rangeCtx ? "Range story active; trade edges, avoid middle" : warning ? "Child transition warning; parent story not invalidated yet" : bear ? "4H bearish story active; wait for child pullback/continuation proof" : bull ? "4H bullish story active; wait for child pullback/continuation proof" : "Story building / mixed; wait for cleaner structure"
+f_confidence(string finalStory, string validation, string sdStory) =>
+    str.contains(finalStory, "supported") ? "Aligned" : str.contains(finalStory, "warning") ? "Warning" : str.contains(finalStory, "Range") ? "Decision zone" : str.contains(validation, "needs confirmation") ? "Needs confirmation" : str.contains(sdStory, "obsolete") ? "Mixed" : "Building"
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 8. MTF requests + calculated story
+// ─────────────────────────────────────────────────────────────────────────────
+s1C = request.security(syminfo.tickerid, tf1, close)
+s2C = request.security(syminfo.tickerid, tf2, close)
+s3C = request.security(syminfo.tickerid, tf3, close)
+s4C = request.security(syminfo.tickerid, tf4, close)
+s1E = request.security(syminfo.tickerid, tf1, ta.ema(close, emaLen))
+s2E = request.security(syminfo.tickerid, tf2, ta.ema(close, emaLen))
+s3E = request.security(syminfo.tickerid, tf3, ta.ema(close, emaLen))
+s4E = request.security(syminfo.tickerid, tf4, ta.ema(close, emaLen))
+s1Atr = request.security(syminfo.tickerid, tf1, ta.atr(atrLen))
+
+s1H = request.security(syminfo.tickerid, tf1, f_pivH(0))
+s1L = request.security(syminfo.tickerid, tf1, f_pivL(0))
+s1PH = request.security(syminfo.tickerid, tf1, f_pivH(1))
+s1PL = request.security(syminfo.tickerid, tf1, f_pivL(1))
+s2H = request.security(syminfo.tickerid, tf2, f_pivH(0))
+s2L = request.security(syminfo.tickerid, tf2, f_pivL(0))
+s3H = request.security(syminfo.tickerid, tf3, f_pivH(0))
+s3L = request.security(syminfo.tickerid, tf3, f_pivL(0))
+s4H = request.security(syminfo.tickerid, tf4, f_pivH(0))
+s4L = request.security(syminfo.tickerid, tf4, f_pivL(0))
+
+s2State = f_ctx(s2C, s2E)
+s3State = f_ctx(s3C, s3E)
+s4State = f_ctx(s4C, s4E)
+masterState = f_masterState(s1C, s1H, s1PH, s1L, s1PL, s1Atr)
+masterAnchor = f_eventAnchor(s1C, s1H, s1L, s1Atr, masterState)
+child1Role = f_childRole(masterState, masterAnchor, s2State, s2C, s2H, s2L)
+child2Role = f_childRole(s2State, child1Role, s3State, s3C, s3H, s3L)
+child3Role = f_childRole(s3State, child2Role, s4State, s4C, s4H, s4L)
+
+chartH = f_pivH(0)
+chartL = f_pivL(0)
+chartMid = f_rangeMid(chartH, chartL)
+chartAtr = ta.atr(atrLen)
+validation = f_validationText(chartH, chartL, chartAtr)
+chartRangeStory = f_rangeStory(close, chartH, chartL, chartMid, chartAtr, validation)
+chartRangePos = f_rangePos(close, chartH, chartL, chartAtr)
+chartKLState = f_klState(chartH, chartL)
+
+chartDLow = f_lastDemandLow(chartAtr)
+chartDHigh = f_lastDemandHigh(chartAtr)
+chartSLow = f_lastSupplyLow(chartAtr)
+chartSHigh = f_lastSupplyHigh(chartAtr)
+chartDType = f_demandTypeText(f_lastDemandCode(chartAtr))
+chartSType = f_supplyTypeText(f_lastSupplyCode(chartAtr))
+chartSDState = f_sdState(chartDLow, chartDHigh, chartSLow, chartSHigh)
+chartSDStory = f_sdStory(masterState, chartRangeStory, chartSDState)
+
+finalStory = f_finalStory(masterState, masterAnchor, child1Role, chartRangeStory, validation, chartSDStory)
+storyConfidence = f_confidence(finalStory, validation, chartSDStory)
+stackText = f_tfLabel(tf1) + " → " + f_tfLabel(tf2) + " → " + f_tfLabel(tf3) + " → " + f_tfLabel(tf4)
+masterKLText = "UP " + f_price(s1L) + " | DOWN " + f_price(s1H)
+chartKLText = "UP " + f_price(chartL) + " | DOWN " + f_price(chartH)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 9. Story panel
+// ─────────────────────────────────────────────────────────────────────────────
+var table t = table.new(f_pos(panelPos), 2, 16, border_width=1)
+f_cell(int c, int r, string s, color bg) => table.cell(t, c, r, s, bgcolor=bg, text_color=txt, text_size=panelMode == "Mobile Compact" ? size.tiny : size.small)
+if barstate.islast and showPanel
+    table.clear(t, 0, 0, 1, 15)
+    f_cell(0, 0, "NCI Story", headBg)
+    f_cell(1, 0, "v1.1 Fix", headBg)
+    if panelMode == "Mobile Compact"
+        f_cell(0, 1, "Final", altBg), f_cell(1, 1, finalStory, altBg)
+        f_cell(0, 2, "Confidence", rowBg), f_cell(1, 2, storyConfidence, rowBg)
+        f_cell(0, 3, "4H", rowBg), f_cell(1, 3, masterState, rowBg)
+        f_cell(0, 4, "1H", rowBg), f_cell(1, 4, child1Role, rowBg)
+        f_cell(0, 5, "Range/SD", rowBg), f_cell(1, 5, chartRangeStory + " | " + chartSDStory, rowBg)
+        f_cell(0, 6, "NCI", rowBg), f_cell(1, 6, validation, rowBg)
+    else
+        f_cell(0, 1, "Final Story", altBg), f_cell(1, 1, finalStory, altBg)
+        f_cell(0, 2, "Confidence", rowBg), f_cell(1, 2, storyConfidence, rowBg)
+        f_cell(0, 3, "Stack", rowBg), f_cell(1, 3, stackText, rowBg)
+        f_cell(0, 4, "4H Master", rowBg), f_cell(1, 4, masterState + " | " + masterKLText, rowBg)
+        f_cell(0, 5, "4H Anchor", rowBg), f_cell(1, 5, masterAnchor, rowBg)
+        f_cell(0, 6, "1H explains 4H", rowBg), f_cell(1, 6, child1Role, rowBg)
+        f_cell(0, 7, "15M / 5M", rowBg), f_cell(1, 7, child2Role + " | " + child3Role, rowBg)
+        f_cell(0, 8, "Range", rowBg), f_cell(1, 8, chartRangeStory + " | " + chartRangePos, rowBg)
+        f_cell(0, 9, "NCI Validation", rowBg), f_cell(1, 9, validation, rowBg)
+        f_cell(0, 10, "SD Context", rowBg), f_cell(1, 10, chartSDStory, rowBg)
+        if panelMode == "Full Debug"
+            f_cell(0, 11, "Chart TF", rowBg), f_cell(1, 11, timeframe.period + " | " + f_chartRole() + " | " + chartKLText, rowBg)
+            f_cell(0, 12, "Demand", rowBg), f_cell(1, 12, chartDType + " " + f_price(chartDLow) + "-" + f_price(chartDHigh), rowBg)
+            f_cell(0, 13, "Supply", rowBg), f_cell(1, 13, chartSType + " " + f_price(chartSLow) + "-" + f_price(chartSHigh), rowBg)
+            f_cell(0, 14, "HTF LL/HH Law", rowBg), f_cell(1, 14, "LTF reaction = pullback first", rowBg)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 10. Lines, zones, labels
+// ─────────────────────────────────────────────────────────────────────────────
+var line cUp = na, cDn = na, rMid = na, mUp = na, mDn = na
+var label cUpL = na, cDnL = na, rMidL = na, mUpL = na, mDnL = na, storyL = na
+var box dBox = na, sBox = na
+var label dLab = na, sLab = na
+if barstate.islast
+    line.delete(cUp), line.delete(cDn), line.delete(rMid), line.delete(mUp), line.delete(mDn)
+    label.delete(cUpL), label.delete(cDnL), label.delete(rMidL), label.delete(mUpL), label.delete(mDnL), label.delete(dLab), label.delete(sLab), label.delete(storyL)
+    box.delete(dBox), box.delete(sBox)
+    if showChartLayer and showChartKL
+        if not na(chartL)
+            cUp := line.new(bar_index - lineLen, chartL, bar_index, chartL, extend=extend.right, width=1, color=color.new(color.green, 20))
+            cUpL := label.new(bar_index, chartL, "Range/KL LOW\n" + f_price(chartL), style=label.style_label_left, textcolor=color.white, color=color.new(color.green, 10), size=size.tiny)
+        if not na(chartH)
+            cDn := line.new(bar_index - lineLen, chartH, bar_index, chartH, extend=extend.right, width=1, color=color.new(color.red, 20))
+            cDnL := label.new(bar_index, chartH, "Range/KL HIGH\n" + f_price(chartH), style=label.style_label_left, textcolor=color.white, color=color.new(color.red, 10), size=size.tiny)
+        if not na(chartMid)
+            rMid := line.new(bar_index - lineLen, chartMid, bar_index, chartMid, extend=extend.right, width=1, style=line.style_dotted, color=color.new(color.gray, 20))
+            rMidL := label.new(bar_index, chartMid, "Range MID", style=label.style_label_left, textcolor=color.black, color=color.new(color.silver, 55), size=size.tiny)
+    if showMasterKL
+        if not na(s1L)
+            mUp := line.new(bar_index - masterLineLen, s1L, bar_index, s1L, extend=extend.right, width=2, color=color.new(color.green, 45))
+            mUpL := label.new(bar_index, s1L, f_tfLabel(tf1) + " MASTER KL UP\n" + f_price(s1L), style=label.style_label_left, textcolor=color.black, color=color.new(color.green, 65), size=size.tiny)
+        if not na(s1H)
+            mDn := line.new(bar_index - masterLineLen, s1H, bar_index, s1H, extend=extend.right, width=2, color=color.new(color.red, 45))
+            mDnL := label.new(bar_index, s1H, f_tfLabel(tf1) + " MASTER KL DOWN\n" + f_price(s1H), style=label.style_label_left, textcolor=color.black, color=color.new(color.red, 65), size=size.tiny)
+    if showSDZones
+        drawDemand = not na(chartDLow) and not na(chartDHigh) and (not showOnlyRelevantSD or str.contains(chartSDStory, "Demand") or str.contains(masterState, "Bullish"))
+        drawSupply = not na(chartSLow) and not na(chartSHigh) and (not showOnlyRelevantSD or str.contains(chartSDStory, "Supply") or str.contains(masterState, "Bearish"))
+        if drawDemand
+            dBox := box.new(left=bar_index - sdBoxLen, top=chartDHigh, right=bar_index, bottom=chartDLow, bgcolor=color.new(color.green, 86), border_color=color.new(color.green, 35), extend=extend.right)
+            dLab := label.new(bar_index, chartDHigh, chartDType, style=label.style_label_left, textcolor=color.black, color=color.new(color.green, 70), size=size.tiny)
+        if drawSupply
+            sBox := box.new(left=bar_index - sdBoxLen, top=chartSHigh, right=bar_index, bottom=chartSLow, bgcolor=color.new(color.red, 86), border_color=color.new(color.red, 35), extend=extend.right)
+            sLab := label.new(bar_index, chartSLow, chartSType, style=label.style_label_left, textcolor=color.black, color=color.new(color.red, 70), size=size.tiny)
+    if showFinalStoryLabel
+        storyL := label.new(bar_index, close, "Final Story\n" + finalStory + "\nConfidence: " + storyConfidence, style=label.style_label_left, textcolor=color.black, color=color.new(color.yellow, 55), size=size.tiny)
+    if showDebug
+        label.new(bar_index, low, "DEBUG v1.1\n" + finalStory, style=label.style_label_up, textcolor=txt, color=rowBg, size=size.tiny)
+
+// Next: v1.2 Real NCI Market Structure Engine + SMC/SATS integration roadmap.

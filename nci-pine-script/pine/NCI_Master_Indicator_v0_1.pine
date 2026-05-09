@@ -1,0 +1,201 @@
+//@version=6
+indicator(title="NCI Master Indicator v0.1 — Candle Engine + Debug", shorttitle="NCI v0.1", overlay=true, max_labels_count=500, max_lines_count=100, max_boxes_count=100)
+
+//=============================================================================
+// NCI MASTER INDICATOR v0.1
+// Pine Script: v6
+// Module 01: Preset Engine
+// Module 02: Candle Engine
+// Module 03: Debug Dashboard
+//=============================================================================
+
+groupPreset = "01. NCI Preset Engine"
+groupCandle = "02. Candle Engine Settings"
+groupVisual = "03. Visual Settings"
+groupDebug  = "04. Debug Mode"
+
+presetMode = input.string(defval="Universal", title="NCI Preset", options=["Universal", "Scalping", "Day Trading", "Swing Trading", "BTCUSD", "XAUUSD", "Manual Custom"], group=groupPreset)
+strictMode = input.bool(defval=true, title="Strict NCI Rules", group=groupPreset)
+
+manualMaruRatio = input.float(defval=0.70, title="Manual Marubozu Body Ratio", minval=0.50, maxval=0.95, step=0.01, group=groupCandle)
+manualSpecialMaruRatio = input.float(defval=0.50, title="Manual Special Maru Body Ratio", minval=0.40, maxval=0.90, step=0.01, group=groupCandle)
+manualCloseNearExtreme = input.float(defval=0.90, title="Manual Close Near High/Low Ratio", minval=0.70, maxval=0.99, step=0.01, group=groupCandle)
+manualDojiBodyRatio = input.float(defval=0.15, title="Manual Doji Max Body Ratio", minval=0.03, maxval=0.30, step=0.01, group=groupCandle)
+manualPinbarBodyRatio = input.float(defval=0.50, title="Manual Pinbar Max Body Ratio", minval=0.20, maxval=0.60, step=0.01, group=groupCandle)
+manualPinbarWickMultiplier = input.float(defval=2.00, title="Manual Pinbar Wick / Body Multiplier", minval=1.00, maxval=5.00, step=0.10, group=groupCandle)
+atrLength = input.int(defval=14, title="ATR Length for Candle Significance", minval=5, maxval=100, group=groupCandle)
+minSignificantAtrRatio = input.float(defval=0.35, title="Minimum Candle Size vs ATR", minval=0.05, maxval=2.00, step=0.05, group=groupCandle)
+
+showCandleMarkers = input.bool(defval=true, title="Show Candle Type Markers", group=groupVisual)
+showNormalCandles = input.bool(defval=false, title="Show Normal Candle Markers", group=groupVisual)
+showDashboard = input.bool(defval=true, title="Show NCI Dashboard", group=groupVisual)
+debugMode = input.bool(defval=true, title="Debug Mode", group=groupDebug)
+
+//=============================================================================
+// 1. PRESET ENGINE
+//=============================================================================
+
+float presetMaruRatio = switch presetMode
+    "Universal"     => 0.70
+    "Scalping"      => 0.72
+    "Day Trading"   => 0.70
+    "Swing Trading" => 0.68
+    "BTCUSD"        => 0.72
+    "XAUUSD"        => 0.70
+    "Manual Custom" => manualMaruRatio
+
+float presetSpecialMaruRatio = switch presetMode
+    "Universal"     => 0.50
+    "Scalping"      => 0.52
+    "Day Trading"   => 0.50
+    "Swing Trading" => 0.50
+    "BTCUSD"        => 0.52
+    "XAUUSD"        => 0.50
+    "Manual Custom" => manualSpecialMaruRatio
+
+float presetCloseNearExtreme = switch presetMode
+    "Universal"     => 0.90
+    "Scalping"      => 0.92
+    "Day Trading"   => 0.90
+    "Swing Trading" => 0.88
+    "BTCUSD"        => 0.92
+    "XAUUSD"        => 0.90
+    "Manual Custom" => manualCloseNearExtreme
+
+float presetDojiBodyRatio = switch presetMode
+    "Universal"     => 0.15
+    "Scalping"      => 0.12
+    "Day Trading"   => 0.15
+    "Swing Trading" => 0.18
+    "BTCUSD"        => 0.12
+    "XAUUSD"        => 0.15
+    "Manual Custom" => manualDojiBodyRatio
+
+float presetPinbarBodyRatio = switch presetMode
+    "Universal"     => 0.50
+    "Scalping"      => 0.45
+    "Day Trading"   => 0.50
+    "Swing Trading" => 0.50
+    "BTCUSD"        => 0.45
+    "XAUUSD"        => 0.50
+    "Manual Custom" => manualPinbarBodyRatio
+
+float presetPinbarWickMultiplier = switch presetMode
+    "Universal"     => 2.00
+    "Scalping"      => 2.20
+    "Day Trading"   => 2.00
+    "Swing Trading" => 1.80
+    "BTCUSD"        => 2.30
+    "XAUUSD"        => 2.00
+    "Manual Custom" => manualPinbarWickMultiplier
+
+maruRatio          = strictMode ? math.max(presetMaruRatio, 0.70) : presetMaruRatio
+specialMaruRatio   = strictMode ? math.max(presetSpecialMaruRatio, 0.50) : presetSpecialMaruRatio
+closeNearExtreme   = strictMode ? math.max(presetCloseNearExtreme, 0.90) : presetCloseNearExtreme
+dojiBodyRatio      = strictMode ? math.min(presetDojiBodyRatio, 0.15) : presetDojiBodyRatio
+pinbarBodyRatio    = strictMode ? math.min(presetPinbarBodyRatio, 0.50) : presetPinbarBodyRatio
+pinbarWickMultiple = strictMode ? math.max(presetPinbarWickMultiplier, 2.00) : presetPinbarWickMultiplier
+
+//=============================================================================
+// 2. CANDLE ENGINE
+//=============================================================================
+
+candleRange = high - low
+bodySize = math.abs(close - open)
+upperWick = high - math.max(open, close)
+lowerWick = math.min(open, close) - low
+bodyRatio = candleRange > 0 ? bodySize / candleRange : 0.0
+closePosition = candleRange > 0 ? (close - low) / candleRange : 0.5
+atrValue = ta.atr(atrLength)
+isSignificantCandle = candleRange >= atrValue * minSignificantAtrRatio
+isBull = close > open
+isBear = close < open
+
+isBullMaru = isSignificantCandle and isBull and bodyRatio >= maruRatio
+isBearMaru = isSignificantCandle and isBear and bodyRatio >= maruRatio
+isMaru = isBullMaru or isBearMaru
+
+isBullSpecialMaru = isSignificantCandle and isBull and bodyRatio >= specialMaruRatio and closePosition >= closeNearExtreme and lowerWick > upperWick
+isBearSpecialMaru = isSignificantCandle and isBear and bodyRatio >= specialMaruRatio and closePosition <= 1.0 - closeNearExtreme and upperWick > lowerWick
+isSpecialMaru = isBullSpecialMaru or isBearSpecialMaru
+
+isDoji = bodyRatio <= dojiBodyRatio and candleRange <= atrValue * 1.20
+
+hasBullishPinWick = lowerWick >= bodySize * pinbarWickMultiple and lowerWick > upperWick
+hasBearishPinWick = upperWick >= bodySize * pinbarWickMultiple and upperWick > lowerWick
+isBullPinbar = isSignificantCandle and bodyRatio < pinbarBodyRatio and hasBullishPinWick and not isDoji
+isBearPinbar = isSignificantCandle and bodyRatio < pinbarBodyRatio and hasBearishPinWick and not isDoji
+isPinbar = isBullPinbar or isBearPinbar
+
+isNormalCandle = not isMaru and not isSpecialMaru and not isPinbar and not isDoji
+
+string candleClass = isBullSpecialMaru ? "Bull Special Maru" : isBearSpecialMaru ? "Bear Special Maru" : isBullMaru ? "Bull Maru" : isBearMaru ? "Bear Maru" : isDoji ? "Doji" : isBullPinbar ? "Bull Pinbar" : isBearPinbar ? "Bear Pinbar" : "Normal"
+
+//=============================================================================
+// 3. VISUAL ENGINE
+//=============================================================================
+
+plotshape(showCandleMarkers and isBullMaru, title="NCI Bull Maru", style=shape.triangleup, location=location.belowbar, text="M+", size=size.tiny, color=color.new(color.green, 0), textcolor=color.white)
+plotshape(showCandleMarkers and isBearMaru, title="NCI Bear Maru", style=shape.triangledown, location=location.abovebar, text="M-", size=size.tiny, color=color.new(color.red, 0), textcolor=color.white)
+plotshape(showCandleMarkers and isBullSpecialMaru, title="NCI Bull Special Maru", style=shape.labelup, location=location.belowbar, text="SM+", size=size.tiny, color=color.new(color.lime, 0), textcolor=color.black)
+plotshape(showCandleMarkers and isBearSpecialMaru, title="NCI Bear Special Maru", style=shape.labeldown, location=location.abovebar, text="SM-", size=size.tiny, color=color.new(color.maroon, 0), textcolor=color.white)
+plotshape(showCandleMarkers and isBullPinbar, title="NCI Bull Pinbar", style=shape.circle, location=location.belowbar, text="PB+", size=size.tiny, color=color.new(color.blue, 0), textcolor=color.white)
+plotshape(showCandleMarkers and isBearPinbar, title="NCI Bear Pinbar", style=shape.circle, location=location.abovebar, text="PB-", size=size.tiny, color=color.new(color.orange, 0), textcolor=color.black)
+plotshape(showCandleMarkers and isDoji, title="NCI Doji", style=shape.xcross, location=location.abovebar, text="DJ", size=size.tiny, color=color.new(color.gray, 0), textcolor=color.white)
+plotshape(showCandleMarkers and showNormalCandles and isNormalCandle, title="NCI Normal Candle", style=shape.square, location=location.bottom, text="N", size=size.tiny, color=color.new(color.black, 70), textcolor=color.white)
+
+//=============================================================================
+// 4. DEBUG DASHBOARD
+//=============================================================================
+
+var table dash = table.new(position.top_right, 2, 12, border_width=1)
+
+f_boolText(_condition) => _condition ? "PASS" : "FAIL"
+f_boolColor(_condition) => _condition ? color.new(color.green, 20) : color.new(color.red, 20)
+
+if barstate.islast and showDashboard
+    table.cell(dash, 0, 0, "NCI v0.1", text_color=color.white, bgcolor=color.new(color.black, 0))
+    table.cell(dash, 1, 0, "Candle Engine", text_color=color.white, bgcolor=color.new(color.black, 0))
+    table.cell(dash, 0, 1, "Pine", text_color=color.white, bgcolor=color.new(color.gray, 70))
+    table.cell(dash, 1, 1, "v6", text_color=color.white, bgcolor=color.new(color.gray, 70))
+    table.cell(dash, 0, 2, "Preset", text_color=color.white, bgcolor=color.new(color.gray, 70))
+    table.cell(dash, 1, 2, presetMode, text_color=color.white, bgcolor=color.new(color.gray, 70))
+    table.cell(dash, 0, 3, "Strict Mode", text_color=color.white, bgcolor=color.new(color.gray, 70))
+    table.cell(dash, 1, 3, strictMode ? "ON" : "OFF", text_color=color.white, bgcolor=strictMode ? color.new(color.green, 20) : color.new(color.orange, 20))
+    table.cell(dash, 0, 4, "Candle Class", text_color=color.white, bgcolor=color.new(color.gray, 70))
+    table.cell(dash, 1, 4, candleClass, text_color=color.white, bgcolor=color.new(color.blue, 65))
+    table.cell(dash, 0, 5, "Body Ratio", text_color=color.white, bgcolor=color.new(color.gray, 70))
+    table.cell(dash, 1, 5, str.tostring(bodyRatio * 100, "#.##") + "%", text_color=color.white, bgcolor=color.new(color.gray, 80))
+    table.cell(dash, 0, 6, "Close Position", text_color=color.white, bgcolor=color.new(color.gray, 70))
+    table.cell(dash, 1, 6, str.tostring(closePosition * 100, "#.##") + "%", text_color=color.white, bgcolor=color.new(color.gray, 80))
+    table.cell(dash, 0, 7, "Maru", text_color=color.white, bgcolor=color.new(color.gray, 70))
+    table.cell(dash, 1, 7, f_boolText(isMaru), text_color=color.white, bgcolor=f_boolColor(isMaru))
+    table.cell(dash, 0, 8, "Special Maru", text_color=color.white, bgcolor=color.new(color.gray, 70))
+    table.cell(dash, 1, 8, f_boolText(isSpecialMaru), text_color=color.white, bgcolor=f_boolColor(isSpecialMaru))
+    table.cell(dash, 0, 9, "Pinbar", text_color=color.white, bgcolor=color.new(color.gray, 70))
+    table.cell(dash, 1, 9, f_boolText(isPinbar), text_color=color.white, bgcolor=f_boolColor(isPinbar))
+    table.cell(dash, 0, 10, "Doji", text_color=color.white, bgcolor=color.new(color.gray, 70))
+    table.cell(dash, 1, 10, f_boolText(isDoji), text_color=color.white, bgcolor=f_boolColor(isDoji))
+    table.cell(dash, 0, 11, "Significant", text_color=color.white, bgcolor=color.new(color.gray, 70))
+    table.cell(dash, 1, 11, f_boolText(isSignificantCandle), text_color=color.white, bgcolor=f_boolColor(isSignificantCandle))
+
+string debugText = "NCI v0.1 Debug\n" + "Pine: v6\n" + "Preset: " + presetMode + "\n" + "Strict: " + (strictMode ? "ON" : "OFF") + "\n" + "Class: " + candleClass + "\n" + "Body Ratio: " + str.tostring(bodyRatio * 100, "#.##") + "%\n" + "Close Position: " + str.tostring(closePosition * 100, "#.##") + "%\n" + "Range vs ATR: " + str.tostring(candleRange / atrValue, "#.##") + "x\n" + "Maru Threshold: " + str.tostring(maruRatio * 100, "#.##") + "%"
+
+var label debugLabel = na
+if barstate.islast and debugMode
+    label.delete(debugLabel)
+    debugLabel := label.new(x=bar_index, y=high, text=debugText, style=label.style_label_down, textcolor=color.white, color=color.new(color.black, 10), size=size.small)
+
+//=============================================================================
+// 5. ALERT CONDITIONS — FOUNDATION ONLY
+//=============================================================================
+
+alertcondition(isBullMaru, title="NCI Bull Maru", message="NCI Bull Maru candle detected.")
+alertcondition(isBearMaru, title="NCI Bear Maru", message="NCI Bear Maru candle detected.")
+alertcondition(isBullSpecialMaru, title="NCI Bull Special Maru", message="NCI Bull Special Maru candle detected.")
+alertcondition(isBearSpecialMaru, title="NCI Bear Special Maru", message="NCI Bear Special Maru candle detected.")
+alertcondition(isBullPinbar, title="NCI Bull Pinbar", message="NCI Bull Pinbar candle detected.")
+alertcondition(isBearPinbar, title="NCI Bear Pinbar", message="NCI Bear Pinbar candle detected.")
+alertcondition(isDoji, title="NCI Doji", message="NCI Doji candle detected.")
+
+// END OF NCI v0.1

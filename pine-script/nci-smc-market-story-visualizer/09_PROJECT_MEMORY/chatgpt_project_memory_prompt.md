@@ -88,6 +88,7 @@ HTF sweep above/below
 HTF breakout candle
 HTF failed breakout candle
 HTF retest of broken level
+HTF LL / HH reaction after impulse
 ```
 
 ## Connected structure rule
@@ -199,6 +200,42 @@ Bearish leg
 → range high becomes decision area
 → range low becomes continuation/break area
 ```
+
+## HTF LL / HH reaction continuation rule
+
+This rule is mandatory.
+
+If the 4H is bearish and creates a new LL, then a 1H bullish reaction from that new LL is treated first as a **pullback explanation**, not as a bullish reversal.
+
+```text
+4H bearish continuation candidate
+→ 4H creates new LL
+→ 1H reacts upward from the 4H LL
+→ 1H mission = explain the pullback from that 4H LL
+→ watch whether 1H forms LH / KL DOWN rejection
+→ 4H bearish continuation remains active until valid 4H invalidation or reversal
+```
+
+Opposite bullish case:
+
+```text
+4H bullish continuation candidate
+→ 4H creates new HH
+→ 1H reacts downward from the 4H HH
+→ 1H mission = explain the pullback from that 4H HH
+→ watch whether 1H forms HL / KL UP rejection
+→ 4H bullish continuation remains active until valid 4H invalidation or reversal
+```
+
+Decision rule:
+
+```text
+LTF reaction from HTF LL/HH = pullback explanation first.
+HTF continuation story remains active until HTF structure is invalidated by valid NCI structure rules.
+LTF movement can warn, clarify, or explain, but it cannot override the HTF story alone.
+```
+
+Never flip the HTF story only because the child timeframe reacts from an HTF LL/HH.
 
 ## NCI-first rule
 

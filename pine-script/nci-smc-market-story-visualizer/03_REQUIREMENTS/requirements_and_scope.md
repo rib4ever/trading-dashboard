@@ -97,6 +97,37 @@ Normal mode must show only story-relevant visuals.
 
 Debug mode can show deeper data.
 
+### R11 — HTF LL / HH reaction handling
+
+The indicator must treat lower-timeframe reactions from a higher-timeframe LL/HH as pullback explanations first, not immediate reversals.
+
+Bearish example:
+
+```text
+4H bearish continuation candidate
+→ 4H creates new LL
+→ 1H reacts upward from 4H LL
+→ 1H explains pullback from 4H LL
+→ 4H bearish story remains active until valid 4H invalidation or reversal
+```
+
+Bullish example:
+
+```text
+4H bullish continuation candidate
+→ 4H creates new HH
+→ 1H reacts downward from 4H HH
+→ 1H explains pullback from 4H HH
+→ 4H bullish story remains active until valid 4H invalidation or reversal
+```
+
+Decision rule:
+
+```text
+LTF reaction from HTF LL/HH = pullback explanation first.
+LTF can warn or clarify, but it cannot override the HTF story alone.
+```
+
 ## 3. Non-requirements for initial stage
 
 Do not prioritize:
@@ -129,6 +160,7 @@ The indicator is successful when it can answer visually:
 What is the 4H story?
 Where is price in the 4H story?
 What 4H event is being explained?
+Is the child timeframe reaction only a pullback explanation or a valid transition warning?
 How does 1H explain 4H?
 How does 15M explain 1H?
 How does 5M explain 15M?

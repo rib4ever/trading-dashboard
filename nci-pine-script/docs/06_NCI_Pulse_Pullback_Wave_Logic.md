@@ -312,6 +312,38 @@ Trading rule:
 Skip trading range and wait for valid breakout.
 ```
 
+## Ravi confirmed range-to-wave rule
+
+When price is in range, the script must not force Pulse Wave or Pullback Wave.
+
+Correct NCI flow:
+
+```text
+Range detected
+→ wait
+→ apply NCI breakout standard
+→ valid breakout confirmed
+→ then classify the next wave as Pulse Wave or Pullback Wave depending on market cycle and HTF context
+→ then create/replace market structure and key levels
+```
+
+Important:
+
+```text
+Range does not directly create PW or PBW.
+Valid breakout from range is required first.
+```
+
+Coding implication:
+
+```text
+If rangeState = true:
+    block new PW/PBW labels
+    watch range high/low or BOI
+    require Two-Maru breakout OR Big-Maru + small-candle breakout
+    only after valid breakout, allow wave classification
+```
+
 ## Key Level rule from wave logic
 
 Key level must be created after valid wave logic.
@@ -356,8 +388,9 @@ Do not code the final MTF key level map until the following detectors exist:
 5. Two-Maru breakout detector.
 6. Big-Maru + small-candle breakout detector.
 7. Range detector.
-8. Per-timeframe key level state.
-9. Broken key level state using valid breakout, not wick break.
+8. Range-to-valid-breakout gate before PW/PBW classification.
+9. Per-timeframe key level state.
+10. Broken key level state using valid breakout, not wick break.
 ```
 
 ## Next implementation step
@@ -377,6 +410,7 @@ Pullback confirmation
 Two-Maru breakout
 Big-Maru + small-candle breakout
 Range warning
+Range-to-valid-breakout gate
 ```
 
 Only after this block is validated should we build:

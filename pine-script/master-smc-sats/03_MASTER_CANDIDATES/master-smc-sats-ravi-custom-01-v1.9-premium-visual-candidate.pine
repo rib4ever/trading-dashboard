@@ -2345,6 +2345,7 @@ pvLabelSizeTiny = pvIsClean ? size.tiny : size.small
 // - Highlights 61.8% to 80% retracement area.
 // - Searches for OB/FVG-style confluence inside/touching that area.
 // - Draws one strongest POI box.
+// - Respects market-cycle lifecycle: impulse → pullback → mitigation → reaction/invalidation.
 //
 // IMPORTANT:
 // - This block is NOT standalone.
@@ -2368,6 +2369,14 @@ fibManualPivotLen = input.int(8, "Manual Pivot Length", minval = 3, maxval = 50,
 fibManualLookback = input.int(120, "Manual OB/FVG Search Lookback", minval = 30, maxval = 500, group = GRP_FIB)
 fibZoneLower = input.float(0.618, "Fib Zone Start", minval = 0.50, maxval = 0.90, step = 0.001, group = GRP_FIB)
 fibZoneUpper = input.float(0.800, "Fib Zone End", minval = 0.55, maxval = 0.95, step = 0.001, group = GRP_FIB)
+
+fibLifecycleMode = input.string("Auto Cycle", "Fib Lifecycle Mode", options = ["Off", "Auto Cycle"], group = GRP_FIB, tooltip = "Auto Cycle hides completed or invalidated fib/POI visuals and waits for a new valid market cycle.")
+fibHideCompletedInvalid = input.bool(true, "Hide Completed / Invalid Fib", group = GRP_FIB)
+fibMitigationSource = input.string("POI or Fib Zone", "Mitigation Source", options = ["Fib Zone", "POI", "POI or Fib Zone"], group = GRP_FIB)
+fibInvalidationMode = input.string("Close Beyond 80%", "Invalidation Mode", options = ["Close Beyond 80%", "Close Beyond POI", "Close Beyond 100%"], group = GRP_FIB)
+fibReactionBars = input.int(3, "Reaction Confirm Bars", minval = 1, maxval = 20, group = GRP_FIB)
+fibReactionAtr = input.float(0.35, "Reaction Confirm ATR", minval = 0.05, maxval = 2.0, step = 0.05, group = GRP_FIB)
+fibShowGhostAfterCompletion = input.bool(false, "Show Ghost After Completion", group = GRP_FIB)
 
 int fibEffectivePivotLen = switch fibPreset
     "XAUUSD Scalping" => 6
@@ -2393,6 +2402,7 @@ float fibHighSrc = fibUseSelectedTf ? request.security(syminfo.tickerid, fibSele
 float fibLowSrc = fibUseSelectedTf ? request.security(syminfo.tickerid, fibSelectedTf, low) : low
 float fibCloseSrc = fibUseSelectedTf ? request.security(syminfo.tickerid, fibSelectedTf, close) : close
 float fibOpenSrc = fibUseSelectedTf ? request.security(syminfo.tickerid, fibSelectedTf, open) : open
+float fibAtr = ta.atr(14)
 
 float fibPh = ta.pivothigh(fibHighSrc, fibEffectivePivotLen, fibEffectivePivotLen)
 float fibPl = ta.pivotlow(fibLowSrc, fibEffectivePivotLen, fibEffectivePivotLen)
@@ -2419,6 +2429,7 @@ float fibAnchorA = fibBullMode ? fibLastLow : fibBearMode ? fibLastHigh : na
 float fibAnchorB = fibBullMode ? fibLastHigh : fibBearMode ? fibLastLow : na
 int fibAnchorABar = fibBullMode ? fibLastLowBar : fibBearMode ? fibLastHighBar : na
 int fibAnchorBBar = fibBullMode ? fibLastHighBar : fibBearMode ? fibLastLowBar : na
+int fibCycleDir = fibBullMode ? 1 : fibBearMode ? -1 : 0
 float fibRange = math.abs(fibAnchorB - fibAnchorA)
 
 float fib0 = fibBullMode ? fibLastHigh : fibBearMode ? fibLastLow : na
@@ -2430,7 +2441,8 @@ float fib800 = fibBullMode ? fibLastHigh - fibRange * fibZoneUpper : fibBearMode
 
 float fibZoneTop = math.max(fib618, fib800)
 float fibZoneBottom = math.min(fib618, fib800)
-bool fibValidVisual = showFibPoiEngine and fibHasLeg and (fibBullMode or fibBearMode) and fibRange > syminfo.mintick and not na(fibZoneTop) and not na(fibZoneBottom)
+bool fibValidBase = showFibPoiEngine and fibHasLeg and (fibBullMode or fibBearMode) and fibRange > syminfo.mintick and not na(fibZoneTop) and not na(fibZoneBottom)
+bool fibValidVisual = fibValidBase
 
 fibOverlaps(float topA, float botA, float topB, float botB) =>
     math.max(topA, botA) >= math.min(topB, botB) and math.min(topA, botA) <= math.max(topB, botB)
@@ -2478,6 +2490,55 @@ if fibValidVisual
                 fibBestPoiType := fibBullMode ? "Bullish FVG" : "Bearish FVG"
 
 bool fibHasPoi = not na(fibBestPoiTop) and not na(fibBestPoiBottom)
+float fibPoiTop = fibHasPoi ? math.max(fibBestPoiTop, fibBestPoiBottom) : na
+float fibPoiBottom = fibHasPoi ? math.min(fibBestPoiTop, fibBestPoiBottom) : na
+
+// Market-cycle lifecycle state. Visual-only. Does not feed entry logic.
+var int fibActiveABar = na
+var int fibActiveBBar = na
+var int fibActiveDir = 0
+var bool fibCycleMitigated = false
+var bool fibCycleCompleted = false
+var bool fibCycleInvalid = false
+var int fibMitigatedBar = na
+
+bool fibNewCycle = fibValidBase and (fibAnchorABar != fibActiveABar or fibAnchorBBar != fibActiveBBar or fibCycleDir != fibActiveDir)
+if fibNewCycle
+    fibActiveABar := fibAnchorABar
+    fibActiveBBar := fibAnchorBBar
+    fibActiveDir := fibCycleDir
+    fibCycleMitigated := false
+    fibCycleCompleted := false
+    fibCycleInvalid := false
+    fibMitigatedBar := na
+
+bool fibZoneTouched = fibValidBase and high >= fibZoneBottom and low <= fibZoneTop
+bool fibPoiTouched = fibValidBase and fibHasPoi and high >= fibPoiBottom and low <= fibPoiTop
+bool fibMitigationTouched = fibMitigationSource == "Fib Zone" ? fibZoneTouched : fibMitigationSource == "POI" ? fibPoiTouched : (fibZoneTouched or fibPoiTouched)
+
+if fibLifecycleMode == "Auto Cycle" and fibValidBase and fibMitigationTouched and not fibCycleMitigated and not fibCycleCompleted and not fibCycleInvalid
+    fibCycleMitigated := true
+    fibMitigatedBar := bar_index
+
+bool fibInvalidBy80 = fibValidBase and (fibBullMode ? close < fib800 : fibBearMode ? close > fib800 : false)
+bool fibInvalidBy100 = fibValidBase and (fibBullMode ? close < fib100 : fibBearMode ? close > fib100 : false)
+bool fibInvalidByPoi = fibValidBase and fibHasPoi and (fibBullMode ? close < fibPoiBottom : fibBearMode ? close > fibPoiTop : false)
+bool fibInvalidNow = fibInvalidationMode == "Close Beyond POI" ? fibInvalidByPoi : fibInvalidationMode == "Close Beyond 100%" ? fibInvalidBy100 : fibInvalidBy80
+
+if fibLifecycleMode == "Auto Cycle" and fibValidBase and fibInvalidNow and not fibCycleCompleted
+    fibCycleInvalid := true
+
+bool fibWithinReactionWindow = fibCycleMitigated and not na(fibMitigatedBar) and bar_index - fibMitigatedBar <= fibReactionBars
+bool fibBullReaction = fibValidBase and fibBullMode and fibWithinReactionWindow and high >= fibZoneTop + fibAtr * fibReactionAtr
+bool fibBearReaction = fibValidBase and fibBearMode and fibWithinReactionWindow and low <= fibZoneBottom - fibAtr * fibReactionAtr
+
+if fibLifecycleMode == "Auto Cycle" and fibValidBase and not fibCycleInvalid and (fibBullReaction or fibBearReaction)
+    fibCycleCompleted := true
+
+bool fibCycleClosed = fibLifecycleMode == "Auto Cycle" and (fibCycleInvalid or fibCycleCompleted)
+bool fibCycleGhost = fibCycleClosed and fibShowGhostAfterCompletion
+bool fibLifecycleAllowsVisual = fibLifecycleMode == "Off" or not fibHideCompletedInvalid or not fibCycleClosed or fibCycleGhost
+fibValidVisual := fibValidVisual and fibLifecycleAllowsVisual
 
 var line fibLine0 = na
 var line fibLine618 = na
@@ -2504,9 +2565,9 @@ if barstate.islast
 
     if fibValidVisual and (not fibPoiRequireObFvg or fibHasPoi)
         color fibBaseColor = fibBullMode ? themeZoneBullBase : themeZoneBearBase
-        color fibLineColor = color.new(fibBaseColor, 15)
-        color fibBoxColor = pvFibBandBg
-        color fibBoxBorder = pvFibBandBorder
+        color fibLineColor = fibCycleGhost ? color.new(themeBaseNeutral, 55) : color.new(fibBaseColor, 15)
+        color fibBoxColor = fibCycleGhost ? color.new(themeBaseNeutral, 93) : pvFibBandBg
+        color fibBoxBorder = fibCycleGhost ? color.new(themeBaseNeutral, 75) : pvFibBandBorder
         int x1 = math.min(fibAnchorABar, fibAnchorBBar)
         int x2 = bar_index + fibExtendBars
 
@@ -2518,23 +2579,29 @@ if barstate.islast
                 fibLine618 := line.new(x1, fib618, x2, fib618, color = color.new(fibLineColor, pvIsClean ? 55 : 35), style = line.style_dashed, width = 1)
                 fibLine786 := line.new(x1, fib786, x2, fib786, color = color.new(fibLineColor, pvIsClean ? 55 : 35), style = line.style_dashed, width = 1)
                 fibLine800 := line.new(x1, fib800, x2, fib800, color = color.new(fibLineColor, pvIsClean ? 65 : 45), style = line.style_dotted, width = 1)
-            fibLine705 := line.new(x1, fib705, x2, fib705, color = pvPoiBorder, style = line.style_solid, width = pvFibLineWidthMain)
+            fibLine705 := line.new(x1, fib705, x2, fib705, color = fibCycleGhost ? color.new(pvPoiBorder, 65) : pvPoiBorder, style = line.style_solid, width = pvFibLineWidthMain)
+
+
 
         if fibShowRetracementBox
-            fibRetracementBox := box.new(x1, fibZoneTop, x2, fibZoneBottom, bgcolor = fibBoxColor, border_color = fibBoxBorder, text = pvLabelsMinimal ? "" : "FIB POI 61.8-80", text_color = fibLineColor, text_size = size.tiny, text_halign = text.align_left)
+            string fibBoxTxt = fibCycleGhost ? "Fib POI — closed" : "Fib POI 61.8%-80%"
+            fibRetracementBox := box.new(x1, fibZoneTop, x2, fibZoneBottom, bgcolor = fibBoxColor, border_color = fibBoxBorder, text = pvLabelsMinimal and not fibCycleGhost ? "" : fibBoxTxt, text_color = fibLineColor, text_size = size.tiny, text_halign = text.align_left)
 
         if fibShowPoiBox and fibHasPoi
-            color poiBg = pvPoiBg
-            color poiBorder = pvPoiBorder
-            fibPoiBox := box.new(bar_index - math.min(fibEffectiveLookback, 80), math.max(fibBestPoiTop, fibBestPoiBottom), x2, math.min(fibBestPoiTop, fibBestPoiBottom), bgcolor = poiBg, border_color = poiBorder, border_width = pvPoiBorderWidth, text = pvIsClean ? "POI" : "STRONG POI", text_color = poiBorder, text_size = pvLabelSizeTiny, text_halign = text.align_left)
+            color poiBg = fibCycleGhost ? color.new(themeBaseNeutral, 92) : pvPoiBg
+            color poiBorder = fibCycleGhost ? color.new(themeBaseNeutral, 70) : pvPoiBorder
+            fibPoiBox := box.new(bar_index - math.min(fibEffectiveLookback, 80), math.max(fibBestPoiTop, fibBestPoiBottom), x2, math.min(fibBestPoiTop, fibBestPoiBottom), bgcolor = poiBg, border_color = poiBorder, border_width = pvPoiBorderWidth, text = fibCycleGhost ? "CLOSED POI" : pvIsClean ? "POI" : "STRONG POI", text_color = poiBorder, text_size = pvLabelSizeTiny, text_halign = text.align_left)
             string dirTxt = fibBullMode ? "BUY STRUCTURE" : "SELL STRUCTURE"
-            fibPoiLabel := label.new(x2, (fibBestPoiTop + fibBestPoiBottom) / 2.0, pvCompactPoiLabel ? "Fib POI • " + (fibBullMode ? "BUY" : "SELL") + "\n" + fibBestPoiType + " • " + str.tostring(fibBestPoiScore, "#.0") : "Fib POI\n" + dirTxt + "\n" + fibBestPoiType + "\nScore " + str.tostring(fibBestPoiScore, "#.0"), style = label.style_label_left, color = poiBorder, textcolor = themePanelText, size = pvLabelSizeTiny)
+            string lifecycleTxt = fibCycleInvalid ? "INVALID" : fibCycleCompleted ? "SERVED" : fibCycleMitigated ? "MITIGATED" : "ACTIVE"
+            fibPoiLabel := label.new(x2, (fibBestPoiTop + fibBestPoiBottom) / 2.0, pvCompactPoiLabel ? "Fib POI • " + (fibBullMode ? "BUY" : "SELL") + "\n" + lifecycleTxt + " • " + fibBestPoiType + " • " + str.tostring(fibBestPoiScore, "#.0") : "Fib POI\n" + dirTxt + "\n" + fibBestPoiType + "\n" + lifecycleTxt + " • Score " + str.tostring(fibBestPoiScore, "#.0"), style = label.style_label_left, color = poiBorder, textcolor = themePanelText, size = pvLabelSizeTiny)
 
-        fibDirLabel := pvLabelsMinimal ? na : label.new(x2, fib705, fibBullMode ? "70.5% Bull Fib" : "70.5% Bear Fib", style = label.style_label_left, color = color.new(pvPoiBorder, 15), textcolor = themePanelText, size = size.tiny)
+        fibDirLabel := pvLabelsMinimal ? na : label.new(x2, fib705, fibBullMode ? "70.5% Bull Fib" : "70.5% Bear Fib", style = label.style_label_left, color = color.new(pvPoiBorder, fibCycleGhost ? 65 : 15), textcolor = themePanelText, size = size.tiny)
 
 // Hidden diagnostics for Style tab only.
 plotshape(fibValidVisual and fibHasPoi and fibBullMode, title = "Fib Bull POI Found", style = shape.circle, location = location.belowbar, size = size.tiny, color = themeWarning, display = display.none)
 plotshape(fibValidVisual and fibHasPoi and fibBearMode, title = "Fib Bear POI Found", style = shape.circle, location = location.abovebar, size = size.tiny, color = themeWarning, display = display.none)
+plotshape(fibCycleInvalid, title = "Fib POI Invalidated", style = shape.xcross, location = location.top, size = size.tiny, color = color.red, display = display.none)
+plotshape(fibCycleCompleted, title = "Fib POI Served", style = shape.circle, location = location.top, size = size.tiny, color = color.green, display = display.none)
 
 // ══════════════════════════════════════════════════════════════════════════════
 // END 11 FIBONACCI POI VISUAL ENGINE BLOCK

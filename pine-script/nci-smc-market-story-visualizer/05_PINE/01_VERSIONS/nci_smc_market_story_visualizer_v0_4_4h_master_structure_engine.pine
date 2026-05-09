@@ -1,0 +1,215 @@
+//@version=6
+indicator("NCI x SMC Market Story Visualizer [Ravi Custom] v0.4", shorttitle="NCIxSMC Story v0.4", overlay=true, max_boxes_count=500, max_lines_count=500, max_labels_count=500)
+
+// v0.4 starts the first 4H/Slot1 master-structure brain.
+// It is still visual-only and preliminary, but it follows the core mind:
+// 4H master story → 1H explanation → 15M explanation → 5M reaction.
+// No execution logic.
+
+// Inputs
+grpTF = "01. Timeframe Story Stack"
+tf1 = input.timeframe("240", "TF Slot 1 - Master Story", group=grpTF)
+tf2 = input.timeframe("60", "TF Slot 2 - Explains Slot 1", group=grpTF)
+tf3 = input.timeframe("15", "TF Slot 3 - Explains Slot 2", group=grpTF)
+tf4 = input.timeframe("5", "TF Slot 4 - Explains Slot 3", group=grpTF)
+showChartLayer = input.bool(true, "Show Current Chart TF Working Layer", group=grpTF)
+
+grpTheme = "02. Theme / Mobile Display"
+themeMode = input.string("Light - Black Font", "Theme", options=["Light - Black Font", "Dark - White Font"], group=grpTheme)
+panelMode = input.string("Mobile Compact", "Story Panel Mode", options=["Mobile Compact", "Normal", "Full Debug"], group=grpTheme)
+panelPos = input.string("Top Right", "Panel Position", options=["Top Right", "Top Left", "Bottom Right", "Bottom Left"], group=grpTheme)
+showPanel = input.bool(true, "Show Story Panel", group=grpTheme)
+showChartKL = input.bool(true, "Show Chart TF KL", group=grpTheme)
+showMasterKL = input.bool(true, "Show Slot 1 Master KL", group=grpTheme)
+showDebug = input.bool(false, "Debug", group=grpTheme)
+
+grpCalc = "03. Structure Settings"
+emaLen = input.int(20, "Temporary EMA Gauge", minval=1, group=grpCalc)
+atrLen = input.int(14, "ATR Length", minval=1, group=grpCalc)
+pivotLeft = input.int(3, "Pivot Left", minval=1, maxval=20, group=grpCalc)
+pivotRight = input.int(3, "Pivot Right", minval=1, maxval=20, group=grpCalc)
+rangeAtrMult = input.float(2.0, "Range Width ATR Multiplier", minval=0.5, maxval=10.0, step=0.25, group=grpCalc)
+lineLen = input.int(110, "Chart KL Line Length", minval=20, maxval=500, group=grpCalc)
+masterLineLen = input.int(240, "Master KL Line Length", minval=50, maxval=1000, group=grpCalc)
+
+grpCandle = "04. NCI Candle Engine"
+maruRatio = input.float(0.70, "Maru Body / Range", minval=0.50, maxval=0.95, step=0.05, group=grpCandle)
+specialRatio = input.float(0.50, "Special Maru Body / Range", minval=0.30, maxval=0.80, step=0.05, group=grpCandle)
+pinbarBody = input.float(0.50, "Pinbar Max Body / Range", minval=0.10, maxval=0.60, step=0.05, group=grpCandle)
+pinbarWick = input.float(0.55, "Pinbar Wick / Range", minval=0.35, maxval=0.85, step=0.05, group=grpCandle)
+dojiBody = input.float(0.15, "Doji Max Body / Range", minval=0.03, maxval=0.30, step=0.01, group=grpCandle)
+
+// Theme
+isLight = themeMode == "Light - Black Font"
+txt = isLight ? color.black : color.white
+headBg = isLight ? color.new(color.silver, 10) : color.new(color.black, 0)
+rowBg = isLight ? color.new(color.white, 72) : color.new(color.gray, 86)
+altBg = isLight ? color.new(color.silver, 80) : color.new(color.gray, 90)
+
+// Utility functions
+f_tfLabel(string tf) => tf == "240" ? "4H" : tf == "60" ? "1H" : tf == "30" ? "30M" : tf == "15" ? "15M" : tf == "5" ? "5M" : tf == "3" ? "3M" : tf == "1" ? "1M" : tf
+f_tfMin(string tf) => tf == "1" ? 1 : tf == "3" ? 3 : tf == "5" ? 5 : tf == "15" ? 15 : tf == "30" ? 30 : tf == "60" ? 60 : tf == "240" ? 240 : tf == "D" ? 1440 : tf == "W" ? 10080 : na
+f_chartMin() => timeframe.isminutes ? timeframe.multiplier : timeframe.isdaily ? 1440 * timeframe.multiplier : timeframe.isweekly ? 10080 * timeframe.multiplier : na
+f_sameTf(string tf) => tf == timeframe.period or f_tfMin(tf) == f_chartMin()
+f_chartRole() => f_sameTf(tf1) ? "Slot 1 Master" : f_sameTf(tf2) ? "Slot 2 explains Slot 1" : f_sameTf(tf3) ? "Slot 3 explains Slot 2" : f_sameTf(tf4) ? "Slot 4 reaction" : showChartLayer ? "Extra working layer" : "Hidden"
+f_panelPos(string p) => p == "Top Left" ? position.top_left : p == "Bottom Right" ? position.bottom_right : p == "Bottom Left" ? position.bottom_left : position.top_right
+f_price(float x) => na(x) ? "n/a" : str.tostring(x, format.mintick)
+f_context(float c, float e) => c > e ? "Bullish" : c < e ? "Bearish" : "Neutral"
+f_rel(string p, string ch) => p == ch ? "Aligned" : p == "Neutral" or ch == "Neutral" ? "Unclear" : "Opposing / pullback"
+
+// Candle functions
+f_body(float o, float c) => math.abs(c - o)
+f_rng(float h, float l) => h - l
+f_bodyRatio(float o, float h, float l, float c) => f_rng(h, l) > 0 ? f_body(o, c) / f_rng(h, l) : 0.0
+f_upWickRatio(float o, float h, float l, float c) => f_rng(h, l) > 0 ? (h - math.max(o, c)) / f_rng(h, l) : 0.0
+f_dnWickRatio(float o, float h, float l, float c) => f_rng(h, l) > 0 ? (math.min(o, c) - l) / f_rng(h, l) : 0.0
+f_candleType(float o, float h, float l, float c) =>
+    br = f_bodyRatio(o, h, l, c)
+    uw = f_upWickRatio(o, h, l, c)
+    dw = f_dnWickRatio(o, h, l, c)
+    bullSpecial = c > o and br >= specialRatio and dw >= 0.25
+    bearSpecial = c < o and br >= specialRatio and uw >= 0.25
+    bullSpecial or bearSpecial ? "Special Maru" : br >= maruRatio ? "Maru" : br <= dojiBody ? "Doji" : br <= pinbarBody and (uw >= pinbarWick or dw >= pinbarWick) ? "Pinbar" : "Normal"
+f_candlePressure(string typ, float o, float c) => typ == "Special Maru" and c > o ? "Bull absorption" : typ == "Special Maru" and c < o ? "Bear absorption" : typ == "Maru" and c > o ? "Bull pressure" : typ == "Maru" and c < o ? "Bear pressure" : typ == "Pinbar" ? "Rejection" : typ == "Doji" ? "Indecision" : "Normal"
+
+// Pivot / KL functions
+f_pivH(int occ) =>
+    ph = ta.pivothigh(high, pivotLeft, pivotRight)
+    ta.valuewhen(not na(ph), ph, occ)
+f_pivL(int occ) =>
+    pl = ta.pivotlow(low, pivotLeft, pivotRight)
+    ta.valuewhen(not na(pl), pl, occ)
+f_klState(float ph, float pl) => na(ph) or na(pl) ? "KL building" : close > ph ? "Above prelim KL DOWN" : close < pl ? "Below prelim KL UP" : "Between prelim KLs"
+f_masterState(float c, float ph, float phPrev, float pl, float plPrev, float atr) =>
+    enough = not na(ph) and not na(phPrev) and not na(pl) and not na(plPrev)
+    hh = enough and ph > phPrev
+    hl = enough and pl > plPrev
+    lh = enough and ph < phPrev
+    ll = enough and pl < plPrev
+    width = not na(ph) and not na(pl) ? math.abs(ph - pl) : na
+    isRange = not na(width) and width <= atr * rangeAtrMult
+    c > ph and enough ? "Breakout attempt above master KL DOWN" : c < pl and enough ? "Breakdown attempt below master KL UP" : hh and hl ? "Bullish master structure candidate" : lh and ll ? "Bearish master structure candidate" : isRange ? "Master range candidate" : enough ? "Master transition / mixed" : "Master structure building"
+f_masterAnchor(float c, float ph, float pl, string st) => str.contains(st, "Bullish") ? "Last HL / KL UP area" : str.contains(st, "Bearish") ? "Last LH / KL DOWN area" : str.contains(st, "range") ? "Range edge reaction" : c > ph ? "Breakout candle area" : c < pl ? "Breakdown candle area" : "Building"
+
+// Requests
+s1Close = request.security(syminfo.tickerid, tf1, close)
+s2Close = request.security(syminfo.tickerid, tf2, close)
+s3Close = request.security(syminfo.tickerid, tf3, close)
+s4Close = request.security(syminfo.tickerid, tf4, close)
+s1Ema = request.security(syminfo.tickerid, tf1, ta.ema(close, emaLen))
+s2Ema = request.security(syminfo.tickerid, tf2, ta.ema(close, emaLen))
+s3Ema = request.security(syminfo.tickerid, tf3, ta.ema(close, emaLen))
+s4Ema = request.security(syminfo.tickerid, tf4, ta.ema(close, emaLen))
+s1Atr = request.security(syminfo.tickerid, tf1, ta.atr(atrLen))
+
+s1State = f_context(s1Close, s1Ema)
+s2State = f_context(s2Close, s2Ema)
+s3State = f_context(s3Close, s3Ema)
+s4State = f_context(s4Close, s4Ema)
+rel12 = f_rel(s1State, s2State)
+rel23 = f_rel(s2State, s3State)
+rel34 = f_rel(s3State, s4State)
+
+chartCandle = f_candleType(open, high, low, close)
+chartPressure = f_candlePressure(chartCandle, open, close)
+s1Candle = request.security(syminfo.tickerid, tf1, f_candleType(open, high, low, close))
+
+chartKLDown = f_pivH(0)
+chartKLUp = f_pivL(0)
+chartKLState = f_klState(chartKLDown, chartKLUp)
+
+s1KLDown = request.security(syminfo.tickerid, tf1, f_pivH(0))
+s1KLUp = request.security(syminfo.tickerid, tf1, f_pivL(0))
+s1PrevHigh = request.security(syminfo.tickerid, tf1, f_pivH(1))
+s1PrevLow = request.security(syminfo.tickerid, tf1, f_pivL(1))
+s2KLDown = request.security(syminfo.tickerid, tf2, f_pivH(0))
+s2KLUp = request.security(syminfo.tickerid, tf2, f_pivL(0))
+s3KLDown = request.security(syminfo.tickerid, tf3, f_pivH(0))
+s3KLUp = request.security(syminfo.tickerid, tf3, f_pivL(0))
+s4KLDown = request.security(syminfo.tickerid, tf4, f_pivH(0))
+s4KLUp = request.security(syminfo.tickerid, tf4, f_pivL(0))
+
+masterState = f_masterState(s1Close, s1KLDown, s1PrevHigh, s1KLUp, s1PrevLow, s1Atr)
+masterAnchor = f_masterAnchor(s1Close, s1KLDown, s1KLUp, masterState)
+stackText = f_tfLabel(tf1) + " → " + f_tfLabel(tf2) + " → " + f_tfLabel(tf3) + " → " + f_tfLabel(tf4)
+masterKLText = "UP " + f_price(s1KLUp) + " | DOWN " + f_price(s1KLDown)
+chartKLText = "UP " + f_price(chartKLUp) + " | DOWN " + f_price(chartKLDown)
+
+// Panel
+var table t = table.new(f_panelPos(panelPos), 2, 16, border_width=1)
+f_cell(int c, int r, string s, color bg) => table.cell(t, c, r, s, bgcolor=bg, text_color=txt, text_size=panelMode == "Mobile Compact" ? size.tiny : size.small)
+
+if barstate.islast and showPanel
+    table.clear(t, 0, 0, 1, 15)
+    f_cell(0, 0, "NCI Story", headBg)
+    f_cell(1, 0, "v0.4 Master", headBg)
+    if panelMode == "Mobile Compact"
+        f_cell(0, 1, "Stack", altBg)
+        f_cell(1, 1, stackText, altBg)
+        f_cell(0, 2, "Master", rowBg)
+        f_cell(1, 2, masterState, rowBg)
+        f_cell(0, 3, "M-KL", rowBg)
+        f_cell(1, 3, masterKLText, rowBg)
+        f_cell(0, 4, "Anchor", rowBg)
+        f_cell(1, 4, masterAnchor, rowBg)
+        f_cell(0, 5, "Chart", rowBg)
+        f_cell(1, 5, timeframe.period + " = " + f_chartRole() + " | " + chartKLState, rowBg)
+        f_cell(0, 6, "Next", rowBg)
+        f_cell(1, 6, "v0.5 Event Anchor", rowBg)
+    else
+        f_cell(0, 1, "Stack", altBg)
+        f_cell(1, 1, stackText, altBg)
+        f_cell(0, 2, f_tfLabel(tf1) + " Master", rowBg)
+        f_cell(1, 2, masterState + " | " + masterKLText, rowBg)
+        f_cell(0, 3, "Master Anchor", rowBg)
+        f_cell(1, 3, masterAnchor, rowBg)
+        f_cell(0, 4, f_tfLabel(tf2) + " Child", rowBg)
+        f_cell(1, 4, s2State + " | " + rel12 + " | KL " + f_price(s2KLUp) + " / " + f_price(s2KLDown), rowBg)
+        f_cell(0, 5, f_tfLabel(tf3) + " Child", rowBg)
+        f_cell(1, 5, s3State + " | " + rel23 + " | KL " + f_price(s3KLUp) + " / " + f_price(s3KLDown), rowBg)
+        f_cell(0, 6, f_tfLabel(tf4) + " Reaction", rowBg)
+        f_cell(1, 6, s4State + " | " + rel34 + " | KL " + f_price(s4KLUp) + " / " + f_price(s4KLDown), rowBg)
+        f_cell(0, 7, "Chart TF", rowBg)
+        f_cell(1, 7, timeframe.period + " | " + f_chartRole() + " | " + chartKLText, rowBg)
+        f_cell(0, 8, "Candle", rowBg)
+        f_cell(1, 8, chartCandle + " | " + chartPressure + " | Master candle " + s1Candle, rowBg)
+        f_cell(0, 9, "Core Law", rowBg)
+        f_cell(1, 9, "1H explains 4H; lower layers explain parent anchor", rowBg)
+        f_cell(0, 10, "Next", rowBg)
+        f_cell(1, 10, "v0.5 Event Anchor Engine", rowBg)
+        if panelMode == "Full Debug"
+            f_cell(0, 11, "Prev H/L", rowBg)
+            f_cell(1, 11, f_price(s1PrevHigh) + " / " + f_price(s1PrevLow), rowBg)
+            f_cell(0, 12, "Range Law", rowBg)
+            f_cell(1, 12, "Range can begin after breakout/pullback", rowBg)
+
+// Lines
+var line cUp = na
+var line cDn = na
+var line mUp = na
+var line mDn = na
+var label cUpL = na
+var label cDnL = na
+var label mUpL = na
+var label mDnL = na
+if barstate.islast
+    line.delete(cUp), line.delete(cDn), line.delete(mUp), line.delete(mDn)
+    label.delete(cUpL), label.delete(cDnL), label.delete(mUpL), label.delete(mDnL)
+    if showChartLayer and showChartKL
+        if not na(chartKLUp)
+            cUp := line.new(bar_index - lineLen, chartKLUp, bar_index, chartKLUp, extend=extend.right, width=1, color=color.new(color.green, 20))
+            cUpL := label.new(bar_index, chartKLUp, "Chart KL UP\n" + f_price(chartKLUp), style=label.style_label_left, textcolor=color.white, color=color.new(color.green, 10), size=size.tiny)
+        if not na(chartKLDown)
+            cDn := line.new(bar_index - lineLen, chartKLDown, bar_index, chartKLDown, extend=extend.right, width=1, color=color.new(color.red, 20))
+            cDnL := label.new(bar_index, chartKLDown, "Chart KL DOWN\n" + f_price(chartKLDown), style=label.style_label_left, textcolor=color.white, color=color.new(color.red, 10), size=size.tiny)
+    if showMasterKL
+        if not na(s1KLUp)
+            mUp := line.new(bar_index - masterLineLen, s1KLUp, bar_index, s1KLUp, extend=extend.right, width=2, color=color.new(color.green, 45))
+            mUpL := label.new(bar_index, s1KLUp, f_tfLabel(tf1) + " MASTER KL UP\n" + f_price(s1KLUp), style=label.style_label_left, textcolor=color.black, color=color.new(color.green, 65), size=size.tiny)
+        if not na(s1KLDown)
+            mDn := line.new(bar_index - masterLineLen, s1KLDown, bar_index, s1KLDown, extend=extend.right, width=2, color=color.new(color.red, 45))
+            mDnL := label.new(bar_index, s1KLDown, f_tfLabel(tf1) + " MASTER KL DOWN\n" + f_price(s1KLDown), style=label.style_label_left, textcolor=color.black, color=color.new(color.red, 65), size=size.tiny)
+    if showDebug
+        label.new(bar_index, low, "DEBUG v0.4\n" + masterState + "\n" + masterAnchor, style=label.style_label_up, textcolor=txt, color=rowBg, size=size.tiny)
+
+// Next: v0.5 Event Anchor Engine, then fractal child engine, range engine, breakout/pullback validation, SD engine.

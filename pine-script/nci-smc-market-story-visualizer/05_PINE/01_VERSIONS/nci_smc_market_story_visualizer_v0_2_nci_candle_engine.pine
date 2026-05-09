@@ -1,0 +1,343 @@
+//@version=6
+indicator("NCI x SMC Market Story Visualizer [Ravi Custom] v0.2", shorttitle="NCIxSMC Story v0.2", overlay=true, max_boxes_count=500, max_lines_count=500, max_labels_count=500)
+
+// ============================================================================
+// NCI x SMC Market Story Visualizer [Ravi Custom]
+// v0.2 - NCI Candle Engine
+// ============================================================================
+// Purpose:
+// Visual market story narrator, not an execution/signal indicator yet.
+//
+// v0.2 adds a proper NCI candle classification layer:
+// - Maru / Marubozu
+// - Special Maru
+// - Pinbar
+// - Doji
+// - Normal candle
+//
+// Important NCI principle:
+// We do NOT read every candle blindly.
+// We prepare candle classification now, but the final structure engine will use it
+// mainly at key zones, KLs, pullback/breakout areas, range edges, and event anchors.
+// ============================================================================
+
+// -----------------------------------------------------------------------------
+// 1. Inputs
+// -----------------------------------------------------------------------------
+
+grpTF = "01. Timeframe Story Stack"
+tfSlot1 = input.timeframe("240", "TF Slot 1 - Master Story", group=grpTF)
+tfSlot2 = input.timeframe("60", "TF Slot 2 - Explains Slot 1", group=grpTF)
+tfSlot3 = input.timeframe("15", "TF Slot 3 - Explains Slot 2", group=grpTF)
+tfSlot4 = input.timeframe("5", "TF Slot 4 - Explains Slot 3", group=grpTF)
+showChartTfLayer = input.bool(true, "Show Current Chart TF Working Layer", group=grpTF)
+autoAlignChartTf = input.bool(true, "Auto-align Current Chart TF into Story", group=grpTF)
+
+grpMode = "02. Mode"
+visualMode = input.string("Story", "Visual Mode", options=["Clean", "Story", "Debug"], group=grpMode)
+storyMode = input.string("Hybrid NCI + SMC", "Story Mode", options=["NCI Only", "SMC Context Only", "Hybrid NCI + SMC"], group=grpMode)
+
+grpDisplay = "03. Display"
+showStoryPanel = input.bool(true, "Show Story Panel", group=grpDisplay)
+showTfRoleMarker = input.bool(true, "Show Current Chart TF Role Marker", group=grpDisplay)
+showCandleMarks = input.bool(false, "Show NCI Candle Marks", group=grpDisplay)
+showDebug = input.bool(false, "Debug Mode Visuals", group=grpDisplay)
+
+grpTrend = "04. Temporary Context Gauge"
+emaLen = input.int(20, "Temporary EMA Context Length", minval=1, group=grpTrend)
+
+grpCandle = "05. NCI Candle Engine"
+maruBodyRatio = input.float(0.70, "Maru Body / Total Range", minval=0.50, maxval=0.95, step=0.05, group=grpCandle)
+specialMaruBodyRatio = input.float(0.50, "Special Maru Min Body / Range", minval=0.30, maxval=0.80, step=0.05, group=grpCandle)
+closeNearExtremeRatio = input.float(0.10, "Close Near High/Low Threshold", minval=0.02, maxval=0.30, step=0.01, group=grpCandle)
+pinbarMaxBodyRatio = input.float(0.50, "Pinbar Max Body / Range", minval=0.10, maxval=0.60, step=0.05, group=grpCandle)
+pinbarWickRatio = input.float(0.55, "Pinbar Dominant Wick / Range", minval=0.35, maxval=0.85, step=0.05, group=grpCandle)
+dojiMaxBodyRatio = input.float(0.15, "Doji Max Body / Range", minval=0.03, maxval=0.30, step=0.01, group=grpCandle)
+smallCandleAtrRatio = input.float(0.50, "Doji/Small Candle ATR Filter", minval=0.10, maxval=1.50, step=0.05, group=grpCandle)
+atrLen = input.int(14, "ATR Length", minval=1, group=grpCandle)
+
+// -----------------------------------------------------------------------------
+// 2. Timeframe Role Engine utilities
+// -----------------------------------------------------------------------------
+
+f_tfLabel(string tf) =>
+    tf == "1" ? "1M" :
+     tf == "3" ? "3M" :
+     tf == "5" ? "5M" :
+     tf == "15" ? "15M" :
+     tf == "30" ? "30M" :
+     tf == "45" ? "45M" :
+     tf == "60" ? "1H" :
+     tf == "120" ? "2H" :
+     tf == "180" ? "3H" :
+     tf == "240" ? "4H" :
+     tf == "D" ? "1D" :
+     tf == "W" ? "1W" :
+     tf == "M" ? "1Mth" : tf
+
+f_tfMinutes(string tf) =>
+    tf == "1" ? 1 :
+     tf == "3" ? 3 :
+     tf == "5" ? 5 :
+     tf == "15" ? 15 :
+     tf == "30" ? 30 :
+     tf == "45" ? 45 :
+     tf == "60" ? 60 :
+     tf == "120" ? 120 :
+     tf == "180" ? 180 :
+     tf == "240" ? 240 :
+     tf == "D" ? 1440 :
+     tf == "W" ? 10080 :
+     tf == "M" ? 43200 : na
+
+f_chartTfMinutes() =>
+    timeframe.isseconds ? 1 :
+     timeframe.isminutes ? timeframe.multiplier :
+     timeframe.isdaily ? 1440 * timeframe.multiplier :
+     timeframe.isweekly ? 10080 * timeframe.multiplier :
+     timeframe.ismonthly ? 43200 * timeframe.multiplier : na
+
+f_sameTf(string tf, string chartPeriod) =>
+    tf == chartPeriod or f_tfMinutes(tf) == f_chartTfMinutes()
+
+f_inSelectedStack() =>
+    f_sameTf(tfSlot1, timeframe.period) or f_sameTf(tfSlot2, timeframe.period) or f_sameTf(tfSlot3, timeframe.period) or f_sameTf(tfSlot4, timeframe.period)
+
+f_chartRole() =>
+    f_sameTf(tfSlot1, timeframe.period) ? "Chart TF = Slot 1 Master" :
+     f_sameTf(tfSlot2, timeframe.period) ? "Chart TF = Slot 2 explains Slot 1" :
+     f_sameTf(tfSlot3, timeframe.period) ? "Chart TF = Slot 3 explains Slot 2" :
+     f_sameTf(tfSlot4, timeframe.period) ? "Chart TF = Slot 4 reaction" :
+     showChartTfLayer ? "Chart TF = extra working layer" : "Chart TF layer hidden"
+
+f_tempContext(float c, float e) =>
+    c > e ? "Bullish context" : c < e ? "Bearish context" : "Neutral"
+
+f_relationText(string parentState, string childState) =>
+    parentState == childState ? "Aligned" :
+     parentState == "Neutral" or childState == "Neutral" ? "Neutral / unclear" : "Opposing / explaining pullback"
+
+// -----------------------------------------------------------------------------
+// 3. NCI Candle Engine utilities
+// -----------------------------------------------------------------------------
+
+f_body(float o, float c) => math.abs(c - o)
+f_range(float h, float l) => h - l
+f_upperWick(float o, float h, float c) => h - math.max(o, c)
+f_lowerWick(float o, float l, float c) => math.min(o, c) - l
+f_bodyRatio(float o, float h, float l, float c) => f_range(h, l) > 0 ? f_body(o, c) / f_range(h, l) : 0.0
+f_upperWickRatio(float o, float h, float l, float c) => f_range(h, l) > 0 ? f_upperWick(o, h, c) / f_range(h, l) : 0.0
+f_lowerWickRatio(float o, float h, float l, float c) => f_range(h, l) > 0 ? f_lowerWick(o, l, c) / f_range(h, l) : 0.0
+f_closeNearHigh(float h, float l, float c) => f_range(h, l) > 0 ? (h - c) / f_range(h, l) <= closeNearExtremeRatio : false
+f_closeNearLow(float h, float l, float c) => f_range(h, l) > 0 ? (c - l) / f_range(h, l) <= closeNearExtremeRatio : false
+
+f_isBull(float o, float c) => c > o
+f_isBear(float o, float c) => c < o
+
+f_isMaru(float o, float h, float l, float c) =>
+    f_bodyRatio(o, h, l, c) >= maruBodyRatio
+
+f_isBullSpecialMaru(float o, float h, float l, float c) =>
+    f_isBull(o, c) and f_bodyRatio(o, h, l, c) >= specialMaruBodyRatio and f_lowerWickRatio(o, h, l, c) >= 0.25 and f_closeNearHigh(h, l, c)
+
+f_isBearSpecialMaru(float o, float h, float l, float c) =>
+    f_isBear(o, c) and f_bodyRatio(o, h, l, c) >= specialMaruBodyRatio and f_upperWickRatio(o, h, l, c) >= 0.25 and f_closeNearLow(h, l, c)
+
+f_isSpecialMaru(float o, float h, float l, float c) =>
+    f_isBullSpecialMaru(o, h, l, c) or f_isBearSpecialMaru(o, h, l, c)
+
+f_isPinbar(float o, float h, float l, float c) =>
+    f_bodyRatio(o, h, l, c) <= pinbarMaxBodyRatio and (f_upperWickRatio(o, h, l, c) >= pinbarWickRatio or f_lowerWickRatio(o, h, l, c) >= pinbarWickRatio)
+
+f_isDoji(float o, float h, float l, float c, float atrValue) =>
+    f_bodyRatio(o, h, l, c) <= dojiMaxBodyRatio and f_range(h, l) <= atrValue * smallCandleAtrRatio
+
+f_candleType(float o, float h, float l, float c, float atrValue) =>
+    f_isSpecialMaru(o, h, l, c) ? "Special Maru" :
+     f_isMaru(o, h, l, c) ? "Maru" :
+     f_isDoji(o, h, l, c, atrValue) ? "Doji" :
+     f_isPinbar(o, h, l, c) ? "Pinbar" : "Normal"
+
+f_candlePressure(float o, float h, float l, float c, float atrValue) =>
+    typ = f_candleType(o, h, l, c, atrValue)
+    typ == "Special Maru" and f_isBull(o, c) ? "Strong bullish absorption" :
+     typ == "Special Maru" and f_isBear(o, c) ? "Strong bearish absorption" :
+     typ == "Maru" and f_isBull(o, c) ? "Strong bullish pressure" :
+     typ == "Maru" and f_isBear(o, c) ? "Strong bearish pressure" :
+     typ == "Pinbar" ? "Conflict / rejection" :
+     typ == "Doji" ? "Low-power indecision" : "Normal pressure"
+
+f_shortCandleMark(string typ) =>
+    typ == "Special Maru" ? "SM" :
+     typ == "Maru" ? "M" :
+     typ == "Pinbar" ? "P" :
+     typ == "Doji" ? "D" : "N"
+
+// -----------------------------------------------------------------------------
+// 4. Timeframe context requests - temporary v0.2 gauge
+// -----------------------------------------------------------------------------
+
+// IMPORTANT:
+// EMA context remains temporary. Final versions replace this with connected NCI
+// market structure, event anchors, range logic, KL, and SD engines.
+
+slot1Close = request.security(syminfo.tickerid, tfSlot1, close)
+slot2Close = request.security(syminfo.tickerid, tfSlot2, close)
+slot3Close = request.security(syminfo.tickerid, tfSlot3, close)
+slot4Close = request.security(syminfo.tickerid, tfSlot4, close)
+
+slot1Ema = request.security(syminfo.tickerid, tfSlot1, ta.ema(close, emaLen))
+slot2Ema = request.security(syminfo.tickerid, tfSlot2, ta.ema(close, emaLen))
+slot3Ema = request.security(syminfo.tickerid, tfSlot3, ta.ema(close, emaLen))
+slot4Ema = request.security(syminfo.tickerid, tfSlot4, ta.ema(close, emaLen))
+
+slot1State = f_tempContext(slot1Close, slot1Ema)
+slot2State = f_tempContext(slot2Close, slot2Ema)
+slot3State = f_tempContext(slot3Close, slot3Ema)
+slot4State = f_tempContext(slot4Close, slot4Ema)
+
+rel12 = f_relationText(slot1State, slot2State)
+rel23 = f_relationText(slot2State, slot3State)
+rel34 = f_relationText(slot3State, slot4State)
+
+chartClose = close
+chartEma = ta.ema(close, emaLen)
+chartState = f_tempContext(chartClose, chartEma)
+chartInStack = f_inSelectedStack()
+chartRole = f_chartRole()
+
+// -----------------------------------------------------------------------------
+// 5. Current chart candle classification
+// -----------------------------------------------------------------------------
+
+atrValue = ta.atr(atrLen)
+chartCandleType = f_candleType(open, high, low, close, atrValue)
+chartCandlePressure = f_candlePressure(open, high, low, close, atrValue)
+chartCandleMark = f_shortCandleMark(chartCandleType)
+
+// HTF candle type snapshots for the selected stack.
+slot1CandleType = request.security(syminfo.tickerid, tfSlot1, f_candleType(open, high, low, close, ta.atr(atrLen)))
+slot2CandleType = request.security(syminfo.tickerid, tfSlot2, f_candleType(open, high, low, close, ta.atr(atrLen)))
+slot3CandleType = request.security(syminfo.tickerid, tfSlot3, f_candleType(open, high, low, close, ta.atr(atrLen)))
+slot4CandleType = request.security(syminfo.tickerid, tfSlot4, f_candleType(open, high, low, close, ta.atr(atrLen)))
+
+// -----------------------------------------------------------------------------
+// 6. Story output text
+// -----------------------------------------------------------------------------
+
+stackText = f_tfLabel(tfSlot1) + " → " + f_tfLabel(tfSlot2) + " → " + f_tfLabel(tfSlot3) + " → " + f_tfLabel(tfSlot4)
+
+basicStory = rel12 == "Aligned" and rel23 == "Aligned" and rel34 == "Aligned" ?
+     "All selected TFs currently point in the same temporary context. Final NCI story not built yet." :
+     "TFs are mixed. Treat lower TFs as explanation/pullback until NCI structure engine confirms."
+
+chartLayerText = chartInStack ? "Current chart is inside selected stack." :
+     showChartTfLayer ? "Current chart added as extra working layer." : "Current chart layer disabled."
+
+candleStoryText = "Current candle: " + chartCandleType + " | " + chartCandlePressure
+
+// -----------------------------------------------------------------------------
+// 7. Story panel
+// -----------------------------------------------------------------------------
+
+var table storyTbl = table.new(position.top_right, 2, 14, border_width=1)
+
+f_cell(int col, int row, string txt, color bg, color tc) =>
+    table.cell(storyTbl, col, row, txt, bgcolor=bg, text_color=tc)
+
+if barstate.islast and showStoryPanel
+    f_cell(0, 0, "NCI x SMC Story", color.black, color.white)
+    f_cell(1, 0, "v0.2 Candle Engine", color.black, color.white)
+
+    f_cell(0, 1, "Stack", color.new(color.gray, 85), color.white)
+    f_cell(1, 1, stackText, color.new(color.gray, 85), color.white)
+
+    f_cell(0, 2, "Chart TF", color.new(color.gray, 90), color.white)
+    f_cell(1, 2, timeframe.period + " | " + chartRole, color.new(color.gray, 90), color.white)
+
+    f_cell(0, 3, f_tfLabel(tfSlot1) + " Master", color.new(color.gray, 90), color.white)
+    f_cell(1, 3, slot1State + " | Candle: " + slot1CandleType, color.new(color.gray, 90), color.white)
+
+    f_cell(0, 4, f_tfLabel(tfSlot2) + " explains " + f_tfLabel(tfSlot1), color.new(color.gray, 90), color.white)
+    f_cell(1, 4, slot2State + " | " + rel12 + " | Candle: " + slot2CandleType, color.new(color.gray, 90), color.white)
+
+    f_cell(0, 5, f_tfLabel(tfSlot3) + " explains " + f_tfLabel(tfSlot2), color.new(color.gray, 90), color.white)
+    f_cell(1, 5, slot3State + " | " + rel23 + " | Candle: " + slot3CandleType, color.new(color.gray, 90), color.white)
+
+    f_cell(0, 6, f_tfLabel(tfSlot4) + " explains " + f_tfLabel(tfSlot3), color.new(color.gray, 90), color.white)
+    f_cell(1, 6, slot4State + " | " + rel34 + " | Candle: " + slot4CandleType, color.new(color.gray, 90), color.white)
+
+    f_cell(0, 7, "Chart Layer", color.new(color.gray, 90), color.white)
+    f_cell(1, 7, chartLayerText + " Context: " + chartState, color.new(color.gray, 90), color.white)
+
+    f_cell(0, 8, "NCI Candle", color.new(color.gray, 90), color.white)
+    f_cell(1, 8, candleStoryText, color.new(color.gray, 90), color.white)
+
+    f_cell(0, 9, "Candle Rule", color.new(color.gray, 90), color.white)
+    f_cell(1, 9, "Use mainly at KL / range / event anchors", color.new(color.gray, 90), color.white)
+
+    f_cell(0, 10, "Core Law", color.new(color.gray, 90), color.white)
+    f_cell(1, 10, "LTF starts from HTF event anchor", color.new(color.gray, 90), color.white)
+
+    f_cell(0, 11, "Range Law", color.new(color.gray, 90), color.white)
+    f_cell(1, 11, "Range is a core chapter, not noise", color.new(color.gray, 90), color.white)
+
+    f_cell(0, 12, "Story", color.new(color.gray, 90), color.white)
+    f_cell(1, 12, basicStory, color.new(color.gray, 90), color.white)
+
+    f_cell(0, 13, "Next Engine", color.new(color.gray, 90), color.white)
+    f_cell(1, 13, "v0.3 Preliminary KL Engine", color.new(color.gray, 90), color.white)
+
+// -----------------------------------------------------------------------------
+// 8. Current chart TF role marker
+// -----------------------------------------------------------------------------
+
+var label chartRoleLabel = na
+
+if barstate.islast and showTfRoleMarker
+    label.delete(chartRoleLabel)
+    chartRoleLabel := label.new(
+         bar_index,
+         high,
+         "Chart TF: " + timeframe.period + "\n" + chartRole + "\nStack: " + stackText + "\nCandle: " + chartCandleType,
+         style=label.style_label_down,
+         textcolor=color.white,
+         color=color.new(color.black, 0),
+         size=size.small)
+
+// -----------------------------------------------------------------------------
+// 9. Candle marks
+// -----------------------------------------------------------------------------
+
+if showCandleMarks and (visualMode == "Story" or visualMode == "Debug")
+    markColor = chartCandleType == "Special Maru" ? color.new(color.purple, 0) :
+         chartCandleType == "Maru" ? color.new(color.green, 0) :
+         chartCandleType == "Pinbar" ? color.new(color.blue, 0) :
+         chartCandleType == "Doji" ? color.new(color.red, 0) : color.new(color.gray, 20)
+    label.new(bar_index, high, chartCandleMark, style=label.style_label_down, textcolor=color.white, color=markColor, size=size.tiny)
+
+// -----------------------------------------------------------------------------
+// 10. Debug visuals
+// -----------------------------------------------------------------------------
+
+if showDebug and visualMode == "Debug" and barstate.islast
+    debugTxt = "DEBUG" +
+         "\nchartInStack=" + str.tostring(chartInStack) +
+         "\nchartMin=" + str.tostring(f_chartTfMinutes()) +
+         "\nbodyRatio=" + str.tostring(f_bodyRatio(open, high, low, close), "#.##") +
+         "\nupperWick=" + str.tostring(f_upperWickRatio(open, high, low, close), "#.##") +
+         "\nlowerWick=" + str.tostring(f_lowerWickRatio(open, high, low, close), "#.##")
+    label.new(bar_index, low, debugTxt, style=label.style_label_up, textcolor=color.white, color=color.new(color.blue, 20), size=size.tiny)
+
+// -----------------------------------------------------------------------------
+// 11. Next modules
+// -----------------------------------------------------------------------------
+
+// TODO v0.3: Preliminary KL Engine
+// TODO v0.4: 4H Master Structure Engine
+// TODO v0.5: Event Anchor Engine
+// TODO v0.6: Fractal Child Structure Engine
+// TODO v0.7: Range Story Engine
+// TODO v0.8: NCI Breakout/Pullback Engine
+// TODO v0.9: NCI Supply/Demand Engine
+// TODO v1.0: Story Decision + Visual Engine

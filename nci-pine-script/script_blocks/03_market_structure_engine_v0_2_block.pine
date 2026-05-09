@@ -1,0 +1,286 @@
+//@version=6
+indicator(title="NCI v0.2 Block — Market Structure + Key Levels", shorttitle="NCI MS v0.2 Block", overlay=true, max_labels_count=500, max_lines_count=300, max_boxes_count=50)
+
+//=============================================================================
+// NCI v0.2 SCRIPT BLOCK — MARKET STRUCTURE + KEY LEVELS
+//=============================================================================
+// Purpose:
+// - Build a conservative NCI Market Structure testing block.
+// - This is NOT the final master script yet.
+// - It must be tested before merging into candidate/master.
+//
+// Source rules:
+// - NCI candle pressure logic.
+// - NCI pullback / breakout standards.
+// - Ravi confirmation: latest valid pullback replaces Key Level.
+// - Ravi confirmation: internal structure visible, but noise-controlled.
+// - Ravi confirmation: optional instrument display filters are allowed only
+//   for visual/noise control, not for replacing NCI logic.
+//=============================================================================
+
+//=============================================================================
+// 1. INPUTS
+//=============================================================================
+
+groupPreset = "01. Preset / Display Filter"
+groupCandle = "02. Candle Engine"
+groupMS     = "03. NCI Market Structure"
+groupVisual = "04. Visuals"
+groupHTF    = "05. Top-Down / HTF Bias"
+
+presetMode = input.string("Universal", "Display Filter", options=["Universal", "BTCUSD", "XAUUSD", "Scalping", "Day Trading", "Swing Trading", "Manual Custom"], group=groupPreset)
+strictMode = input.bool(true, "Strict NCI Rules", group=groupPreset)
+
+manualMaruRatio = input.float(0.70, "Manual Maru Body Ratio", minval=0.50, maxval=0.95, step=0.01, group=groupCandle)
+atrLength = input.int(14, "ATR Length", minval=5, maxval=100, group=groupCandle)
+minSignificantAtrRatio = input.float(0.35, "Min Candle Size vs ATR", minval=0.05, maxval=2.00, step=0.05, group=groupCandle)
+
+similarityThreshold = input.float(0.70, "Two-Maru Similar Length Threshold", minval=0.50, maxval=1.00, step=0.01, group=groupMS)
+smallCandleRatio = input.float(0.30, "Small Candle Max vs Big Maru", minval=0.10, maxval=0.60, step=0.01, group=groupMS)
+bigMaruLookback = input.int(5, "Compare Big Maru With Last N Maru Candles", minval=3, maxval=20, group=groupMS)
+confirmationBars = input.int(4, "Confirmation Window If One Condition Fails", minval=1, maxval=10, group=groupMS)
+
+showPulse = input.bool(true, "Show Pulse Candidates", group=groupVisual)
+showPullback = input.bool(true, "Show Pullback Candidates", group=groupVisual)
+showKeyLevels = input.bool(true, "Show Latest NCI Key Levels", group=groupVisual)
+showInternalStructure = input.bool(true, "Show Internal Structure", group=groupVisual)
+showOnlyLatestInternal = input.bool(true, "Show Only Latest Internal Structure Labels", group=groupVisual)
+showDashboard = input.bool(true, "Show MS Dashboard", group=groupVisual)
+
+internalPivotLenManual = input.int(3, "Manual Internal Pivot Length", minval=1, maxval=20, group=groupMS)
+minInternalMoveAtrManual = input.float(0.60, "Manual Min Internal Move vs ATR", minval=0.10, maxval=5.00, step=0.10, group=groupMS)
+
+htfTf = input.timeframe("60", "HTF Bias Timeframe", group=groupHTF)
+showHtfBias = input.bool(true, "Show HTF Bias In Dashboard", group=groupHTF)
+
+//=============================================================================
+// 2. DISPLAY FILTERS / NOISE CONTROL
+//=============================================================================
+
+float maruPreset = switch presetMode
+    "Universal" => 0.70
+    "BTCUSD" => 0.70
+    "XAUUSD" => 0.70
+    "Scalping" => 0.70
+    "Day Trading" => 0.70
+    "Swing Trading" => 0.68
+    "Manual Custom" => manualMaruRatio
+
+int internalPivotLen = switch presetMode
+    "BTCUSD" => 4
+    "XAUUSD" => 3
+    "Scalping" => 3
+    "Day Trading" => 4
+    "Swing Trading" => 6
+    "Manual Custom" => internalPivotLenManual
+    => 3
+
+float minInternalMoveAtr = switch presetMode
+    "BTCUSD" => 0.90
+    "XAUUSD" => 0.75
+    "Scalping" => 0.60
+    "Day Trading" => 0.80
+    "Swing Trading" => 1.20
+    "Manual Custom" => minInternalMoveAtrManual
+    => 0.60
+
+maruRatio = strictMode ? math.max(maruPreset, 0.70) : maruPreset
+
+//=============================================================================
+// 3. CANDLE PRESSURE ENGINE — REQUIRED BY NCI STRUCTURE
+//=============================================================================
+
+candleRange = high - low
+bodySize = math.abs(close - open)
+bodyRatio = candleRange > 0 ? bodySize / candleRange : 0.0
+atrValue = ta.atr(atrLength)
+isSignificantCandle = candleRange >= atrValue * minSignificantAtrRatio
+isBull = close > open
+isBear = close < open
+
+isBullMaru = isSignificantCandle and isBull and bodyRatio >= maruRatio
+isBearMaru = isSignificantCandle and isBear and bodyRatio >= maruRatio
+isMaru = isBullMaru or isBearMaru
+
+//=============================================================================
+// 4. NCI PULSE CANDIDATES
+//=============================================================================
+// Conservative first version:
+// - Bull pulse candidate = strong Bull Maru.
+// - Bear pulse candidate = strong Bear Maru.
+// Later this will be upgraded with full market cycle + KL context.
+//=============================================================================
+
+bullPulseCandidate = isBullMaru
+bearPulseCandidate = isBearMaru
+
+plotshape(showPulse and bullPulseCandidate, title="NCI Bull Pulse Candidate", style=shape.arrowup, location=location.belowbar, text="PW+", size=size.tiny, color=color.new(color.green, 0), textcolor=color.black)
+plotshape(showPulse and bearPulseCandidate, title="NCI Bear Pulse Candidate", style=shape.arrowdown, location=location.abovebar, text="PW-", size=size.tiny, color=color.new(color.red, 0), textcolor=color.black)
+
+//=============================================================================
+// 5. NCI PULLBACK PRESSURE STANDARDS
+//=============================================================================
+
+// Standard 1: Two Maru candles, close 2 beyond close 1, similar total length from 70%.
+rangeSimilarity = math.min(candleRange, candleRange[1]) / math.max(candleRange, candleRange[1])
+
+bullTwoMaruPB = isBullMaru and isBullMaru[1] and close > close[1] and rangeSimilarity >= similarityThreshold
+bearTwoMaruPB = isBearMaru and isBearMaru[1] and close < close[1] and rangeSimilarity >= similarityThreshold
+
+// Standard 2: Big Maru + one small candle.
+// Big Maru is compared against average of recent candle ranges as a practical v0.2 approximation.
+// This remains a conservative candidate until deeper NCI wave memory is added.
+avgRecentRange = ta.sma(candleRange, bigMaruLookback)
+priorIsBigBullMaru = isBullMaru[1] and candleRange[1] >= avgRecentRange[1]
+priorIsBigBearMaru = isBearMaru[1] and candleRange[1] >= avgRecentRange[1]
+smallAfterBig = candleRange <= candleRange[1] * smallCandleRatio
+priorMid = (high[1] + low[1]) / 2.0
+bullSmallRespects50 = low > priorMid
+bearSmallRespects50 = high < priorMid
+
+bullBigSmallPB = priorIsBigBullMaru and smallAfterBig and bullSmallRespects50
+bearBigSmallPB = priorIsBigBearMaru and smallAfterBig and bearSmallRespects50
+
+bullValidPullback = bullTwoMaruPB or bullBigSmallPB
+bearValidPullback = bearTwoMaruPB or bearBigSmallPB
+
+plotshape(showPullback and bullValidPullback, title="NCI Bull Pullback Candidate", style=shape.labelup, location=location.belowbar, text="PBw+", size=size.tiny, color=color.new(color.teal, 0), textcolor=color.black)
+plotshape(showPullback and bearValidPullback, title="NCI Bear Pullback Candidate", style=shape.labeldown, location=location.abovebar, text="PBw-", size=size.tiny, color=color.new(color.purple, 0), textcolor=color.white)
+
+//=============================================================================
+// 6. LATEST VALID PULLBACK REPLACES KEY LEVEL
+//=============================================================================
+// Ravi confirmed rule:
+// - Latest valid pullback replaces the previous key level.
+// Bullish KL = low of latest bullish pullback pressure pattern.
+// Bearish KL = high of latest bearish pullback pressure pattern.
+//=============================================================================
+
+var float bullKeyLevel = na
+var float bearKeyLevel = na
+var line bullKeyLine = na
+var line bearKeyLine = na
+var label bullKeyLabel = na
+var label bearKeyLabel = na
+
+newBullKL = bullValidPullback ? math.min(low, low[1]) : na
+newBearKL = bearValidPullback ? math.max(high, high[1]) : na
+
+if showKeyLevels and bullValidPullback
+    bullKeyLevel := newBullKL
+    line.delete(bullKeyLine)
+    label.delete(bullKeyLabel)
+    bullKeyLine := line.new(bar_index, bullKeyLevel, bar_index + 1, bullKeyLevel, extend=extend.right, color=color.new(color.green, 0), width=2)
+    bullKeyLabel := label.new(bar_index, bullKeyLevel, "Latest NCI Bull KL", style=label.style_label_up, textcolor=color.black, color=color.new(color.green, 15), size=size.tiny)
+
+if showKeyLevels and bearValidPullback
+    bearKeyLevel := newBearKL
+    line.delete(bearKeyLine)
+    label.delete(bearKeyLabel)
+    bearKeyLine := line.new(bar_index, bearKeyLevel, bar_index + 1, bearKeyLevel, extend=extend.right, color=color.new(color.red, 0), width=2)
+    bearKeyLabel := label.new(bar_index, bearKeyLevel, "Latest NCI Bear KL", style=label.style_label_down, textcolor=color.white, color=color.new(color.red, 10), size=size.tiny)
+
+//=============================================================================
+// 7. VALID BREAKOUT CANDIDATE OF KEY LEVEL
+//=============================================================================
+// This is a candidate only. Full v0.5 breakout module will replace this.
+//=============================================================================
+
+bullBreaksBearKL = not na(bearKeyLevel) and close > bearKeyLevel and isBullMaru
+bearBreaksBullKL = not na(bullKeyLevel) and close < bullKeyLevel and isBearMaru
+
+plotshape(bullBreaksBearKL, title="NCI Bull BO Candidate", style=shape.diamond, location=location.belowbar, text="BO+?", size=size.tiny, color=color.new(color.green, 0), textcolor=color.black)
+plotshape(bearBreaksBullKL, title="NCI Bear BO Candidate", style=shape.diamond, location=location.abovebar, text="BO-?", size=size.tiny, color=color.new(color.red, 0), textcolor=color.white)
+
+//=============================================================================
+// 8. INTERNAL STRUCTURE — VISIBLE BUT NOISE-CONTROLLED
+//=============================================================================
+// Technical helper only in v0.2.
+// Final NCI trend state must not rely on generic HH/HL alone.
+//=============================================================================
+
+pivotHigh = ta.pivothigh(high, internalPivotLen, internalPivotLen)
+pivotLow = ta.pivotlow(low, internalPivotLen, internalPivotLen)
+
+var float lastInternalHigh = na
+var float lastInternalLow = na
+var label lastHighLabel = na
+var label lastLowLabel = na
+var string internalTrend = "Neutral"
+
+validInternalHigh = not na(pivotHigh) and (na(lastInternalHigh) or math.abs(pivotHigh - lastInternalHigh) >= atrValue[internalPivotLen] * minInternalMoveAtr)
+validInternalLow = not na(pivotLow) and (na(lastInternalLow) or math.abs(pivotLow - lastInternalLow) >= atrValue[internalPivotLen] * minInternalMoveAtr)
+
+if showInternalStructure and validInternalHigh
+    string hText = na(lastInternalHigh) ? "iH" : pivotHigh > lastInternalHigh ? "iHH" : "iLH"
+    if showOnlyLatestInternal
+        label.delete(lastHighLabel)
+    lastHighLabel := label.new(bar_index - internalPivotLen, pivotHigh, hText, style=label.style_label_down, textcolor=color.black, color=color.new(color.orange, 10), size=size.tiny)
+    lastInternalHigh := pivotHigh
+
+if showInternalStructure and validInternalLow
+    string lText = na(lastInternalLow) ? "iL" : pivotLow > lastInternalLow ? "iHL" : "iLL"
+    if showOnlyLatestInternal
+        label.delete(lastLowLabel)
+    lastLowLabel := label.new(bar_index - internalPivotLen, pivotLow, lText, style=label.style_label_up, textcolor=color.black, color=color.new(color.aqua, 10), size=size.tiny)
+    lastInternalLow := pivotLow
+
+if not na(lastInternalHigh) and not na(lastInternalLow)
+    internalTrend := close > lastInternalHigh ? "Internal Bullish" : close < lastInternalLow ? "Internal Bearish" : "Internal Range / Pullback"
+
+//=============================================================================
+// 9. HTF BIAS PLACEHOLDER / TOP-DOWN DASHBOARD FIELD
+//=============================================================================
+// Conservative placeholder using HTF candle-pressure balance.
+// This is not final NCI market cycle logic yet.
+//=============================================================================
+
+htfClose = request.security(syminfo.tickerid, htfTf, close, barmerge.gaps_off, barmerge.lookahead_off)
+htfOpen = request.security(syminfo.tickerid, htfTf, open, barmerge.gaps_off, barmerge.lookahead_off)
+htfEma = request.security(syminfo.tickerid, htfTf, ta.ema(close, 20), barmerge.gaps_off, barmerge.lookahead_off)
+
+string htfBias = htfClose > htfEma and htfClose > htfOpen ? "HTF Bullish" : htfClose < htfEma and htfClose < htfOpen ? "HTF Bearish" : "HTF Neutral"
+
+//=============================================================================
+// 10. DASHBOARD
+//=============================================================================
+
+var table dash = table.new(position.top_right, 2, 12, border_width=1)
+f_bg(_txt) => _txt == "HTF Bullish" or _txt == "Internal Bullish" ? color.new(color.green, 20) : _txt == "HTF Bearish" or _txt == "Internal Bearish" ? color.new(color.red, 20) : color.new(color.gray, 70)
+
+if barstate.islast and showDashboard
+    table.cell(dash, 0, 0, "NCI v0.2 Block", text_color=color.white, bgcolor=color.new(color.black, 0))
+    table.cell(dash, 1, 0, "MS + KL", text_color=color.white, bgcolor=color.new(color.black, 0))
+    table.cell(dash, 0, 1, "Filter", text_color=color.white, bgcolor=color.new(color.gray, 70))
+    table.cell(dash, 1, 1, presetMode, text_color=color.white, bgcolor=color.new(color.gray, 70))
+    table.cell(dash, 0, 2, "HTF Bias", text_color=color.white, bgcolor=color.new(color.gray, 70))
+    table.cell(dash, 1, 2, showHtfBias ? htfBias : "OFF", text_color=color.white, bgcolor=f_bg(htfBias))
+    table.cell(dash, 0, 3, "Internal Trend", text_color=color.white, bgcolor=color.new(color.gray, 70))
+    table.cell(dash, 1, 3, internalTrend, text_color=color.white, bgcolor=f_bg(internalTrend))
+    table.cell(dash, 0, 4, "Bull KL", text_color=color.white, bgcolor=color.new(color.gray, 70))
+    table.cell(dash, 1, 4, na(bullKeyLevel) ? "None" : str.tostring(bullKeyLevel, format.mintick), text_color=color.white, bgcolor=color.new(color.green, 65))
+    table.cell(dash, 0, 5, "Bear KL", text_color=color.white, bgcolor=color.new(color.gray, 70))
+    table.cell(dash, 1, 5, na(bearKeyLevel) ? "None" : str.tostring(bearKeyLevel, format.mintick), text_color=color.white, bgcolor=color.new(color.red, 65))
+    table.cell(dash, 0, 6, "Bull PB", text_color=color.white, bgcolor=color.new(color.gray, 70))
+    table.cell(dash, 1, 6, bullValidPullback ? "YES" : "NO", text_color=color.white, bgcolor=bullValidPullback ? color.new(color.green, 25) : color.new(color.gray, 80))
+    table.cell(dash, 0, 7, "Bear PB", text_color=color.white, bgcolor=color.new(color.gray, 70))
+    table.cell(dash, 1, 7, bearValidPullback ? "YES" : "NO", text_color=color.white, bgcolor=bearValidPullback ? color.new(color.red, 25) : color.new(color.gray, 80))
+    table.cell(dash, 0, 8, "BO+?", text_color=color.white, bgcolor=color.new(color.gray, 70))
+    table.cell(dash, 1, 8, bullBreaksBearKL ? "YES" : "NO", text_color=color.white, bgcolor=bullBreaksBearKL ? color.new(color.green, 25) : color.new(color.gray, 80))
+    table.cell(dash, 0, 9, "BO-?", text_color=color.white, bgcolor=color.new(color.gray, 70))
+    table.cell(dash, 1, 9, bearBreaksBullKL ? "YES" : "NO", text_color=color.white, bgcolor=bearBreaksBullKL ? color.new(color.red, 25) : color.new(color.gray, 80))
+    table.cell(dash, 0, 10, "Internal Pivot", text_color=color.white, bgcolor=color.new(color.gray, 70))
+    table.cell(dash, 1, 10, str.tostring(internalPivotLen), text_color=color.white, bgcolor=color.new(color.gray, 80))
+    table.cell(dash, 0, 11, "Min Move", text_color=color.white, bgcolor=color.new(color.gray, 70))
+    table.cell(dash, 1, 11, str.tostring(minInternalMoveAtr, "#.##") + " ATR", text_color=color.white, bgcolor=color.new(color.gray, 80))
+
+//=============================================================================
+// 11. ALERTS
+//=============================================================================
+
+alertcondition(bullValidPullback, title="NCI Bull Pullback Candidate", message="NCI Bull Pullback candidate created a latest bullish key level.")
+alertcondition(bearValidPullback, title="NCI Bear Pullback Candidate", message="NCI Bear Pullback candidate created a latest bearish key level.")
+alertcondition(bullBreaksBearKL, title="NCI Bull Breakout Candidate", message="NCI bullish breakout candidate above bearish key level.")
+alertcondition(bearBreaksBullKL, title="NCI Bear Breakout Candidate", message="NCI bearish breakout candidate below bullish key level.")
+
+// END OF NCI v0.2 SCRIPT BLOCK

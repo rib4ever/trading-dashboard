@@ -32,6 +32,67 @@ Valid Breakout
 Trend Started / Trend Finished
 Range / No Trade Condition
 Market Cycle Context
+HTF Bias
+Internal Trend
+Confluence / Unconfluence
+POI Strategy Context
+```
+
+## Ravi confirmed decisions for v0.2
+
+### 1. Key Level replacement rule
+
+```text
+Latest valid pullback replaces the previous key level.
+```
+
+The script must not keep an old key level active after a newer valid pullback creates a newer valid NCI key level.
+
+### 2. Internal structure visibility rule
+
+```text
+Internal structure should be visible on the chart.
+```
+
+But noise must be controlled. The visual system must not overload the chart with too many internal labels.
+
+### 3. Top-down analysis rule
+
+NCI Market Structure should be handled through top-down analysis and market cycle context.
+
+The dashboard and chart should clearly separate:
+
+```text
+HTF Bias / HTF Trend
+Current TF Trend
+Internal Trend
+Key Level
+Market Cycle Context
+Confluence / Unconfluence
+POI Strategy Context
+```
+
+### 4. Optional instrument-specific display filtering
+
+Instrument-specific filtering is allowed only as an optional display / sensitivity setting.
+
+Important:
+
+```text
+Core NCI logic must remain NCI-based.
+Instrument-specific settings may reduce visual noise, but must not replace NCI rules.
+```
+
+Allowed optional display presets:
+
+```text
+Universal
+BTCUSD display filter
+XAUUSD display filter
+Scalping display filter
+Day trading display filter
+Swing trading display filter
+Manual custom
 ```
 
 ## Pulse Wave
@@ -198,22 +259,44 @@ The first Market Structure script block should be conservative.
 
 It should not immediately create full trading signals.
 
-It should only show:
+It should show:
 
 ```text
 Pulse candidate
 Pullback candidate
 Internal structure candidate
-Key level candidate
+Latest key level candidate
 Valid breakout candidate
 Range warning
+HTF bias placeholder / dashboard field
+Internal trend field
+Confluence / unconfluence placeholder
 Debug reason
 ```
 
-## Open confirmations needed from Ravi
+## Noise-control rule for internal structure
 
-Before coding final NCI Market Structure, confirm these points:
+Internal structure must be visible, but noise must be controlled using settings such as:
 
-1. For first version, should key levels be drawn from the first valid pullback only, or should we allow latest valid pullback to replace the key level?
-2. Should internal structure be shown visually in v0.2, or only used inside debug/dashboard first?
-3. For BTCUSD and XAUUSD, should we keep the same NCI thresholds or add instrument-specific sensitivity only for display filtering?
+```text
+Show internal structure: ON/OFF
+Minimum internal move size
+Maximum labels per lookback
+Show only latest internal swing
+Show only internal trend line
+Display filter: Universal / BTCUSD / XAUUSD / Manual
+```
+
+## Candidate merge rule
+
+Before merging v0.2 into candidate:
+
+```text
+1. Confirm NCI logic source.
+2. Test on BTCUSD 5M.
+3. Test on XAUUSD 3M.
+4. Test on EURUSD 15M.
+5. Confirm key level replacement works.
+6. Confirm internal structure is visible but not noisy.
+7. Confirm dashboard separates HTF bias and internal trend.
+```

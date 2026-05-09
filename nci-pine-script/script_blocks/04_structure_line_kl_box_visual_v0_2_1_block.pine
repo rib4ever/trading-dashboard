@@ -1,0 +1,224 @@
+//@version=6
+indicator(title="NCI v0.2.1 Block — Structure Line + KL Boxes", shorttitle="NCI Visual v0.2.1", overlay=true, max_labels_count=500, max_lines_count=500, max_boxes_count=200)
+
+//=============================================================================
+// NCI v0.2.1 SCRIPT BLOCK — STRUCTURE LINE + KEY LEVEL BOX VISUAL ENGINE
+//=============================================================================
+// Purpose:
+// - Stop noisy normal-mode PBW/PW labels.
+// - Draw clean NCI-style market-cycle structure lines.
+// - Draw KL UP / KL DOWN rectangle boxes with timeframe detail.
+// - Draw broken KL box when key level is broken.
+// - Keep raw wave labels available only in Debug Mode.
+//
+// Important:
+// - This is a VISUAL FRAMEWORK block.
+// - Final structure points must still be refined with full NCI market-cycle logic.
+// - The goal of this block is to match Ravi's manual drawing style first.
+//=============================================================================
+
+//=============================================================================
+// 1. INPUTS
+//=============================================================================
+
+groupCycle = "01. Market Cycle / Structure"
+groupVisual = "02. Visual Style"
+groupDebug = "03. Debug"
+
+analysisTfLabel = input.string("Auto", "Displayed TF Label", options=["Auto", "H4", "H1", "M15", "M5"], group=groupCycle)
+pivotLen = input.int(5, "Structure Turning Point Strength", minval=2, maxval=30, group=groupCycle)
+minLegAtr = input.float(1.20, "Minimum Structure Leg Size vs ATR", minval=0.20, maxval=10.00, step=0.10, group=groupCycle)
+atrLength = input.int(14, "ATR Length", minval=5, maxval=100, group=groupCycle)
+klBoxBars = input.int(120, "KL Box Extension Bars", minval=20, maxval=500, group=groupCycle)
+klBoxHeightAtr = input.float(0.18, "KL Box Height vs ATR", minval=0.03, maxval=2.00, step=0.01, group=groupCycle)
+showOnlyLatestKL = input.bool(true, "Show Only Latest Active KL", group=groupCycle)
+
+showStructureLine = input.bool(true, "Show Market Cycle Structure Line", group=groupVisual)
+showKLBoxes = input.bool(true, "Show KL Boxes", group=groupVisual)
+showBrokenKL = input.bool(true, "Show Broken KL Box", group=groupVisual)
+showDashboard = input.bool(true, "Show Dashboard", group=groupVisual)
+structureLineWidth = input.int(3, "Structure Line Width", minval=1, maxval=5, group=groupVisual)
+
+// Debug must stay OFF by default.
+debugMode = input.bool(false, "Debug Mode — Show Raw Structure Events", group=groupDebug)
+showRawPivots = input.bool(false, "Debug: Show Raw Turning Points", group=groupDebug)
+
+//=============================================================================
+// 2. TIMEFRAME LABEL
+//=============================================================================
+
+f_autoTfLabel() =>
+    timeframe.period == "240" ? "H4" :
+     timeframe.period == "60" ? "H1" :
+     timeframe.period == "15" ? "M15" :
+     timeframe.period == "5" ? "M5" :
+     timeframe.period
+
+string tfLabel = analysisTfLabel == "Auto" ? f_autoTfLabel() : analysisTfLabel
+
+//=============================================================================
+// 3. BASIC STRUCTURE POINT DETECTION
+//=============================================================================
+// This block uses filtered confirmed pivots to draw the market-cycle visual line.
+// Later, the pivot approval must be replaced/confirmed by full NCI PW/PBW logic.
+//=============================================================================
+
+atrValue = ta.atr(atrLength)
+pivH = ta.pivothigh(high, pivotLen, pivotLen)
+pivL = ta.pivotlow(low, pivotLen, pivotLen)
+
+var float lastPointPrice = na
+var int lastPointIndex = na
+var int lastPointType = 0      // 1 = high, -1 = low
+var string cycleState = "WAIT"
+var string activeDirection = "NONE"
+
+var line lastStructureLine = na
+var array<line> structureLines = array.new_line()
+
+// KL objects.
+var box activeKLBox = na
+var label activeKLLabel = na
+var box brokenKLBox = na
+var label brokenKLLabel = na
+
+var float activeKLTop = na
+var float activeKLBottom = na
+var string activeKLDirection = "NONE"   // UP / DOWN
+var string lastBrokenText = "None"
+
+// Candidate points confirmed pivotLen bars after occurrence.
+newHigh = not na(pivH)
+newLow = not na(pivL)
+newPointIndexHigh = bar_index - pivotLen
+newPointIndexLow = bar_index - pivotLen
+
+// Debug pivot marks.
+plotshape(debugMode and showRawPivots and newHigh, title="Raw Structure High", style=shape.triangledown, location=location.abovebar, offset=-pivotLen, text="SH", size=size.tiny, color=color.new(color.orange, 0), textcolor=color.black)
+plotshape(debugMode and showRawPivots and newLow, title="Raw Structure Low", style=shape.triangleup, location=location.belowbar, offset=-pivotLen, text="SL", size=size.tiny, color=color.new(color.aqua, 0), textcolor=color.black)
+
+//=============================================================================
+// 4. STRUCTURE LINE + MARKET CYCLE STATE UPDATE
+//=============================================================================
+
+f_validLeg(_newPrice) =>
+    na(lastPointPrice) or math.abs(_newPrice - lastPointPrice) >= atrValue * minLegAtr
+
+f_addStructureLine(_x1, _y1, _x2, _y2) =>
+    if showStructureLine and not na(_x1) and not na(_y1)
+        _ln = line.new(_x1, _y1, _x2, _y2, xloc=xloc.bar_index, extend=extend.none, color=color.new(color.teal, 0), width=structureLineWidth)
+        array.push(structureLines, _ln)
+        if array.size(structureLines) > 20
+            line.delete(array.shift(structureLines))
+
+f_deleteActiveKL() =>
+    box.delete(activeKLBox)
+    label.delete(activeKLLabel)
+
+f_makeKLBox(_direction, _pivotIndex, _levelPrice, _tfLabel) =>
+    _height = atrValue * klBoxHeightAtr
+    _top = _direction == "UP" ? _levelPrice + _height : _levelPrice + _height
+    _bottom = _direction == "UP" ? _levelPrice - _height : _levelPrice - _height
+    _bg = _direction == "UP" ? color.new(color.aqua, 84) : color.new(color.fuchsia, 86)
+    _border = _direction == "UP" ? color.new(color.teal, 0) : color.new(color.rgb(255, 105, 180), 0)
+    _txt = _direction == "UP" ? _tfLabel + " KL UP" : _tfLabel + " KL DOWN"
+    _style = _direction == "UP" ? label.style_label_left : label.style_label_left
+    _b = box.new(left=_pivotIndex, top=_top, right=bar_index + klBoxBars, bottom=_bottom, xloc=xloc.bar_index, bgcolor=_bg, border_color=_border, border_width=2)
+    _l = label.new(bar_index + math.min(klBoxBars, 50), (_top + _bottom) / 2.0, _txt, xloc=xloc.bar_index, style=_style, color=color.new(_direction == "UP" ? color.aqua : color.rgb(255, 105, 180), 78), textcolor=color.black, size=size.small)
+    [_b, _l, _top, _bottom]
+
+f_makeBrokenBox(_direction, _tfLabel, _top, _bottom) =>
+    _txt = "KL " + _tfLabel + " Broken"
+    _b = box.new(left=bar_index - pivotLen, top=_top, right=bar_index + math.min(klBoxBars, 60), bottom=_bottom, xloc=xloc.bar_index, bgcolor=color.new(color.orange, 86), border_color=color.new(color.orange, 0), border_width=2)
+    _l = label.new(bar_index, (_top + _bottom) / 2.0, _txt, xloc=xloc.bar_index, style=label.style_label_left, color=color.new(color.orange, 78), textcolor=color.black, size=size.small)
+    [_b, _l, _txt]
+
+// Process structure high.
+if newHigh and f_validLeg(pivH)
+    // Accept alternating turning points only, to avoid noisy same-side points.
+    if lastPointType != 1
+        f_addStructureLine(lastPointIndex, lastPointPrice, newPointIndexHigh, pivH)
+        // If market moved from low to high, we have bullish cycle leg.
+        if lastPointType == -1
+            cycleState := "UP CYCLE"
+            activeDirection := "UP"
+            // KL UP is based near the last pullback low / last low point.
+            if showKLBoxes and not na(lastPointPrice)
+                if showOnlyLatestKL
+                    f_deleteActiveKL()
+                [activeKLBox, activeKLLabel, activeKLTop, activeKLBottom] = f_makeKLBox("UP", lastPointIndex, lastPointPrice, tfLabel)
+                activeKLDirection := "UP"
+        lastPointPrice := pivH
+        lastPointIndex := newPointIndexHigh
+        lastPointType := 1
+
+// Process structure low.
+if newLow and f_validLeg(pivL)
+    if lastPointType != -1
+        f_addStructureLine(lastPointIndex, lastPointPrice, newPointIndexLow, pivL)
+        // If market moved from high to low, we have bearish cycle leg.
+        if lastPointType == 1
+            cycleState := "DOWN CYCLE"
+            activeDirection := "DOWN"
+            // KL DOWN is based near the last pullback high / last high point.
+            if showKLBoxes and not na(lastPointPrice)
+                if showOnlyLatestKL
+                    f_deleteActiveKL()
+                [activeKLBox, activeKLLabel, activeKLTop, activeKLBottom] = f_makeKLBox("DOWN", lastPointIndex, lastPointPrice, tfLabel)
+                activeKLDirection := "DOWN"
+        lastPointPrice := pivL
+        lastPointIndex := newPointIndexLow
+        lastPointType := -1
+
+//=============================================================================
+// 5. BROKEN KL VISUAL
+//=============================================================================
+// This uses simple close-through-box logic as a VISUAL placeholder.
+// Later it must be replaced with NCI valid breakout standards.
+//=============================================================================
+
+upKLBroken = showBrokenKL and activeKLDirection == "UP" and not na(activeKLBottom) and close < activeKLBottom
+downKLBroken = showBrokenKL and activeKLDirection == "DOWN" and not na(activeKLTop) and close > activeKLTop
+
+if upKLBroken or downKLBroken
+    box.delete(brokenKLBox)
+    label.delete(brokenKLLabel)
+    [brokenKLBox, brokenKLLabel, lastBrokenText] = f_makeBrokenBox(activeKLDirection, tfLabel, activeKLTop, activeKLBottom)
+    activeKLDirection := "BROKEN"
+    cycleState := activeDirection == "UP" ? "UP KL BROKEN" : activeDirection == "DOWN" ? "DOWN KL BROKEN" : "KL BROKEN"
+
+//=============================================================================
+// 6. DASHBOARD
+//=============================================================================
+
+f_stateBg(_state) =>
+    str.contains(_state, "UP") and not str.contains(_state, "BROKEN") ? color.new(color.green, 25) :
+     str.contains(_state, "DOWN") and not str.contains(_state, "BROKEN") ? color.new(color.red, 25) :
+     str.contains(_state, "BROKEN") ? color.new(color.orange, 25) : color.new(color.gray, 75)
+
+var table dash = table.new(position.top_right, 2, 7, border_width=1)
+
+if barstate.islast and showDashboard
+    table.cell(dash, 0, 0, "NCI v0.2.1", text_color=color.white, bgcolor=color.new(color.black, 0))
+    table.cell(dash, 1, 0, "Visual MS + KL", text_color=color.white, bgcolor=color.new(color.black, 0))
+    table.cell(dash, 0, 1, "TF", text_color=color.white, bgcolor=color.new(color.gray, 70))
+    table.cell(dash, 1, 1, tfLabel, text_color=color.white, bgcolor=color.new(color.gray, 75))
+    table.cell(dash, 0, 2, "Market Cycle", text_color=color.white, bgcolor=color.new(color.gray, 70))
+    table.cell(dash, 1, 2, cycleState, text_color=color.white, bgcolor=f_stateBg(cycleState))
+    table.cell(dash, 0, 3, "Active KL", text_color=color.white, bgcolor=color.new(color.gray, 70))
+    table.cell(dash, 1, 3, activeKLDirection, text_color=color.white, bgcolor=f_stateBg(activeKLDirection))
+    table.cell(dash, 0, 4, "Broken", text_color=color.white, bgcolor=color.new(color.gray, 70))
+    table.cell(dash, 1, 4, lastBrokenText, text_color=color.white, bgcolor=str.contains(lastBrokenText, "Broken") ? color.new(color.orange, 25) : color.new(color.gray, 80))
+    table.cell(dash, 0, 5, "Display", text_color=color.white, bgcolor=color.new(color.gray, 70))
+    table.cell(dash, 1, 5, debugMode ? "DEBUG" : "NORMAL", text_color=color.white, bgcolor=debugMode ? color.new(color.orange, 25) : color.new(color.green, 35))
+    table.cell(dash, 0, 6, "Rule", text_color=color.white, bgcolor=color.new(color.gray, 70))
+    table.cell(dash, 1, 6, "Cycle → KL Box", text_color=color.white, bgcolor=color.new(color.blue, 70))
+
+//=============================================================================
+// 7. ALERTS
+//=============================================================================
+
+alertcondition(upKLBroken, title="NCI KL UP Broken Visual", message="NCI visual KL UP broken. Validate with NCI breakout standard.")
+alertcondition(downKLBroken, title="NCI KL DOWN Broken Visual", message="NCI visual KL DOWN broken. Validate with NCI breakout standard.")
+
+// END OF NCI v0.2.1 VISUAL STRUCTURE + KL BOX BLOCK

@@ -115,6 +115,7 @@ HTF sweep above/below
 HTF breakout candle
 HTF failed breakout candle
 HTF retest of broken level
+HTF LL / HH reaction after impulse
 ```
 
 ## 7. Connected market-structure law
@@ -279,7 +280,55 @@ invalid noise
 
 Debug mode can reveal them.
 
-## 13. No execution priority
+## 13. HTF LL / HH reaction continuation law
+
+This law is mandatory for correct higher-timeframe storytelling.
+
+When the higher timeframe is in a bearish sequence and creates a new LL, any lower-timeframe bullish reaction from that LL is treated first as a **pullback explanation**, not as a bullish trend reversal.
+
+```text
+4H bearish continuation candidate
+→ 4H creates new LL
+→ 1H reacts upward from the 4H LL
+→ 1H mission = explain the pullback from the 4H LL
+→ watch whether 1H forms LH / KL DOWN rejection
+→ 4H bearish continuation remains active until valid 4H invalidation or reversal
+```
+
+The opposite applies in bullish structure:
+
+```text
+4H bullish continuation candidate
+→ 4H creates new HH
+→ 1H reacts downward from the 4H HH
+→ 1H mission = explain the pullback from the 4H HH
+→ watch whether 1H forms HL / KL UP rejection
+→ 4H bullish continuation remains active until valid 4H invalidation or reversal
+```
+
+Core decision rule:
+
+```text
+LTF reaction from HTF LL/HH = pullback explanation first.
+HTF continuation story remains active until HTF structure is invalidated by valid NCI structure rules.
+LTF movement can warn, clarify, or explain, but it cannot override the HTF story alone.
+```
+
+This prevents false story flips such as:
+
+```text
+4H bearish creates LL → 1H moves up → incorrectly call bullish reversal
+```
+
+Correct interpretation:
+
+```text
+4H bearish creates LL → 1H moves up → likely 4H bearish pullback explanation until proven otherwise
+```
+
+Official HTF story change requires valid higher-timeframe structure change, not only lower-timeframe reaction.
+
+## 14. No execution priority
 
 Do not prioritize:
 

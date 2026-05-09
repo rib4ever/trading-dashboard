@@ -1,0 +1,200 @@
+//@version=6
+indicator("NCI x SMC Market Story Visualizer [Ravi Custom] v0.6", shorttitle="NCIxSMC Story v0.6", overlay=true, max_boxes_count=500, max_lines_count=500, max_labels_count=500)
+
+// v0.6 Fractal Child Structure Engine
+// Visual-only. No execution logic.
+// Core law: 4H anchor -> 1H explanation -> 15M explanation -> 5M reaction.
+// Mandatory: LTF reaction from HTF LL/HH is pullback explanation first, not reversal.
+
+// Inputs
+grpTF = "01. Timeframe Story Stack"
+tf1 = input.timeframe("240", "TF Slot 1 - Master Story", group=grpTF)
+tf2 = input.timeframe("60", "TF Slot 2 - Explains Slot 1", group=grpTF)
+tf3 = input.timeframe("15", "TF Slot 3 - Explains Slot 2", group=grpTF)
+tf4 = input.timeframe("5", "TF Slot 4 - Explains Slot 3", group=grpTF)
+showChartLayer = input.bool(true, "Show Current Chart TF Working Layer", group=grpTF)
+
+grpView = "02. Theme / Display"
+themeMode = input.string("Light - Black Font", "Theme", options=["Light - Black Font", "Dark - White Font"], group=grpView)
+panelMode = input.string("Mobile Compact", "Panel Mode", options=["Mobile Compact", "Normal", "Full Debug"], group=grpView)
+panelPos = input.string("Top Right", "Panel Position", options=["Top Right", "Top Left", "Bottom Right", "Bottom Left"], group=grpView)
+showPanel = input.bool(true, "Show Story Panel", group=grpView)
+showChartKL = input.bool(true, "Show Chart TF KL", group=grpView)
+showMasterKL = input.bool(true, "Show Master KL", group=grpView)
+showAnchorLabel = input.bool(true, "Show Master Anchor Label", group=grpView)
+showDebug = input.bool(false, "Debug", group=grpView)
+
+grpCalc = "03. Structure Settings"
+emaLen = input.int(20, "Temporary EMA Gauge", minval=1, group=grpCalc)
+atrLen = input.int(14, "ATR Length", minval=1, group=grpCalc)
+pLeft = input.int(3, "Pivot Left", minval=1, maxval=20, group=grpCalc)
+pRight = input.int(3, "Pivot Right", minval=1, maxval=20, group=grpCalc)
+rangeAtrMult = input.float(2.0, "Range ATR Multiplier", minval=0.5, maxval=10.0, step=0.25, group=grpCalc)
+nearAtrMult = input.float(0.35, "Near KL ATR Multiplier", minval=0.05, maxval=2.0, step=0.05, group=grpCalc)
+lineLen = input.int(120, "Chart KL Length", minval=20, maxval=500, group=grpCalc)
+masterLineLen = input.int(260, "Master KL Length", minval=50, maxval=1000, group=grpCalc)
+
+// Theme
+isLight = themeMode == "Light - Black Font"
+txt = isLight ? color.black : color.white
+headBg = isLight ? color.new(color.silver, 10) : color.new(color.black, 0)
+rowBg = isLight ? color.new(color.white, 72) : color.new(color.gray, 86)
+altBg = isLight ? color.new(color.silver, 80) : color.new(color.gray, 90)
+
+// Utilities
+f_tfLabel(string tf) => tf == "240" ? "4H" : tf == "60" ? "1H" : tf == "30" ? "30M" : tf == "15" ? "15M" : tf == "5" ? "5M" : tf == "3" ? "3M" : tf == "1" ? "1M" : tf
+f_tfMin(string tf) => tf == "1" ? 1 : tf == "3" ? 3 : tf == "5" ? 5 : tf == "15" ? 15 : tf == "30" ? 30 : tf == "60" ? 60 : tf == "240" ? 240 : tf == "D" ? 1440 : tf == "W" ? 10080 : na
+f_chartMin() => timeframe.isminutes ? timeframe.multiplier : timeframe.isdaily ? 1440 * timeframe.multiplier : timeframe.isweekly ? 10080 * timeframe.multiplier : na
+f_sameTf(string tf) => tf == timeframe.period or f_tfMin(tf) == f_chartMin()
+f_chartRole() => f_sameTf(tf1) ? "Slot 1 Master" : f_sameTf(tf2) ? "Slot 2 explains Slot 1" : f_sameTf(tf3) ? "Slot 3 explains Slot 2" : f_sameTf(tf4) ? "Slot 4 reaction" : showChartLayer ? "Extra working layer" : "Hidden"
+f_pos(string p) => p == "Top Left" ? position.top_left : p == "Bottom Right" ? position.bottom_right : p == "Bottom Left" ? position.bottom_left : position.top_right
+f_price(float x) => na(x) ? "n/a" : str.tostring(x, format.mintick)
+f_ctx(float c, float e) => c > e ? "Bullish" : c < e ? "Bearish" : "Neutral"
+f_rel(string p, string ch) => p == ch ? "Aligned" : p == "Neutral" or ch == "Neutral" ? "Unclear" : "Opposing / pullback"
+
+// Candle lightweight
+f_body(float o, float c) => math.abs(c - o)
+f_rng(float h, float l) => h - l
+f_bodyRatio(float o, float h, float l, float c) => f_rng(h, l) > 0 ? f_body(o, c) / f_rng(h, l) : 0.0
+f_candle(float o, float h, float l, float c) => f_bodyRatio(o, h, l, c) >= 0.70 ? "Maru" : f_bodyRatio(o, h, l, c) <= 0.15 ? "Doji" : "Normal"
+
+// Pivot helpers
+f_pivH(int occ) =>
+    ph = ta.pivothigh(high, pLeft, pRight)
+    ta.valuewhen(not na(ph), ph, occ)
+f_pivL(int occ) =>
+    pl = ta.pivotlow(low, pLeft, pRight)
+    ta.valuewhen(not na(pl), pl, occ)
+f_klState(float ph, float pl) => na(ph) or na(pl) ? "KL building" : close > ph ? "Above prelim KL DOWN" : close < pl ? "Below prelim KL UP" : "Between prelim KLs"
+
+f_masterState(float c, float ph, float phPrev, float pl, float plPrev, float atr) =>
+    enough = not na(ph) and not na(phPrev) and not na(pl) and not na(plPrev)
+    hh = enough and ph > phPrev
+    hl = enough and pl > plPrev
+    lh = enough and ph < phPrev
+    ll = enough and pl < plPrev
+    width = not na(ph) and not na(pl) ? math.abs(ph - pl) : na
+    isRange = not na(width) and width <= atr * rangeAtrMult
+    c > ph and enough ? "Breakout attempt above master KL DOWN" : c < pl and enough ? "Breakdown attempt below master KL UP" : hh and hl ? "Bullish continuation candidate" : lh and ll ? "Bearish continuation candidate" : isRange ? "Master range candidate" : enough ? "Master transition / mixed" : "Master structure building"
+
+f_eventAnchor(float c, float ph, float pl, float atr, string st) =>
+    nearHigh = not na(ph) and math.abs(c - ph) <= atr * nearAtrMult
+    nearLow = not na(pl) and math.abs(c - pl) <= atr * nearAtrMult
+    c > ph ? "Breakout anchor above master KL DOWN" : c < pl ? "Breakdown anchor below master KL UP" : str.contains(st, "Bearish") and nearLow ? "Bearish LL reaction: child pullback explanation" : str.contains(st, "Bullish") and nearHigh ? "Bullish HH reaction: child pullback explanation" : str.contains(st, "Bearish") and nearHigh ? "Bearish LH / KL DOWN decision anchor" : str.contains(st, "Bullish") and nearLow ? "Bullish HL / KL UP decision anchor" : str.contains(st, "range") and nearHigh ? "Range high decision anchor" : str.contains(st, "range") and nearLow ? "Range low decision anchor" : "No active master event anchor"
+
+f_childRole(string parentState, string parentAnchor, string childState, float childC, float childH, float childL) =>
+    childBreakUp = not na(childH) and childC > childH
+    childBreakDn = not na(childL) and childC < childL
+    parentBear = str.contains(parentState, "Bearish")
+    parentBull = str.contains(parentState, "Bullish")
+    llReaction = str.contains(parentAnchor, "LL reaction")
+    hhReaction = str.contains(parentAnchor, "HH reaction")
+    parentRange = str.contains(parentState, "range") or str.contains(parentAnchor, "Range")
+    parentBear and llReaction and childState == "Bullish" ? "Pullback explanation from parent LL" : parentBull and hhReaction and childState == "Bearish" ? "Pullback explanation from parent HH" : parentBear and childState == "Bearish" ? "Supports bearish continuation" : parentBull and childState == "Bullish" ? "Supports bullish continuation" : parentBear and childBreakUp ? "Transition warning only, not HTF reversal" : parentBull and childBreakDn ? "Transition warning only, not HTF reversal" : parentRange ? "Range/internal rotation explanation" : "Child explanation building"
+
+f_nextAnchorFromChild(string role, float childH, float childL, float childC) =>
+    str.contains(role, "Pullback") and childC < childL ? "Child pullback failure / continuation anchor" : str.contains(role, "Pullback") and childC > childH ? "Child pullback extension warning" : str.contains(role, "Supports bearish") ? "Child continuation low anchor" : str.contains(role, "Supports bullish") ? "Child continuation high anchor" : str.contains(role, "Range") ? "Child range edge anchor" : "Child anchor building"
+
+// Data requests
+s1C = request.security(syminfo.tickerid, tf1, close)
+s2C = request.security(syminfo.tickerid, tf2, close)
+s3C = request.security(syminfo.tickerid, tf3, close)
+s4C = request.security(syminfo.tickerid, tf4, close)
+s1E = request.security(syminfo.tickerid, tf1, ta.ema(close, emaLen))
+s2E = request.security(syminfo.tickerid, tf2, ta.ema(close, emaLen))
+s3E = request.security(syminfo.tickerid, tf3, ta.ema(close, emaLen))
+s4E = request.security(syminfo.tickerid, tf4, ta.ema(close, emaLen))
+s1Atr = request.security(syminfo.tickerid, tf1, ta.atr(atrLen))
+
+s1H = request.security(syminfo.tickerid, tf1, f_pivH(0))
+s1L = request.security(syminfo.tickerid, tf1, f_pivL(0))
+s1PH = request.security(syminfo.tickerid, tf1, f_pivH(1))
+s1PL = request.security(syminfo.tickerid, tf1, f_pivL(1))
+s2H = request.security(syminfo.tickerid, tf2, f_pivH(0))
+s2L = request.security(syminfo.tickerid, tf2, f_pivL(0))
+s3H = request.security(syminfo.tickerid, tf3, f_pivH(0))
+s3L = request.security(syminfo.tickerid, tf3, f_pivL(0))
+s4H = request.security(syminfo.tickerid, tf4, f_pivH(0))
+s4L = request.security(syminfo.tickerid, tf4, f_pivL(0))
+
+s1State = f_ctx(s1C, s1E)
+s2State = f_ctx(s2C, s2E)
+s3State = f_ctx(s3C, s3E)
+s4State = f_ctx(s4C, s4E)
+
+masterState = f_masterState(s1C, s1H, s1PH, s1L, s1PL, s1Atr)
+masterAnchor = f_eventAnchor(s1C, s1H, s1L, s1Atr, masterState)
+child1Role = f_childRole(masterState, masterAnchor, s2State, s2C, s2H, s2L)
+child1Anchor = f_nextAnchorFromChild(child1Role, s2H, s2L, s2C)
+child2Role = f_childRole(s2State, child1Anchor, s3State, s3C, s3H, s3L)
+child2Anchor = f_nextAnchorFromChild(child2Role, s3H, s3L, s3C)
+child3Role = f_childRole(s3State, child2Anchor, s4State, s4C, s4H, s4L)
+
+chartH = f_pivH(0)
+chartL = f_pivL(0)
+chartKLState = f_klState(chartH, chartL)
+chartCandle = f_candle(open, high, low, close)
+
+stackText = f_tfLabel(tf1) + " → " + f_tfLabel(tf2) + " → " + f_tfLabel(tf3) + " → " + f_tfLabel(tf4)
+masterKLText = "UP " + f_price(s1L) + " | DOWN " + f_price(s1H)
+chartKLText = "UP " + f_price(chartL) + " | DOWN " + f_price(chartH)
+
+// Panel
+var table t = table.new(f_pos(panelPos), 2, 16, border_width=1)
+f_cell(int c, int r, string s, color bg) => table.cell(t, c, r, s, bgcolor=bg, text_color=txt, text_size=panelMode == "Mobile Compact" ? size.tiny : size.small)
+if barstate.islast and showPanel
+    table.clear(t, 0, 0, 1, 15)
+    f_cell(0, 0, "NCI Story", headBg)
+    f_cell(1, 0, "v0.6 Child", headBg)
+    if panelMode == "Mobile Compact"
+        f_cell(0, 1, "4H", altBg), f_cell(1, 1, masterState, altBg)
+        f_cell(0, 2, "Anchor", rowBg), f_cell(1, 2, masterAnchor, rowBg)
+        f_cell(0, 3, "1H", rowBg), f_cell(1, 3, child1Role, rowBg)
+        f_cell(0, 4, "15M", rowBg), f_cell(1, 4, child2Role, rowBg)
+        f_cell(0, 5, "5M", rowBg), f_cell(1, 5, child3Role, rowBg)
+        f_cell(0, 6, "Next", rowBg), f_cell(1, 6, "v0.7 Range Story", rowBg)
+    else
+        f_cell(0, 1, "Stack", altBg), f_cell(1, 1, stackText, altBg)
+        f_cell(0, 2, "4H Master", rowBg), f_cell(1, 2, masterState + " | " + masterKLText, rowBg)
+        f_cell(0, 3, "4H Anchor", rowBg), f_cell(1, 3, masterAnchor, rowBg)
+        f_cell(0, 4, "1H explains 4H", rowBg), f_cell(1, 4, child1Role + " | Anchor: " + child1Anchor, rowBg)
+        f_cell(0, 5, "15M explains 1H", rowBg), f_cell(1, 5, child2Role + " | Anchor: " + child2Anchor, rowBg)
+        f_cell(0, 6, "5M explains 15M", rowBg), f_cell(1, 6, child3Role, rowBg)
+        f_cell(0, 7, "Chart TF", rowBg), f_cell(1, 7, timeframe.period + " | " + f_chartRole() + " | " + chartKLText, rowBg)
+        f_cell(0, 8, "Candle", rowBg), f_cell(1, 8, chartCandle + " | " + chartKLState, rowBg)
+        f_cell(0, 9, "Rule", rowBg), f_cell(1, 9, "Child reacts/explains; parent controls until invalidation", rowBg)
+        f_cell(0, 10, "Next", rowBg), f_cell(1, 10, "v0.7 Range Story Engine", rowBg)
+        if panelMode == "Full Debug"
+            f_cell(0, 11, "1H State/KL", rowBg), f_cell(1, 11, s2State + " | " + f_price(s2L) + " / " + f_price(s2H), rowBg)
+            f_cell(0, 12, "15M State/KL", rowBg), f_cell(1, 12, s3State + " | " + f_price(s3L) + " / " + f_price(s3H), rowBg)
+            f_cell(0, 13, "5M State/KL", rowBg), f_cell(1, 13, s4State + " | " + f_price(s4L) + " / " + f_price(s4H), rowBg)
+            f_cell(0, 14, "HTF LL/HH Law", rowBg), f_cell(1, 14, "LTF reaction = pullback first", rowBg)
+
+// Lines / labels
+var line cUp = na, cDn = na, mUp = na, mDn = na
+var label cUpL = na, cDnL = na, mUpL = na, mDnL = na, anchorL = na
+if barstate.islast
+    line.delete(cUp), line.delete(cDn), line.delete(mUp), line.delete(mDn)
+    label.delete(cUpL), label.delete(cDnL), label.delete(mUpL), label.delete(mDnL), label.delete(anchorL)
+    if showChartLayer and showChartKL
+        if not na(chartL)
+            cUp := line.new(bar_index - lineLen, chartL, bar_index, chartL, extend=extend.right, width=1, color=color.new(color.green, 20))
+            cUpL := label.new(bar_index, chartL, "Chart KL UP\n" + f_price(chartL), style=label.style_label_left, textcolor=color.white, color=color.new(color.green, 10), size=size.tiny)
+        if not na(chartH)
+            cDn := line.new(bar_index - lineLen, chartH, bar_index, chartH, extend=extend.right, width=1, color=color.new(color.red, 20))
+            cDnL := label.new(bar_index, chartH, "Chart KL DOWN\n" + f_price(chartH), style=label.style_label_left, textcolor=color.white, color=color.new(color.red, 10), size=size.tiny)
+    if showMasterKL
+        if not na(s1L)
+            mUp := line.new(bar_index - masterLineLen, s1L, bar_index, s1L, extend=extend.right, width=2, color=color.new(color.green, 45))
+            mUpL := label.new(bar_index, s1L, f_tfLabel(tf1) + " MASTER KL UP\n" + f_price(s1L), style=label.style_label_left, textcolor=color.black, color=color.new(color.green, 65), size=size.tiny)
+        if not na(s1H)
+            mDn := line.new(bar_index - masterLineLen, s1H, bar_index, s1H, extend=extend.right, width=2, color=color.new(color.red, 45))
+            mDnL := label.new(bar_index, s1H, f_tfLabel(tf1) + " MASTER KL DOWN\n" + f_price(s1H), style=label.style_label_left, textcolor=color.black, color=color.new(color.red, 65), size=size.tiny)
+    if showAnchorLabel
+        anchorY = str.contains(masterAnchor, "KL DOWN") or str.contains(masterAnchor, "High") or str.contains(masterAnchor, "HH") ? s1H : s1L
+        if not na(anchorY)
+            anchorL := label.new(bar_index, anchorY, "4H Anchor\n" + masterAnchor, style=label.style_label_left, textcolor=color.black, color=color.new(color.yellow, 45), size=size.tiny)
+    if showDebug
+        label.new(bar_index, low, "DEBUG v0.6\n" + child1Role + "\n" + child2Role + "\n" + child3Role, style=label.style_label_up, textcolor=txt, color=rowBg, size=size.tiny)
+
+// Next: v0.7 Range Story Engine.

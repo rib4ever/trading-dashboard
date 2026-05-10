@@ -1,0 +1,247 @@
+//@version=6
+indicator("NCI x SMC Market Story Visualizer [Ravi Custom] v1.3.2.1", shorttitle="NCIStory", overlay=true, max_lines_count=500, max_labels_count=500)
+
+// v1.3.2.1 Line Type Compile Hotfix
+// Rule: No validation = no KL label.
+// Candidate pivots are shown as candidates only, never as confirmed KL.
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Inputs
+// ─────────────────────────────────────────────────────────────────────────────
+grpTF = "01. Auto TF Stack"
+tf4h = input.timeframe("240", "Slot 1 / Master", group=grpTF)
+tf1h = input.timeframe("60", "Slot 2 / Child", group=grpTF)
+tf15 = input.timeframe("15", "Slot 3 / Internal", group=grpTF)
+tf5 = input.timeframe("5", "Slot 4 / Execution", group=grpTF)
+
+grpM = "02. Mode"
+anchorViewMode = input.string("Story Focus", "Anchor View Mode", options=["Story Focus", "Show All", "Current TF Pair Only"], group=grpM)
+showPanel = input.bool(true, "Show Story Panel", group=grpM)
+showConfirmedKL = input.bool(true, "Show Confirmed KL", group=grpM)
+showCandidates = input.bool(true, "Show Candidate Levels", group=grpM)
+showEventLabel = input.bool(true, "Show Current Event Label", group=grpM)
+
+grpR = "03. Auto NCI Rules"
+pLeft = input.int(4, "Structure Pivot Left", minval=1, maxval=20, group=grpR)
+pRight = input.int(4, "Structure Pivot Right", minval=1, maxval=20, group=grpR)
+atrLen = input.int(14, "ATR Length", minval=1, group=grpR)
+minLegAtr = input.float(1.20, "Minimum Valid Structure Leg ATR", minval=0.10, maxval=10.0, step=0.05, group=grpR)
+strongClosePct = input.float(0.60, "Valid Break Close Strength", minval=0.40, maxval=0.95, step=0.01, group=grpR)
+touchTolAtr = input.float(0.35, "KL Touch Tolerance ATR", minval=0.05, maxval=3.0, step=0.05, group=grpR)
+breakTolAtr = input.float(0.25, "KL Break Confirmation ATR", minval=0.05, maxval=3.0, step=0.05, group=grpR)
+rangeWidthAtr = input.float(2.20, "Range Candidate Width ATR", minval=0.50, maxval=20.0, step=0.10, group=grpR)
+nearAnchorAtr = input.float(12.0, "Story Focus Max Anchor Distance ATR", minval=2.0, maxval=80.0, step=1.0, group=grpR)
+lineLen = input.int(260, "Line Length", minval=50, maxval=1000, group=grpR)
+
+grpV = "04. Display"
+theme = input.string("Light", "Theme", options=["Light", "Dark"], group=grpV)
+panelMode = input.string("Mobile", "Panel Mode", options=["Mobile", "Normal", "Debug"], group=grpV)
+panelPos = input.string("Top Right", "Panel Position", options=["Top Right", "Top Left", "Bottom Right", "Bottom Left"], group=grpV)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────────────────
+isLight = theme == "Light"
+txt = isLight ? color.black : color.white
+headBg = isLight ? color.new(color.silver, 10) : color.new(color.black, 0)
+rowBg = isLight ? color.new(color.white, 72) : color.new(color.gray, 86)
+altBg = isLight ? color.new(color.silver, 82) : color.new(color.gray, 88)
+
+f_pos(string p) => p == "Top Left" ? position.top_left : p == "Bottom Right" ? position.bottom_right : p == "Bottom Left" ? position.bottom_left : position.top_right
+f_price(float x) => na(x) ? "n/a" : str.tostring(x, format.mintick)
+f_chartMin() => timeframe.isminutes ? timeframe.multiplier : timeframe.isdaily ? 1440 * timeframe.multiplier : timeframe.isweekly ? 10080 * timeframe.multiplier : na
+f_near(float level, float atr) => not na(level) and math.abs(close - level) <= atr * nearAnchorAtr
+f_pairNear(float up, float dn, float atr) => f_near(up, atr) or f_near(dn, atr)
+f_closePos(float h, float l, float c) => h - l > 0 ? (c - l) / (h - l) : 0.5
+
+f_ph(int occ) =>
+    ph = ta.pivothigh(high, pLeft, pRight)
+    ta.valuewhen(not na(ph), ph, occ)
+
+f_pl(int occ) =>
+    pl = ta.pivotlow(low, pLeft, pRight)
+    ta.valuewhen(not na(pl), pl, occ)
+
+f_cycle(float h0, float h1, float l0, float l1, float atr) =>
+    ok = not na(h0) and not na(h1) and not na(l0) and not na(l1)
+    legOk = ok and math.abs(h0 - l0) >= atr * minLegAtr
+    rangeLike = ok and math.abs(h0 - l0) <= atr * rangeWidthAtr
+    hh = ok and h0 > h1
+    hl = ok and l0 > l1
+    lh = ok and h0 < h1
+    ll = ok and l0 < l1
+    legOk and hh and hl ? "Bullish structure candidate" : legOk and lh and ll ? "Bearish structure candidate" : rangeLike ? "Range candidate only" : ok ? "Transition candidate only" : "Building"
+
+f_canConfirm(string cycle) => str.contains(cycle, "Bullish structure") or str.contains(cycle, "Bearish structure")
+f_reason(string cycle) => str.contains(cycle, "Range") ? "Range candidate only; no confirmed KL" : str.contains(cycle, "Transition") ? "Transition candidate only; no confirmed KL" : str.contains(cycle, "Building") ? "Not enough confirmed swing data" : "Structure candidate awaiting validation"
+f_breakUp(float kDn, float o, float h, float l, float c, float atr) => not na(kDn) and c > kDn + atr * breakTolAtr and f_closePos(h, l, c) >= strongClosePct and c > o
+f_breakDn(float kUp, float o, float h, float l, float c, float atr) => not na(kUp) and c < kUp - atr * breakTolAtr and f_closePos(h, l, c) <= 1.0 - strongClosePct and c < o
+f_touchDn(float kDn, float h, float c, float atr) => not na(kDn) and h >= kDn - atr * touchTolAtr and c <= kDn
+f_touchUp(float kUp, float l, float c, float atr) => not na(kUp) and l <= kUp + atr * touchTolAtr and c >= kUp
+
+f_event(string cycle, float candUp, float candDn, float o, float h, float l, float c, float atr) =>
+    can = f_canConfirm(cycle)
+    upBreak = can and f_breakUp(candDn, o, h, l, c, atr)
+    dnBreak = can and f_breakDn(candUp, o, h, l, c, atr)
+    dnTouch = can and f_touchDn(candDn, h, c, atr)
+    upTouch = can and f_touchUp(candUp, l, c, atr)
+    upBreak ? "Confirmed break above candidate high" : dnBreak ? "Confirmed break below candidate low" : dnTouch ? "Confirmed touch/reaction at candidate high" : upTouch ? "Confirmed touch/reaction at candidate low" : f_reason(cycle)
+
+f_confUp(string cycle, string event, float candUp) => f_canConfirm(cycle) and str.contains(event, "Confirmed") ? candUp : na
+f_confDn(string cycle, string event, float candDn) => f_canConfirm(cycle) and str.contains(event, "Confirmed") ? candDn : na
+
+f_childRole(string parentEvent, string childCycle, string layer) =>
+    parentNoKL = str.contains(parentEvent, "no confirmed KL") or str.contains(parentEvent, "Not enough") or str.contains(parentEvent, "candidate only") or str.contains(parentEvent, "awaiting")
+    parentNoKL ? layer + " waits; parent KL not confirmed" : str.contains(parentEvent, "touch/reaction at candidate high") and str.contains(childCycle, "Bullish") ? layer + " explains pullback up to parent high" : str.contains(parentEvent, "touch/reaction at candidate high") and str.contains(childCycle, "Bearish") ? layer + " confirms reaction down from parent high" : str.contains(parentEvent, "touch/reaction at candidate low") and str.contains(childCycle, "Bearish") ? layer + " explains pullback down to parent low" : str.contains(parentEvent, "touch/reaction at candidate low") and str.contains(childCycle, "Bullish") ? layer + " confirms reaction up from parent low" : str.contains(parentEvent, "break above") ? layer + " rebuilds bullish after parent break" : str.contains(parentEvent, "break below") ? layer + " rebuilds bearish after parent break" : layer + " transition / wait"
+
+f_state() =>
+    atr = ta.atr(atrLen)
+    h0 = f_ph(0)
+    h1 = f_ph(1)
+    l0 = f_pl(0)
+    l1 = f_pl(1)
+    cyc = f_cycle(h0, h1, l0, l1, atr)
+    candUp = l0
+    candDn = h0
+    evt = f_event(cyc, candUp, candDn, open, high, low, close, atr)
+    kUp = f_confUp(cyc, evt, candUp)
+    kDn = f_confDn(cyc, evt, candDn)
+    why = f_reason(cyc)
+    [cyc, evt, candUp, candDn, kUp, kDn, why, atr]
+
+[cy4, ev4, candUp4, candDn4, klUp4, klDn4, reason4, atr4] = request.security(syminfo.tickerid, tf4h, f_state())
+[cy1, ev1, candUp1, candDn1, klUp1, klDn1, reason1, atr1] = request.security(syminfo.tickerid, tf1h, f_state())
+[cy15, ev15, candUp15, candDn15, klUp15, klDn15, reason15, atr15] = request.security(syminfo.tickerid, tf15, f_state())
+[cy5, ev5, candUp5, candDn5, klUp5, klDn5, reason5, atr5] = request.security(syminfo.tickerid, tf5, f_state())
+
+role1 = f_childRole(ev4, cy1, "1H")
+role15 = f_childRole(ev1, cy15, "15M")
+role5 = f_childRole(ev15, cy5, "5M")
+masterStory = ev4
+confidence = na(klUp4) and na(klDn4) ? "No confirmed 4H KL" : "Confirmed parent event"
+hierarchyStory = role1 + " | " + role15
+
+chartM = f_chartMin()
+chartAtr = ta.atr(atrLen)
+allMode = anchorViewMode == "Show All"
+storyFocus = anchorViewMode == "Story Focus"
+currentPair = anchorViewMode == "Current TF Pair Only"
+show4 = allMode or (storyFocus and f_pairNear(klUp4, klDn4, chartAtr)) or (currentPair and chartM >= 60)
+show1 = allMode or (storyFocus and (f_pairNear(klUp1, klDn1, chartAtr) or chartM <= 60)) or (currentPair and chartM <= 60 and chartM >= 15)
+show15m = allMode or (storyFocus and (f_pairNear(klUp15, klDn15, chartAtr) or chartM <= 15)) or (currentPair and chartM <= 15 and chartM >= 5)
+show5m = allMode or (storyFocus and (f_pairNear(klUp5, klDn5, chartAtr) or chartM <= 5)) or (currentPair and chartM <= 5)
+visibilityNote = allMode ? "All candidates/KLs shown" : storyFocus ? "Story Focus; far levels hidden" : "Current TF Pair Only"
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Panel
+// ─────────────────────────────────────────────────────────────────────────────
+var table t = table.new(f_pos(panelPos), 2, 18, border_width=1)
+f_cell(int c, int r, string s, color bg) => table.cell(t, c, r, s, bgcolor=bg, text_color=txt, text_size=panelMode == "Mobile" ? size.tiny : size.small)
+if barstate.islast and showPanel
+    table.clear(t, 0, 0, 1, 17)
+    f_cell(0, 0, "NCI Auto", headBg)
+    f_cell(1, 0, "v1.3.2.1", headBg)
+    f_cell(0, 1, "4H Event", altBg)
+    f_cell(1, 1, masterStory, altBg)
+    f_cell(0, 2, "Confidence", rowBg)
+    f_cell(1, 2, confidence, rowBg)
+    f_cell(0, 3, "Hierarchy", rowBg)
+    f_cell(1, 3, hierarchyStory, rowBg)
+    f_cell(0, 4, "Visible", rowBg)
+    f_cell(1, 4, visibilityNote, rowBg)
+    f_cell(0, 5, "4H KL", rowBg)
+    f_cell(1, 5, "UP " + f_price(klUp4) + " | DOWN " + f_price(klDn4), rowBg)
+    f_cell(0, 6, "4H Reason", rowBg)
+    f_cell(1, 6, na(klUp4) and na(klDn4) ? reason4 : cy4, rowBg)
+    f_cell(0, 7, "1H", rowBg)
+    f_cell(1, 7, role1, rowBg)
+    f_cell(0, 8, "15M", rowBg)
+    f_cell(1, 8, role15, rowBg)
+    if panelMode == "Debug"
+        f_cell(0, 9, "1H KL", rowBg)
+        f_cell(1, 9, "UP " + f_price(klUp1) + " | DOWN " + f_price(klDn1), rowBg)
+        f_cell(0, 10, "15M KL", rowBg)
+        f_cell(1, 10, "UP " + f_price(klUp15) + " | DOWN " + f_price(klDn15), rowBg)
+        f_cell(0, 11, "5M KL", rowBg)
+        f_cell(1, 11, "UP " + f_price(klUp5) + " | DOWN " + f_price(klDn5), rowBg)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Visuals — each variable declared separately to avoid Pine NA type errors.
+// ─────────────────────────────────────────────────────────────────────────────
+var line l4u = na
+var line l4d = na
+var line l1u = na
+var line l1d = na
+var line l15u = na
+var line l15d = na
+var line c1u = na
+var line c1d = na
+var line c15u = na
+var line c15d = na
+var label b4u = na
+var label b4d = na
+var label b1u = na
+var label b1d = na
+var label b15u = na
+var label b15d = na
+var label evLab = na
+
+f_drawLine(float level, color col, int width) =>
+    line.new(bar_index - lineLen, level, bar_index, level, extend=extend.right, width=width, color=col)
+
+f_drawLab(float level, string txtLabel, color bg) =>
+    label.new(bar_index, level, txtLabel, style=label.style_label_left, textcolor=color.black, color=bg, size=size.tiny)
+
+if barstate.islast
+    line.delete(l4u)
+    line.delete(l4d)
+    line.delete(l1u)
+    line.delete(l1d)
+    line.delete(l15u)
+    line.delete(l15d)
+    line.delete(c1u)
+    line.delete(c1d)
+    line.delete(c15u)
+    line.delete(c15d)
+    label.delete(b4u)
+    label.delete(b4d)
+    label.delete(b1u)
+    label.delete(b1d)
+    label.delete(b15u)
+    label.delete(b15d)
+    label.delete(evLab)
+
+    if showConfirmedKL and show4 and not na(klUp4)
+        l4u := f_drawLine(klUp4, color.new(color.aqua, 20), 2)
+        b4u := f_drawLab(klUp4, "CONFIRMED 4H KL UP\n" + f_price(klUp4), color.new(color.aqua, 76))
+    if showConfirmedKL and show4 and not na(klDn4)
+        l4d := f_drawLine(klDn4, color.new(color.fuchsia, 20), 2)
+        b4d := f_drawLab(klDn4, "CONFIRMED 4H KL DOWN\n" + f_price(klDn4), color.new(color.fuchsia, 78))
+    if showConfirmedKL and show1 and not na(klUp1)
+        l1u := f_drawLine(klUp1, color.new(color.teal, 20), 2)
+        b1u := f_drawLab(klUp1, "CONFIRMED 1H KL UP\n" + f_price(klUp1), color.new(color.teal, 78))
+    if showConfirmedKL and show1 and not na(klDn1)
+        l1d := f_drawLine(klDn1, color.new(color.red, 25), 2)
+        b1d := f_drawLab(klDn1, "CONFIRMED 1H KL DOWN\n" + f_price(klDn1), color.new(color.red, 80))
+    if showConfirmedKL and show15m and not na(klUp15)
+        l15u := f_drawLine(klUp15, color.new(color.green, 15), 1)
+        b15u := f_drawLab(klUp15, "CONFIRMED 15M KL UP\n" + f_price(klUp15), color.new(color.green, 80))
+    if showConfirmedKL and show15m and not na(klDn15)
+        l15d := f_drawLine(klDn15, color.new(color.red, 15), 1)
+        b15d := f_drawLab(klDn15, "CONFIRMED 15M KL DOWN\n" + f_price(klDn15), color.new(color.red, 82))
+
+    if showCandidates and show1 and na(klUp1) and not na(candUp1)
+        c1u := f_drawLine(candUp1, color.new(color.teal, 72), 1)
+        b1u := f_drawLab(candUp1, "CANDIDATE 1H LOW\nnot KL", color.new(color.teal, 88))
+    if showCandidates and show1 and na(klDn1) and not na(candDn1)
+        c1d := f_drawLine(candDn1, color.new(color.red, 72), 1)
+        b1d := f_drawLab(candDn1, "CANDIDATE 1H HIGH\nnot KL", color.new(color.red, 88))
+    if showCandidates and show15m and na(klUp15) and not na(candUp15)
+        c15u := f_drawLine(candUp15, color.new(color.green, 75), 1)
+        b15u := f_drawLab(candUp15, "CANDIDATE 15M LOW\nnot KL", color.new(color.green, 90))
+    if showCandidates and show15m and na(klDn15) and not na(candDn15)
+        c15d := f_drawLine(candDn15, color.new(color.red, 75), 1)
+        b15d := f_drawLab(candDn15, "CANDIDATE 15M HIGH\nnot KL", color.new(color.red, 90))
+
+    if showEventLabel
+        evLab := label.new(bar_index, close, "AUTO STORY\n" + masterStory, style=label.style_label_left, textcolor=txt, color=color.new(color.silver, 70), size=size.tiny)

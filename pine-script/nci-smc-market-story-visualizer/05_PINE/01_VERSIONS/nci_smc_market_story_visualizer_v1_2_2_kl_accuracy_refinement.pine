@@ -1,0 +1,205 @@
+//@version=6
+indicator("NCI x SMC Market Story Visualizer [Ravi Custom] v1.2.2", shorttitle="NCIStory", overlay=true, max_lines_count=300, max_labels_count=300)
+
+// v1.2.2 KL Accuracy Refinement
+// Visual only. KL is based on structure path + cycle role, not raw pivots.
+
+grpTF = "01. TF Stack"
+tf1 = input.timeframe("240", "TF1 Parent", group=grpTF)
+tf2 = input.timeframe("60", "TF2", group=grpTF)
+tf3 = input.timeframe("15", "TF3", group=grpTF)
+tf4 = input.timeframe("5", "TF4", group=grpTF)
+
+grpV = "02. Display"
+theme = input.string("Light", "Theme", options=["Light", "Dark"], group=grpV)
+panelMode = input.string("Mobile", "Panel", options=["Mobile", "Normal", "Debug"], group=grpV)
+panelPos = input.string("Top Right", "Panel Position", options=["Top Right", "Top Left", "Bottom Right", "Bottom Left"], group=grpV)
+showParentKL = input.bool(true, "Show Parent KL", group=grpV)
+showWorkingKL = input.bool(true, "Show Working KL", group=grpV)
+showCandidates = input.bool(false, "Show Candidate Edges", group=grpV)
+
+grpC = "03. KL Accuracy"
+pLeft = input.int(3, "Pivot Left", minval=1, maxval=20, group=grpC)
+pRight = input.int(3, "Pivot Right", minval=1, maxval=20, group=grpC)
+atrLen = input.int(14, "ATR", minval=1, group=grpC)
+minSwingAtr = input.float(0.85, "Min Swing ATR", minval=0.1, maxval=5, step=0.05, group=grpC)
+rangeAtrMult = input.float(1.6, "Range Width ATR", minval=0.5, maxval=5, step=0.05, group=grpC)
+lineLen = input.int(130, "Working Line Len", minval=20, maxval=500, group=grpC)
+parentLineLen = input.int(280, "Parent Line Len", minval=50, maxval=1000, group=grpC)
+maruRatio = input.float(0.70, "Maru Ratio", minval=0.5, maxval=0.95, step=0.05, group=grpC)
+
+isLight = theme == "Light"
+txt = isLight ? color.black : color.white
+headBg = isLight ? color.new(color.silver, 10) : color.new(color.black, 0)
+rowBg = isLight ? color.new(color.white, 72) : color.new(color.gray, 86)
+altBg = isLight ? color.new(color.silver, 80) : color.new(color.gray, 90)
+
+f_pos(string p) => p == "Top Left" ? position.top_left : p == "Bottom Right" ? position.bottom_right : p == "Bottom Left" ? position.bottom_left : position.top_right
+f_price(float x) => na(x) ? "n/a" : str.tostring(x, format.mintick)
+f_min(string tf) => tf == "1" ? 1 : tf == "3" ? 3 : tf == "5" ? 5 : tf == "15" ? 15 : tf == "30" ? 30 : tf == "60" ? 60 : tf == "240" ? 240 : tf == "D" ? 1440 : tf == "W" ? 10080 : na
+f_chartMin() => timeframe.isminutes ? timeframe.multiplier : timeframe.isdaily ? 1440 * timeframe.multiplier : timeframe.isweekly ? 10080 * timeframe.multiplier : na
+f_same(string tf) => tf == timeframe.period or f_min(tf) == f_chartMin()
+f_bodyRatio() => high - low > 0 ? math.abs(close - open) / (high - low) : 0.0
+f_isMaru() => f_bodyRatio() >= maruRatio
+
+f_ph(int occ) =>
+    x = ta.pivothigh(high, pLeft, pRight)
+    ta.valuewhen(not na(x), x, occ)
+
+f_pl(int occ) =>
+    x = ta.pivotlow(low, pLeft, pRight)
+    ta.valuewhen(not na(x), x, occ)
+
+f_path(float h0, float h1, float l0, float l1, float atr) =>
+    ok = not na(h0) and not na(h1) and not na(l0) and not na(l1)
+    dist = ok and math.abs(h0 - l0) >= atr * minSwingAtr
+    rangeLike = ok and math.abs(h0 - l0) <= atr * rangeAtrMult
+    hh = ok and h0 > h1
+    hl = ok and l0 > l1
+    lh = ok and h0 < h1
+    ll = ok and l0 < l1
+    dist and hh and hl ? "Strong bullish path" : dist and lh and ll ? "Strong bearish path" : rangeLike ? "Range candidate path" : ok ? "Weak / mixed path" : "Path building"
+
+f_cycle(string path, float c, float h0, float l0) =>
+    str.contains(path, "Strong bullish") and c >= l0 and c <= h0 ? "Bullish continuation" : str.contains(path, "Strong bearish") and c <= h0 and c >= l0 ? "Bearish continuation" : str.contains(path, "Strong bullish") and c < l0 ? "Bullish KL UP break / bearish transition" : str.contains(path, "Strong bearish") and c > h0 ? "Bearish KL DOWN break / bullish transition" : str.contains(path, "Range") ? "Range candidate" : str.contains(path, "Weak") ? "Transition / mixed" : "Building"
+
+f_status(string cycle) =>
+    str.contains(cycle, "Bullish continuation") ? "Confirmed bullish NCI KLs" : str.contains(cycle, "Bearish continuation") ? "Confirmed bearish NCI KLs" : str.contains(cycle, "Range") ? "Candidate range edges only" : str.contains(cycle, "transition") ? "Transition after KL break" : "No confirmed NCI KL yet"
+
+f_role(string cycle) =>
+    str.contains(cycle, "Bullish continuation") ? "KL UP=HL, KL DOWN=HH objective" : str.contains(cycle, "Bearish continuation") ? "KL DOWN=LH, KL UP=LL objective" : str.contains(cycle, "Range") ? "Range edges are candidates" : str.contains(cycle, "transition") ? "Broken KL transition; wait retest" : "No confirmed KL role"
+
+f_klUp(string cycle, float l0) => str.contains(cycle, "continuation") ? l0 : na
+f_klDn(string cycle, float h0) => str.contains(cycle, "continuation") ? h0 : na
+
+f_pressure(float klDn, float klUp) =>
+    upBreak = not na(klDn) and close > klDn
+    dnBreak = not na(klUp) and close < klUp
+    upValid = upBreak and close > open and f_isMaru()
+    dnValid = dnBreak and close < open and f_isMaru()
+    upValid ? "Valid upside KL break" : dnValid ? "Valid downside KL break" : upBreak ? "Upside break needs confirmation" : dnBreak ? "Downside break needs confirmation" : "No KL break"
+
+f_hState(string pCycle, float pClose, float pKlDn, float pKlUp, string pressure) =>
+    pBear = str.contains(pCycle, "Bearish continuation")
+    pBull = str.contains(pCycle, "Bullish continuation")
+    upBreak = not na(pKlDn) and pClose > pKlDn
+    dnBreak = not na(pKlUp) and pClose < pKlUp
+    upValid = upBreak and str.contains(pressure, "Valid upside")
+    dnValid = dnBreak and str.contains(pressure, "Valid downside")
+    pBear and upValid ? "Parent bearish KL DOWN broken: child recalculates bullish" : pBull and dnValid ? "Parent bullish KL UP broken: child recalculates bearish" : pBear and upBreak ? "Parent bearish KL DOWN break attempt: warning only" : pBull and dnBreak ? "Parent bullish KL UP break attempt: warning only" : pBear ? "Parent bearish continuation active" : pBull ? "Parent bullish continuation active" : str.contains(pCycle, "Range") ? "Parent range candidate; wait edge decision" : "Parent structure not confirmed"
+
+f_child(string hState, string chCycle) =>
+    str.contains(hState, "recalculates bullish") ? "Child rebuilds bullish from broken parent KL" : str.contains(hState, "recalculates bearish") ? "Child rebuilds bearish from broken parent KL" : str.contains(hState, "warning") ? "Child warning only; parent break unconfirmed" : str.contains(hState, "bearish continuation") and str.contains(chCycle, "Bullish") ? "Child pullback against bearish parent" : str.contains(hState, "bullish continuation") and str.contains(chCycle, "Bearish") ? "Child pullback against bullish parent" : str.contains(hState, "continuation") ? "Child explains parent continuation" : "Child waits for confirmed parent KL"
+
+f_final(string hState, string pStatus, string pPressure, string chStatus) =>
+    str.contains(hState, "recalculates bullish") ? "Parent KL broken; rebuild bullish from retest" : str.contains(hState, "recalculates bearish") ? "Parent KL broken; rebuild bearish from retest" : str.contains(hState, "warning") ? "Break attempt only; wait NCI confirmation" : str.contains(pStatus, "range") or str.contains(pStatus, "Range") ? "Parent range candidate; do not force KL" : str.contains(pStatus, "No confirmed") ? "No confirmed parent KL yet" : str.contains(chStatus, "No confirmed") ? "Parent clear, child KL not confirmed yet" : str.contains(pPressure, "needs confirmation") ? "At parent KL decision; break needs confirmation" : str.contains(hState, "continuation") ? "Parent continuation active; child explains move" : "Story building / mixed"
+
+// MTF data
+s1C = request.security(syminfo.tickerid, tf1, close)
+s2C = request.security(syminfo.tickerid, tf2, close)
+s3C = request.security(syminfo.tickerid, tf3, close)
+s1Atr = request.security(syminfo.tickerid, tf1, ta.atr(atrLen))
+s2Atr = request.security(syminfo.tickerid, tf2, ta.atr(atrLen))
+s3Atr = request.security(syminfo.tickerid, tf3, ta.atr(atrLen))
+s1H0 = request.security(syminfo.tickerid, tf1, f_ph(0))
+s1H1 = request.security(syminfo.tickerid, tf1, f_ph(1))
+s1L0 = request.security(syminfo.tickerid, tf1, f_pl(0))
+s1L1 = request.security(syminfo.tickerid, tf1, f_pl(1))
+s2H0 = request.security(syminfo.tickerid, tf2, f_ph(0))
+s2H1 = request.security(syminfo.tickerid, tf2, f_ph(1))
+s2L0 = request.security(syminfo.tickerid, tf2, f_pl(0))
+s2L1 = request.security(syminfo.tickerid, tf2, f_pl(1))
+s3H0 = request.security(syminfo.tickerid, tf3, f_ph(0))
+s3H1 = request.security(syminfo.tickerid, tf3, f_ph(1))
+s3L0 = request.security(syminfo.tickerid, tf3, f_pl(0))
+s3L1 = request.security(syminfo.tickerid, tf3, f_pl(1))
+
+s1Cycle = f_cycle(f_path(s1H0, s1H1, s1L0, s1L1, s1Atr), s1C, s1H0, s1L0)
+s2Cycle = f_cycle(f_path(s2H0, s2H1, s2L0, s2L1, s2Atr), s2C, s2H0, s2L0)
+s3Cycle = f_cycle(f_path(s3H0, s3H1, s3L0, s3L1, s3Atr), s3C, s3H0, s3L0)
+s1KlUp = f_klUp(s1Cycle, s1L0)
+s1KlDn = f_klDn(s1Cycle, s1H0)
+s2KlUp = f_klUp(s2Cycle, s2L0)
+s2KlDn = f_klDn(s2Cycle, s2H0)
+s3KlUp = f_klUp(s3Cycle, s3L0)
+s3KlDn = f_klDn(s3Cycle, s3H0)
+
+chartAtr = ta.atr(atrLen)
+chH0 = f_ph(0)
+chH1 = f_ph(1)
+chL0 = f_pl(0)
+chL1 = f_pl(1)
+chCycle = f_cycle(f_path(chH0, chH1, chL0, chL1, chartAtr), close, chH0, chL0)
+chStatus = f_status(chCycle)
+chRole = f_role(chCycle)
+chKlUp = f_klUp(chCycle, chL0)
+chKlDn = f_klDn(chCycle, chH0)
+
+pCycle = f_same(tf4) ? s3Cycle : f_same(tf3) ? s2Cycle : s1Cycle
+pClose = f_same(tf4) ? s3C : f_same(tf3) ? s2C : s1C
+pKlUp = f_same(tf4) ? s3KlUp : f_same(tf3) ? s2KlUp : s1KlUp
+pKlDn = f_same(tf4) ? s3KlDn : f_same(tf3) ? s2KlDn : s1KlDn
+pStatus = f_status(pCycle)
+pRole = f_role(pCycle)
+pPressure = f_pressure(pKlDn, pKlUp)
+hState = f_hState(pCycle, pClose, pKlDn, pKlUp, pPressure)
+childMission = f_child(hState, chCycle)
+finalStory = f_final(hState, pStatus, pPressure, chStatus)
+confidence = str.contains(finalStory, "rebuild") ? "Recalc" : str.contains(finalStory, "wait") or str.contains(finalStory, "confirmation") ? "Needs confirm" : str.contains(pStatus, "Confirmed") and str.contains(chStatus, "Confirmed") ? "Structured" : "Building"
+
+// Panel
+var table t = table.new(f_pos(panelPos), 2, 14, border_width=1)
+f_cell(int c, int r, string s, color bg) => table.cell(t, c, r, s, bgcolor=bg, text_color=txt, text_size=panelMode == "Mobile" ? size.tiny : size.small)
+if barstate.islast
+    table.clear(t, 0, 0, 1, 13)
+    f_cell(0, 0, "NCI Story", headBg), f_cell(1, 0, "v1.2.2", headBg)
+    f_cell(0, 1, "Final", altBg), f_cell(1, 1, finalStory, altBg)
+    f_cell(0, 2, "Confidence", rowBg), f_cell(1, 2, confidence, rowBg)
+    f_cell(0, 3, "Parent", rowBg), f_cell(1, 3, pCycle + " | " + pStatus, rowBg)
+    f_cell(0, 4, "Working", rowBg), f_cell(1, 4, chCycle + " | " + chStatus, rowBg)
+    f_cell(0, 5, "Cycle", rowBg), f_cell(1, 5, pRole, rowBg)
+    f_cell(0, 6, "Child", rowBg), f_cell(1, 6, childMission, rowBg)
+    if panelMode != "Mobile"
+        f_cell(0, 7, "Parent KL", rowBg), f_cell(1, 7, "UP " + f_price(pKlUp) + " | DOWN " + f_price(pKlDn), rowBg)
+        f_cell(0, 8, "Working KL", rowBg), f_cell(1, 8, "UP " + f_price(chKlUp) + " | DOWN " + f_price(chKlDn), rowBg)
+        f_cell(0, 9, "Pressure", rowBg), f_cell(1, 9, pPressure, rowBg)
+        f_cell(0, 10, "Working Role", rowBg), f_cell(1, 10, chRole, rowBg)
+
+// Visuals
+var line pUpLine = na
+var line pDnLine = na
+var line wUpLine = na
+var line wDnLine = na
+var line cHiLine = na
+var line cLoLine = na
+var label pUpLab = na
+var label pDnLab = na
+var label wUpLab = na
+var label wDnLab = na
+var label cHiLab = na
+var label cLoLab = na
+
+if barstate.islast
+    line.delete(pUpLine), line.delete(pDnLine), line.delete(wUpLine), line.delete(wDnLine), line.delete(cHiLine), line.delete(cLoLine)
+    label.delete(pUpLab), label.delete(pDnLab), label.delete(wUpLab), label.delete(wDnLab), label.delete(cHiLab), label.delete(cLoLab)
+    if showParentKL
+        if not na(pKlUp)
+            pUpLine := line.new(bar_index - parentLineLen, pKlUp, bar_index, pKlUp, extend=extend.right, width=2, color=color.new(color.green, 45))
+            pUpLab := label.new(bar_index, pKlUp, "Parent KL UP\n" + f_price(pKlUp), style=label.style_label_left, textcolor=color.black, color=color.new(color.green, 65), size=size.tiny)
+        if not na(pKlDn)
+            pDnLine := line.new(bar_index - parentLineLen, pKlDn, bar_index, pKlDn, extend=extend.right, width=2, color=color.new(color.red, 45))
+            pDnLab := label.new(bar_index, pKlDn, "Parent KL DOWN\n" + f_price(pKlDn), style=label.style_label_left, textcolor=color.black, color=color.new(color.red, 65), size=size.tiny)
+    if showWorkingKL
+        if not na(chKlUp)
+            wUpLine := line.new(bar_index - lineLen, chKlUp, bar_index, chKlUp, extend=extend.right, width=1, color=color.new(color.green, 15))
+            wUpLab := label.new(bar_index, chKlUp, "Working KL UP\n" + f_price(chKlUp), style=label.style_label_left, textcolor=color.white, color=color.new(color.green, 10), size=size.tiny)
+        if not na(chKlDn)
+            wDnLine := line.new(bar_index - lineLen, chKlDn, bar_index, chKlDn, extend=extend.right, width=1, color=color.new(color.red, 15))
+            wDnLab := label.new(bar_index, chKlDn, "Working KL DOWN\n" + f_price(chKlDn), style=label.style_label_left, textcolor=color.white, color=color.new(color.red, 10), size=size.tiny)
+    if showCandidateEdges and visualMode == "Debug"
+        if not na(chH0)
+            cHiLine := line.new(bar_index - lineLen, chH0, bar_index, chH0, extend=extend.right, width=1, style=line.style_dotted, color=color.new(color.red, 65))
+            cHiLab := label.new(bar_index, chH0, "Candidate edge high", style=label.style_label_left, textcolor=color.black, color=color.new(color.red, 85), size=size.tiny)
+        if not na(chL0)
+            cLoLine := line.new(bar_index - lineLen, chL0, bar_index, chL0, extend=extend.right, width=1, style=line.style_dotted, color=color.new(color.green, 65))
+            cLoLab := label.new(bar_index, chL0, "Candidate edge low", style=label.style_label_left, textcolor=color.black, color=color.new(color.green, 85), size=size.tiny)

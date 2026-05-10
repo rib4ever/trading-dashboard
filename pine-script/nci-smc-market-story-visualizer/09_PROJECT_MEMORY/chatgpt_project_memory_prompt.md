@@ -277,6 +277,151 @@ But:
 SMC without NCI structure context = visual context only, not story confirmation.
 ```
 
+## Always-HTF-KL rule
+
+There should always be an active higher-timeframe key-level story.
+
+```text
+If the latest 4H candidate is invalid, broken, mitigated, obsolete, not BOS-created, or fails reaction validation, search backward until the latest valid NCI 4H key level/zone is found.
+```
+
+The script should not casually say:
+
+```text
+No confirmed 4H parent KL yet
+```
+
+unless there is truly not enough chart history loaded.
+
+The 4H key level is the master anchor. Lower timeframes only explain, refine, react to, or warn against the 4H story.
+
+## BOS-created KL rule
+
+A key level is not valid only because a candle, base, pivot high, or pivot low exists.
+
+A key level must be created by a wave that makes a break of structure.
+
+```text
+Demand KL = pullback low / demand zone that led to a valid break above previous swing high.
+Supply KL = pullback high / supply zone that led to a valid break below previous swing low.
+```
+
+If the wave has not broken the last HH/LL, the latest candidate cannot become the active KL.
+
+```text
+No BOS = search previous BOS-created KL.
+```
+
+Settings:
+
+```text
+Require BOS to Create KL = ON by default
+BOS Requires Close Beyond Structure = optional
+```
+
+## Reaction-candle validation rule
+
+A KL candidate must prove that the market reacted from it.
+
+After identifying the KL candle/base, count the next reaction candles, normally 3 candles by default.
+
+Demand / KL UP validation:
+
+```text
+After the KL candle/base:
+- buying pressure should appear
+- bullish pressure should dominate
+- strong body/displacement candles are preferred
+- closes should move away from demand
+- price should not immediately deeply re-enter the zone
+- the reaction should ideally produce BOS above previous high
+```
+
+Supply / KL DOWN validation:
+
+```text
+After the KL candle/base:
+- selling pressure should appear
+- bearish pressure should dominate
+- strong body/displacement candles are preferred
+- closes should move away from supply
+- price should not immediately deeply re-enter the zone
+- the reaction should ideally produce BOS below previous low
+```
+
+Recommended settings:
+
+```text
+Require Reaction Candles After KL = ON
+Reaction Candle Count = 3
+Minimum Reaction Score = 3
+```
+
+Simple score:
+
+```text
++1 correct candle direction
++1 strong body / displacement
++1 close moves away from zone
++1 closes progress in expected direction
++1 no deep immediate re-entry
+```
+
+Scores:
+
+```text
+0–2 = weak / ignore
+3 = candidate reaction
+4–5 = confirmed reaction
+```
+
+## Inside-zone decision rule
+
+If price is already inside the candidate zone when the engine identifies or displays it, do not call it clean execution alignment.
+
+```text
+Inside supply = decision area; wait for rejection or breakout.
+Inside demand = decision area; wait for reaction or breakdown.
+```
+
+Clean KL story requires:
+
+```text
+1. KL candle/base exists
+2. NCI zone is drawn correctly
+3. reaction candles move away from zone
+4. BOS validates the wave
+5. price later retests/reacts from the zone
+```
+
+If price is inside the zone, wording should be:
+
+```text
+Decision zone / reaction pending / wait for trigger
+```
+
+not:
+
+```text
+Execution aligned
+```
+
+## Label and mobile visual rule
+
+Child labels must be compact and mobile-friendly.
+
+Default child labels:
+
+```text
+1H SUP / 1H DEM
+15M SUP / 15M DEM
+5M SUP / 5M DEM
+```
+
+Full explanation belongs in tooltip on desktop/web and in the panel for mobile.
+
+4H labels keep priority and may show fuller text.
+
 ## Visual cleanliness rule
 
 The visualizer will not be messy if it tells one aligned story.

@@ -1,0 +1,421 @@
+//@version=6
+indicator("NCI x SMC Market Story Visualizer [Ravi Custom] v1.4.4.1", shorttitle="NCIStory", overlay=true, max_lines_count=500, max_labels_count=500, max_boxes_count=250, max_bars_back=1500)
+
+// v1.4.4.1 — SAFE PATCH from v1.4.4 stable baseline
+// Purpose: enhance NCI standard inside SMC structure and make it visual.
+// This version does NOT continue the broken v1.4.5 lifecycle branch.
+// New visual layer:
+// - NCI zone type tooltip: wick / huge body / normal candle logic.
+// - SMC event state: bullish BOS, bearish BOS, transition, range/inside decision.
+// - Market cycle row: Breakout / Pullback / Range / Decision.
+// - Optional SMC event labels on the active chart.
+// - Child TFs remain explanation layers; 4H remains the master.
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Inputs
+// ─────────────────────────────────────────────────────────────────────────────
+grpTF = "01. TF Story Stack"
+tf4h  = input.timeframe("240", "Master TF", group=grpTF)
+tf1h  = input.timeframe("60", "Child TF 1", group=grpTF)
+tf15m = input.timeframe("15", "Child TF 2", group=grpTF)
+tf5m  = input.timeframe("5", "Execution TF", group=grpTF)
+
+grpL = "02. NCI Logic"
+swingLen          = input.int(5, "Swing Length", minval=4, maxval=20, group=grpL)
+atrLen            = input.int(14, "ATR Length", minval=1, group=grpL)
+searchDepth       = input.int(8, "KL Search Depth", minval=2, maxval=8, group=grpL)
+requireBOS        = input.bool(true, "Require BOS to Create KL", group=grpL)
+bosUseClose       = input.bool(false, "BOS Requires Close Beyond Structure", group=grpL)
+bosBufferAtr      = input.float(0.05, "BOS Buffer ATR", minval=0.0, maxval=2.0, step=0.01, group=grpL)
+requireReaction   = input.bool(true, "Require Reaction Candles After KL", group=grpL)
+reactionBars      = input.int(3, "Reaction Candle Count", minval=2, maxval=4, group=grpL)
+minReactionScore  = input.int(3, "Minimum Reaction Score", minval=1, maxval=5, group=grpL)
+insideZoneFilter  = input.bool(true, "Inside Zone = Decision, Not Execution", group=grpL)
+mitigateAtr       = input.float(0.05, "Break/Mitigation Buffer ATR", minval=0.0, maxval=1.0, step=0.01, group=grpL)
+reentryAtr        = input.float(0.10, "Deep Re-entry Buffer ATR", minval=0.0, maxval=1.0, step=0.01, group=grpL)
+hugeBodyRatio     = input.float(0.70, "Huge Body Ratio", minval=0.50, maxval=0.95, step=0.05, group=grpL)
+wickBodyRatio     = input.float(1.50, "Huge Wick vs Body Ratio", minval=0.50, maxval=5.0, step=0.10, group=grpL)
+minZoneAtr        = input.float(0.06, "Minimum Zone Thickness ATR", minval=0.01, maxval=1.0, step=0.01, group=grpL)
+
+grpV = "03. Visuals"
+showPanel          = input.bool(true, "Show Story Panel", group=grpV)
+show4h             = input.bool(true, "Show 4H Master KL", group=grpV)
+show1h             = input.bool(true, "Show 1H Context", group=grpV)
+show15m            = input.bool(true, "Show 15M Context", group=grpV)
+show5m             = input.bool(true, "Show 5M Context", group=grpV)
+showChildren       = input.bool(true, "Show Child Context Zones", group=grpV)
+showSmcEvents      = input.bool(true, "Show SMC Event Tags", group=grpV)
+showCyclePath      = input.bool(true, "Show Active TF Structure Path", group=grpV)
+showStoryLabel     = input.bool(false, "Show Floating Story Label", group=grpV)
+compactLabels      = input.bool(true, "Compact Child Labels", group=grpV)
+futureBars         = input.int(50, "Right Label Offset", minval=10, maxval=250, group=grpV)
+theme              = input.string("Light", "Theme", options=["Light", "Dark"], group=grpV)
+panelPos           = input.string("Top Right", "Panel Position", options=["Top Right", "Top Left", "Bottom Right", "Bottom Left"], group=grpV)
+panelMode          = input.string("Mobile", "Panel Mode", options=["Mobile", "Normal", "Debug"], group=grpV)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────────────────
+isLight = theme == "Light"
+txtCol = isLight ? color.black : color.white
+headBg = isLight ? color.new(color.silver, 10) : color.new(color.black, 0)
+rowBg  = isLight ? color.new(color.white, 74) : color.new(color.gray, 86)
+altBg  = isLight ? color.new(color.silver, 86) : color.new(color.gray, 90)
+
+f_pos(string p) => p == "Top Left" ? position.top_left : p == "Bottom Right" ? position.bottom_right : p == "Bottom Left" ? position.bottom_left : position.top_right
+f_price(float x) => na(x) ? "n/a" : str.tostring(x, format.mintick)
+f_rightTime(int barsForward) => time + timeframe.in_seconds(timeframe.period) * 1000 * barsForward
+f_body(float o, float c) => math.abs(c - o)
+f_rng(float h, float l) => math.max(h - l, syminfo.mintick)
+f_bodyRatio(float o, float h, float l, float c) => f_body(o, c) / f_rng(h, l)
+f_inside(float top, float bot) => not na(top) and not na(bot) and close <= top and close >= bot
+f_tfName(string tf) => tf == "240" ? "4H" : tf == "60" ? "1H" : tf == "15" ? "15M" : tf == "5" ? "5M" : tf
+
+// NCI candle drawing classification.
+f_candleClass(float o, float h, float l, float c, bool supplySide) =>
+    body = math.max(f_body(o, c), syminfo.mintick)
+    upperWick = h - math.max(o, c)
+    lowerWick = math.min(o, c) - l
+    br = f_bodyRatio(o, h, l, c)
+    wick = supplySide ? upperWick : lowerWick
+    wick >= body * wickBodyRatio ? "Long wick: use 50% wick logic" : br >= hugeBodyRatio ? "Huge body: use body/open zone logic" : "Normal candle: use full candle/body range"
+
+f_supplyBottom(float o, float h, float l, float c) =>
+    body = math.max(f_body(o, c), syminfo.mintick)
+    upperWick = h - math.max(o, c)
+    br = f_bodyRatio(o, h, l, c)
+    hugeWick = upperWick >= body * wickBodyRatio
+    hugeBody = br >= hugeBodyRatio
+    hugeWick ? h - upperWick * 0.50 : hugeBody ? math.max(o, c) : math.min(o, c)
+
+f_demandTop(float o, float h, float l, float c) =>
+    body = math.max(f_body(o, c), syminfo.mintick)
+    lowerWick = math.min(o, c) - l
+    br = f_bodyRatio(o, h, l, c)
+    hugeWick = lowerWick >= body * wickBodyRatio
+    hugeBody = br >= hugeBodyRatio
+    hugeWick ? l + lowerWick * 0.50 : hugeBody ? math.min(o, c) : math.max(o, c)
+
+f_fixSupplyBottom(float top, float bottom, float atr) => math.min(bottom, top - atr * minZoneAtr)
+f_fixDemandTop(float bottom, float top, float atr) => math.max(top, bottom + atr * minZoneAtr)
+
+// Reaction score from candles after the pivot/KL candle.
+f_bullReactionScore(float zoneTop, float zoneBot, float atr) =>
+    c1Bull = close[swingLen - 1] > open[swingLen - 1]
+    c2Bull = close[swingLen - 2] > open[swingLen - 2]
+    c3Bull = close[swingLen - 3] > open[swingLen - 3]
+    c4Bull = close[swingLen - 4] > open[swingLen - 4]
+    dirScore = (c1Bull ? 1 : 0) + (c2Bull ? 1 : 0) + (c3Bull ? 1 : 0) + (reactionBars >= 4 and c4Bull ? 1 : 0)
+    awayScore = close[swingLen - 1] > zoneTop or close[swingLen - 2] > zoneTop or close[swingLen - 3] > zoneTop or (reactionBars >= 4 and close[swingLen - 4] > zoneTop) ? 1 : 0
+    progressScore = close[swingLen - 1] > close[swingLen] and close[swingLen - 2] >= close[swingLen - 1] ? 1 : 0
+    noDeepReentry = math.min(math.min(low[swingLen - 1], low[swingLen - 2]), low[swingLen - 3]) >= zoneBot - atr * reentryAtr ? 1 : 0
+    math.min(5, (dirScore >= math.max(2, reactionBars - 1) ? 2 : 0) + awayScore + progressScore + noDeepReentry)
+
+f_bearReactionScore(float zoneTop, float zoneBot, float atr) =>
+    c1Bear = close[swingLen - 1] < open[swingLen - 1]
+    c2Bear = close[swingLen - 2] < open[swingLen - 2]
+    c3Bear = close[swingLen - 3] < open[swingLen - 3]
+    c4Bear = close[swingLen - 4] < open[swingLen - 4]
+    dirScore = (c1Bear ? 1 : 0) + (c2Bear ? 1 : 0) + (c3Bear ? 1 : 0) + (reactionBars >= 4 and c4Bear ? 1 : 0)
+    awayScore = close[swingLen - 1] < zoneBot or close[swingLen - 2] < zoneBot or close[swingLen - 3] < zoneBot or (reactionBars >= 4 and close[swingLen - 4] < zoneBot) ? 1 : 0
+    progressScore = close[swingLen - 1] < close[swingLen] and close[swingLen - 2] <= close[swingLen - 1] ? 1 : 0
+    noDeepReentry = math.max(math.max(high[swingLen - 1], high[swingLen - 2]), high[swingLen - 3]) <= zoneTop + atr * reentryAtr ? 1 : 0
+    math.min(5, (dirScore >= math.max(2, reactionBars - 1) ? 2 : 0) + awayScore + progressScore + noDeepReentry)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// State per timeframe
+// Return: supplyTop, supplyBot, supplyTime, demandTop, demandBot, demandTime,
+// bias, story, atr, ruleText, insideSupply, insideDemand, supplyScore, demandScore,
+// cycle, smcEvent, supplyClass, demandClass
+// ─────────────────────────────────────────────────────────────────────────────
+f_state() =>
+    atr = ta.atr(atrLen)
+    ph = ta.pivothigh(high, swingLen, swingLen)
+    pl = ta.pivotlow(low, swingLen, swingLen)
+
+    ph0 = ta.valuewhen(not na(ph), ph, 0)
+    ph1 = ta.valuewhen(not na(ph), ph, 1)
+    ph2 = ta.valuewhen(not na(ph), ph, 2)
+    ph3 = ta.valuewhen(not na(ph), ph, 3)
+    pl0 = ta.valuewhen(not na(pl), pl, 0)
+    pl1 = ta.valuewhen(not na(pl), pl, 1)
+    pl2 = ta.valuewhen(not na(pl), pl, 2)
+    pl3 = ta.valuewhen(not na(pl), pl, 3)
+
+    phT0 = ta.valuewhen(not na(ph), time[swingLen], 0)
+    phT1 = ta.valuewhen(not na(ph), time[swingLen], 1)
+    phT2 = ta.valuewhen(not na(ph), time[swingLen], 2)
+    phT3 = ta.valuewhen(not na(ph), time[swingLen], 3)
+    plT0 = ta.valuewhen(not na(pl), time[swingLen], 0)
+    plT1 = ta.valuewhen(not na(pl), time[swingLen], 1)
+    plT2 = ta.valuewhen(not na(pl), time[swingLen], 2)
+    plT3 = ta.valuewhen(not na(pl), time[swingLen], 3)
+
+    phO0 = ta.valuewhen(not na(ph), open[swingLen], 0)
+    phO1 = ta.valuewhen(not na(ph), open[swingLen], 1)
+    phO2 = ta.valuewhen(not na(ph), open[swingLen], 2)
+    phO3 = ta.valuewhen(not na(ph), open[swingLen], 3)
+    phL0 = ta.valuewhen(not na(ph), low[swingLen], 0)
+    phL1 = ta.valuewhen(not na(ph), low[swingLen], 1)
+    phL2 = ta.valuewhen(not na(ph), low[swingLen], 2)
+    phL3 = ta.valuewhen(not na(ph), low[swingLen], 3)
+    phC0 = ta.valuewhen(not na(ph), close[swingLen], 0)
+    phC1 = ta.valuewhen(not na(ph), close[swingLen], 1)
+    phC2 = ta.valuewhen(not na(ph), close[swingLen], 2)
+    phC3 = ta.valuewhen(not na(ph), close[swingLen], 3)
+
+    plO0 = ta.valuewhen(not na(pl), open[swingLen], 0)
+    plO1 = ta.valuewhen(not na(pl), open[swingLen], 1)
+    plO2 = ta.valuewhen(not na(pl), open[swingLen], 2)
+    plO3 = ta.valuewhen(not na(pl), open[swingLen], 3)
+    plH0 = ta.valuewhen(not na(pl), high[swingLen], 0)
+    plH1 = ta.valuewhen(not na(pl), high[swingLen], 1)
+    plH2 = ta.valuewhen(not na(pl), high[swingLen], 2)
+    plH3 = ta.valuewhen(not na(pl), high[swingLen], 3)
+    plC0 = ta.valuewhen(not na(pl), close[swingLen], 0)
+    plC1 = ta.valuewhen(not na(pl), close[swingLen], 1)
+    plC2 = ta.valuewhen(not na(pl), close[swingLen], 2)
+    plC3 = ta.valuewhen(not na(pl), close[swingLen], 3)
+
+    sb0 = f_fixSupplyBottom(ph0, f_supplyBottom(phO0, ph0, phL0, phC0), atr)
+    sb1 = f_fixSupplyBottom(ph1, f_supplyBottom(phO1, ph1, phL1, phC1), atr)
+    sb2 = f_fixSupplyBottom(ph2, f_supplyBottom(phO2, ph2, phL2, phC2), atr)
+    sb3 = f_fixSupplyBottom(ph3, f_supplyBottom(phO3, ph3, phL3, phC3), atr)
+    dt0 = f_fixDemandTop(pl0, f_demandTop(plO0, plH0, pl0, plC0), atr)
+    dt1 = f_fixDemandTop(pl1, f_demandTop(plO1, plH1, pl1, plC1), atr)
+    dt2 = f_fixDemandTop(pl2, f_demandTop(plO2, plH2, pl2, plC2), atr)
+    dt3 = f_fixDemandTop(pl3, f_demandTop(plO3, plH3, pl3, plC3), atr)
+
+    dScoreNow = not na(pl) ? f_bullReactionScore(dt0, pl0, atr) : 0
+    sScoreNow = not na(ph) ? f_bearReactionScore(ph0, sb0, atr) : 0
+    dReact0 = ta.valuewhen(not na(pl), dScoreNow, 0)
+    dReact1 = ta.valuewhen(not na(pl), dScoreNow, 1)
+    dReact2 = ta.valuewhen(not na(pl), dScoreNow, 2)
+    dReact3 = ta.valuewhen(not na(pl), dScoreNow, 3)
+    sReact0 = ta.valuewhen(not na(ph), sScoreNow, 0)
+    sReact1 = ta.valuewhen(not na(ph), sScoreNow, 1)
+    sReact2 = ta.valuewhen(not na(ph), sScoreNow, 2)
+    sReact3 = ta.valuewhen(not na(ph), sScoreNow, 3)
+
+    bullBreak = not na(ph1) and (bosUseClose ? close > ph1 + atr * bosBufferAtr : high > ph1 + atr * bosBufferAtr)
+    bearBreak = not na(pl1) and (bosUseClose ? close < pl1 - atr * bosBufferAtr : low < pl1 - atr * bosBufferAtr)
+    dReactOk = not requireReaction or dReact0 >= minReactionScore
+    sReactOk = not requireReaction or sReact0 >= minReactionScore
+    validBullBreak = bullBreak and dReactOk
+    validBearBreak = bearBreak and sReactOk
+
+    bosDTop0 = ta.valuewhen(validBullBreak, dt0, 0)
+    bosDTop1 = ta.valuewhen(validBullBreak, dt0, 1)
+    bosDTop2 = ta.valuewhen(validBullBreak, dt0, 2)
+    bosDTop3 = ta.valuewhen(validBullBreak, dt0, 3)
+    bosDBot0 = ta.valuewhen(validBullBreak, pl0, 0)
+    bosDBot1 = ta.valuewhen(validBullBreak, pl0, 1)
+    bosDBot2 = ta.valuewhen(validBullBreak, pl0, 2)
+    bosDBot3 = ta.valuewhen(validBullBreak, pl0, 3)
+    bosDTime0 = ta.valuewhen(validBullBreak, plT0, 0)
+    bosDTime1 = ta.valuewhen(validBullBreak, plT0, 1)
+    bosDTime2 = ta.valuewhen(validBullBreak, plT0, 2)
+    bosDTime3 = ta.valuewhen(validBullBreak, plT0, 3)
+    bosDScore0 = ta.valuewhen(validBullBreak, dReact0, 0)
+    bosDScore1 = ta.valuewhen(validBullBreak, dReact0, 1)
+    bosDScore2 = ta.valuewhen(validBullBreak, dReact0, 2)
+    bosDScore3 = ta.valuewhen(validBullBreak, dReact0, 3)
+
+    bosSTop0 = ta.valuewhen(validBearBreak, ph0, 0)
+    bosSTop1 = ta.valuewhen(validBearBreak, ph0, 1)
+    bosSTop2 = ta.valuewhen(validBearBreak, ph0, 2)
+    bosSTop3 = ta.valuewhen(validBearBreak, ph0, 3)
+    bosSBot0 = ta.valuewhen(validBearBreak, sb0, 0)
+    bosSBot1 = ta.valuewhen(validBearBreak, sb0, 1)
+    bosSBot2 = ta.valuewhen(validBearBreak, sb0, 2)
+    bosSBot3 = ta.valuewhen(validBearBreak, sb0, 3)
+    bosSTime0 = ta.valuewhen(validBearBreak, phT0, 0)
+    bosSTime1 = ta.valuewhen(validBearBreak, phT0, 1)
+    bosSTime2 = ta.valuewhen(validBearBreak, phT0, 2)
+    bosSTime3 = ta.valuewhen(validBearBreak, phT0, 3)
+    bosSScore0 = ta.valuewhen(validBearBreak, sReact0, 0)
+    bosSScore1 = ta.valuewhen(validBearBreak, sReact0, 1)
+    bosSScore2 = ta.valuewhen(validBearBreak, sReact0, 2)
+    bosSScore3 = ta.valuewhen(validBearBreak, sReact0, 3)
+
+    rawS0ok = searchDepth > 0 and not na(ph0) and (not requireReaction or sReact0 >= minReactionScore) and close <= ph0 + atr * mitigateAtr
+    rawS1ok = searchDepth > 1 and not na(ph1) and (not requireReaction or sReact1 >= minReactionScore) and close <= ph1 + atr * mitigateAtr
+    rawS2ok = searchDepth > 2 and not na(ph2) and (not requireReaction or sReact2 >= minReactionScore) and close <= ph2 + atr * mitigateAtr
+    rawS3ok = searchDepth > 3 and not na(ph3) and (not requireReaction or sReact3 >= minReactionScore) and close <= ph3 + atr * mitigateAtr
+    rawD0ok = searchDepth > 0 and not na(pl0) and (not requireReaction or dReact0 >= minReactionScore) and close >= pl0 - atr * mitigateAtr
+    rawD1ok = searchDepth > 1 and not na(pl1) and (not requireReaction or dReact1 >= minReactionScore) and close >= pl1 - atr * mitigateAtr
+    rawD2ok = searchDepth > 2 and not na(pl2) and (not requireReaction or dReact2 >= minReactionScore) and close >= pl2 - atr * mitigateAtr
+    rawD3ok = searchDepth > 3 and not na(pl3) and (not requireReaction or dReact3 >= minReactionScore) and close >= pl3 - atr * mitigateAtr
+
+    rawSupplyTop = rawS0ok ? ph0 : rawS1ok ? ph1 : rawS2ok ? ph2 : rawS3ok ? ph3 : na
+    rawSupplyBot = rawS0ok ? sb0 : rawS1ok ? sb1 : rawS2ok ? sb2 : rawS3ok ? sb3 : na
+    rawSupplyTime = rawS0ok ? phT0 : rawS1ok ? phT1 : rawS2ok ? phT2 : rawS3ok ? phT3 : na
+    rawSupplyScore = rawS0ok ? sReact0 : rawS1ok ? sReact1 : rawS2ok ? sReact2 : rawS3ok ? sReact3 : 0
+    rawSupplyClass = rawS0ok ? f_candleClass(phO0, ph0, phL0, phC0, true) : rawS1ok ? f_candleClass(phO1, ph1, phL1, phC1, true) : rawS2ok ? f_candleClass(phO2, ph2, phL2, phC2, true) : rawS3ok ? f_candleClass(phO3, ph3, phL3, phC3, true) : "n/a"
+
+    rawDemandBot = rawD0ok ? pl0 : rawD1ok ? pl1 : rawD2ok ? pl2 : rawD3ok ? pl3 : na
+    rawDemandTop = rawD0ok ? dt0 : rawD1ok ? dt1 : rawD2ok ? dt2 : rawD3ok ? dt3 : na
+    rawDemandTime = rawD0ok ? plT0 : rawD1ok ? plT1 : rawD2ok ? plT2 : rawD3ok ? plT3 : na
+    rawDemandScore = rawD0ok ? dReact0 : rawD1ok ? dReact1 : rawD2ok ? dReact2 : rawD3ok ? dReact3 : 0
+    rawDemandClass = rawD0ok ? f_candleClass(plO0, plH0, pl0, plC0, false) : rawD1ok ? f_candleClass(plO1, plH1, pl1, plC1, false) : rawD2ok ? f_candleClass(plO2, plH2, pl2, plC2, false) : rawD3ok ? f_candleClass(plO3, plH3, pl3, plC3, false) : "n/a"
+
+    bosS0ok = searchDepth > 0 and not na(bosSTop0) and close <= bosSTop0 + atr * mitigateAtr
+    bosS1ok = searchDepth > 1 and not na(bosSTop1) and close <= bosSTop1 + atr * mitigateAtr
+    bosS2ok = searchDepth > 2 and not na(bosSTop2) and close <= bosSTop2 + atr * mitigateAtr
+    bosS3ok = searchDepth > 3 and not na(bosSTop3) and close <= bosSTop3 + atr * mitigateAtr
+    bosD0ok = searchDepth > 0 and not na(bosDBot0) and close >= bosDBot0 - atr * mitigateAtr
+    bosD1ok = searchDepth > 1 and not na(bosDBot1) and close >= bosDBot1 - atr * mitigateAtr
+    bosD2ok = searchDepth > 2 and not na(bosDBot2) and close >= bosDBot2 - atr * mitigateAtr
+    bosD3ok = searchDepth > 3 and not na(bosDBot3) and close >= bosDBot3 - atr * mitigateAtr
+
+    supplyTop = requireBOS ? (bosS0ok ? bosSTop0 : bosS1ok ? bosSTop1 : bosS2ok ? bosSTop2 : bosS3ok ? bosSTop3 : rawSupplyTop) : rawSupplyTop
+    supplyBot = requireBOS ? (bosS0ok ? bosSBot0 : bosS1ok ? bosSBot1 : bosS2ok ? bosSBot2 : bosS3ok ? bosSBot3 : rawSupplyBot) : rawSupplyBot
+    supplyTime = requireBOS ? (bosS0ok ? bosSTime0 : bosS1ok ? bosSTime1 : bosS2ok ? bosSTime2 : bosS3ok ? bosSTime3 : rawSupplyTime) : rawSupplyTime
+    supplyScore = requireBOS ? (bosS0ok ? bosSScore0 : bosS1ok ? bosSScore1 : bosS2ok ? bosSScore2 : bosS3ok ? bosSScore3 : rawSupplyScore) : rawSupplyScore
+    demandBot = requireBOS ? (bosD0ok ? bosDBot0 : bosD1ok ? bosDBot1 : bosD2ok ? bosDBot2 : bosD3ok ? bosDBot3 : rawDemandBot) : rawDemandBot
+    demandTop = requireBOS ? (bosD0ok ? bosDTop0 : bosD1ok ? bosDTop1 : bosD2ok ? bosDTop2 : bosD3ok ? bosDTop3 : rawDemandTop) : rawDemandTop
+    demandTime = requireBOS ? (bosD0ok ? bosDTime0 : bosD1ok ? bosDTime1 : bosD2ok ? bosDTime2 : bosD3ok ? bosDTime3 : rawDemandTime) : rawDemandTime
+    demandScore = requireBOS ? (bosD0ok ? bosDScore0 : bosD1ok ? bosDScore1 : bosD2ok ? bosDScore2 : bosD3ok ? bosDScore3 : rawDemandScore) : rawDemandScore
+
+    inSupply = f_inside(supplyTop, supplyBot)
+    inDemand = f_inside(demandTop, demandBot)
+    hasBoth = not na(supplyTop) and not na(demandBot)
+    mid = hasBoth ? (supplyBot + demandTop) / 2.0 : close
+    int bias = not hasBoth ? 0 : insideZoneFilter and inSupply ? 0 : insideZoneFilter and inDemand ? 0 : close > supplyTop ? 1 : close < demandBot ? -1 : close >= mid ? -1 : 1
+    string cycle = not hasBoth ? "Building" : inSupply or inDemand ? "Decision" : bullBreak ? "Bullish BOS / breakout" : bearBreak ? "Bearish BOS / breakdown" : bias == 1 ? "Pullback above demand" : bias == -1 ? "Pullback below supply" : "Range"
+    string smcEvent = bullBreak ? "Bullish BOS" : bearBreak ? "Bearish BOS" : inSupply ? "Supply reaction" : inDemand ? "Demand reaction" : "No fresh SMC event"
+    string story = not hasBoth ? "Building KL memory" : inSupply ? "Inside supply decision — wait reject/break" : inDemand ? "Inside demand decision — wait react/break" : bias == 1 ? "Working above demand; watching supply" : bias == -1 ? "Working below supply; watching demand" : "Inside active KL range"
+    string ruleText = (requireBOS ? "BOS" : "No BOS") + " + " + (requireReaction ? "Reaction" : "No reaction")
+    [supplyTop, supplyBot, supplyTime, demandTop, demandBot, demandTime, bias, story, atr, ruleText, inSupply, inDemand, supplyScore, demandScore, cycle, smcEvent, rawSupplyClass, rawDemandClass]
+
+[s4Top, s4Bot, s4Time, d4Top, d4Bot, d4Time, b4, story4, atr4, rule4, inS4, inD4, sScore4, dScore4, cycle4, smc4, sClass4, dClass4] = request.security(syminfo.tickerid, tf4h, f_state())
+[s1Top, s1Bot, s1Time, d1Top, d1Bot, d1Time, b1, story1, atr1, rule1, inS1, inD1, sScore1, dScore1, cycle1, smc1, sClass1, dClass1] = request.security(syminfo.tickerid, tf1h, f_state())
+[s15Top, s15Bot, s15Time, d15Top, d15Bot, d15Time, b15, story15, atr15, rule15, inS15, inD15, sScore15, dScore15, cycle15, smc15, sClass15, dClass15] = request.security(syminfo.tickerid, tf15m, f_state())
+[s5Top, s5Bot, s5Time, d5Top, d5Bot, d5Time, b5, story5, atr5, rule5, inS5, inD5, sScore5, dScore5, cycle5, smc5, sClass5, dClass5] = request.security(syminfo.tickerid, tf5m, f_state())
+
+role1 = inS1 or inD1 ? "1H decision zone — wait" : b1 == b4 ? "1H explains 4H" : b1 == 0 ? "1H building" : "1H pullback against 4H"
+role15 = inS15 or inD15 ? "15M decision zone — wait" : b15 == b1 ? "15M explains 1H" : b15 == 0 ? "15M building" : "15M counter-move"
+role5 = inS5 or inD5 ? "5M decision zone — wait trigger" : b5 == b15 ? "5M aligned — wait trigger" : b5 == 0 ? "5M building" : "5M local reaction"
+finalStory = inS4 ? "4H SUPPLY DECISION ACTIVE" : inD4 ? "4H DEMAND DECISION ACTIVE" : b4 == 1 ? "4H DEMAND STORY ACTIVE" : b4 == -1 ? "4H SUPPLY STORY ACTIVE" : "4H RANGE / WAIT"
+confidence = requireBOS and requireReaction ? "BOS + reaction validated" : requireBOS ? "BOS validated; reaction optional" : requireReaction ? "Reaction validated; BOS optional" : "Loose KL mode"
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Panel
+// ─────────────────────────────────────────────────────────────────────────────
+var table panel = table.new(f_pos(panelPos), 2, 18, border_width=1)
+f_cell(int c, int r, string s, color bg) => table.cell(panel, c, r, s, bgcolor=bg, text_color=txtCol, text_size=panelMode == "Mobile" ? size.tiny : size.small)
+
+if barstate.islast and showPanel
+    table.clear(panel, 0, 0, 1, 17)
+    f_cell(0, 0, "NCI x SMC", headBg)
+    f_cell(1, 0, "v1.4.4.1", headBg)
+    f_cell(0, 1, "Final", altBg)
+    f_cell(1, 1, finalStory, altBg)
+    f_cell(0, 2, "Confidence", rowBg)
+    f_cell(1, 2, confidence, rowBg)
+    f_cell(0, 3, "4H Master", rowBg)
+    f_cell(1, 3, story4, rowBg)
+    f_cell(0, 4, "4H Cycle", rowBg)
+    f_cell(1, 4, cycle4, rowBg)
+    f_cell(0, 5, "SMC Event", rowBg)
+    f_cell(1, 5, smc4, rowBg)
+    f_cell(0, 6, "KL Rule", rowBg)
+    f_cell(1, 6, rule4, rowBg)
+    f_cell(0, 7, "1H Role", rowBg)
+    f_cell(1, 7, role1, rowBg)
+    f_cell(0, 8, "15M Role", rowBg)
+    f_cell(1, 8, role15, rowBg)
+    f_cell(0, 9, "5M Role", rowBg)
+    f_cell(1, 9, role5, rowBg)
+    f_cell(0, 10, "4H Supply", rowBg)
+    f_cell(1, 10, f_price(s4Bot) + " - " + f_price(s4Top) + " | S" + str.tostring(sScore4), rowBg)
+    f_cell(0, 11, "4H Demand", rowBg)
+    f_cell(1, 11, f_price(d4Bot) + " - " + f_price(d4Top) + " | S" + str.tostring(dScore4), rowBg)
+    if panelMode == "Debug"
+        f_cell(0, 12, "1H Cycle", rowBg)
+        f_cell(1, 12, cycle1, rowBg)
+        f_cell(0, 13, "15M Cycle", rowBg)
+        f_cell(1, 13, cycle15, rowBg)
+        f_cell(0, 14, "5M Cycle", rowBg)
+        f_cell(1, 14, cycle5, rowBg)
+        f_cell(0, 15, "4H NCI SUP", rowBg)
+        f_cell(1, 15, sClass4, rowBg)
+        f_cell(0, 16, "4H NCI DEM", rowBg)
+        f_cell(1, 16, dClass4, rowBg)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Visuals
+// ─────────────────────────────────────────────────────────────────────────────
+var box bs4 = na
+var box bd4 = na
+var box bs1 = na
+var box bd1 = na
+var box bs15 = na
+var box bd15 = na
+var box bs5 = na
+var box bd5 = na
+var label ls4 = na
+var label ld4 = na
+var label ls1 = na
+var label ld1 = na
+var label ls15 = na
+var label ld15 = na
+var label ls5 = na
+var label ld5 = na
+var label stLab = na
+var label evLab = na
+var line cPath1 = na
+var line cPath2 = na
+
+f_box(int leftT, float top, float bottom, color col, int transp) =>
+    box.new(left=leftT, top=top, right=f_rightTime(futureBars), bottom=bottom, xloc=xloc.bar_time, bgcolor=color.new(col, transp), border_color=color.new(col, 35), extend=extend.right)
+
+f_lab(int off, float y, string s, string tip, color col, bool smallTxt) =>
+    label.new(x=f_rightTime(off), y=y, text=s, tooltip=tip, xloc=xloc.bar_time, style=label.style_label_left, color=color.new(col, 78), textcolor=color.black, size=smallTxt ? size.tiny : size.small)
+
+f_tip(string tfName, string side, float bot, float top, int score, bool insideNow, string klass, string cycleTxt, string smcTxt) =>
+    tfName + " " + side + "\nZone: " + f_price(bot) + " - " + f_price(top) + "\nReaction score: " + str.tostring(score) + "\nNCI draw: " + klass + "\nCycle: " + cycleTxt + "\nSMC: " + smcTxt + "\nStatus: " + (insideNow ? "inside decision zone; wait" : "outside zone; watch reaction/retest")
+
+if barstate.islast
+    box.delete(bs4), box.delete(bd4), box.delete(bs1), box.delete(bd1), box.delete(bs15), box.delete(bd15), box.delete(bs5), box.delete(bd5)
+    label.delete(ls4), label.delete(ld4), label.delete(ls1), label.delete(ld1), label.delete(ls15), label.delete(ld15), label.delete(ls5), label.delete(ld5), label.delete(stLab), label.delete(evLab)
+    line.delete(cPath1), line.delete(cPath2)
+
+    if show4h and not na(s4Time) and not na(s4Top) and not na(s4Bot)
+        bs4 := f_box(s4Time, s4Top, s4Bot, color.fuchsia, 88)
+        ls4 := f_lab(futureBars, (s4Top + s4Bot) / 2, "4H SUPPLY\n" + f_price(s4Bot) + " - " + f_price(s4Top), f_tip("4H", "Supply", s4Bot, s4Top, sScore4, inS4, sClass4, cycle4, smc4), color.fuchsia, false)
+    if show4h and not na(d4Time) and not na(d4Top) and not na(d4Bot)
+        bd4 := f_box(d4Time, d4Top, d4Bot, color.aqua, 86)
+        ld4 := f_lab(futureBars + 8, (d4Top + d4Bot) / 2, "4H DEMAND\n" + f_price(d4Bot) + " - " + f_price(d4Top), f_tip("4H", "Demand", d4Bot, d4Top, dScore4, inD4, dClass4, cycle4, smc4), color.aqua, false)
+
+    if showChildren and show1h and not na(s1Time) and not na(s1Top) and not na(s1Bot)
+        bs1 := f_box(s1Time, s1Top, s1Bot, color.red, 91)
+        ls1 := f_lab(futureBars + 16, (s1Top + s1Bot) / 2, compactLabels ? "1H SUP" : "1H SUPPLY", f_tip("1H", "Supply", s1Bot, s1Top, sScore1, inS1, sClass1, cycle1, smc1), color.red, true)
+    if showChildren and show1h and not na(d1Time) and not na(d1Top) and not na(d1Bot)
+        bd1 := f_box(d1Time, d1Top, d1Bot, color.teal, 91)
+        ld1 := f_lab(futureBars + 24, (d1Top + d1Bot) / 2, compactLabels ? "1H DEM" : "1H DEMAND", f_tip("1H", "Demand", d1Bot, d1Top, dScore1, inD1, dClass1, cycle1, smc1), color.teal, true)
+
+    if showChildren and show15m and not na(s15Time) and not na(s15Top) and not na(s15Bot)
+        bs15 := f_box(s15Time, s15Top, s15Bot, color.orange, 93)
+        ls15 := f_lab(futureBars + 32, (s15Top + s15Bot) / 2, compactLabels ? "15M SUP" : "15M SUPPLY", f_tip("15M", "Supply", s15Bot, s15Top, sScore15, inS15, sClass15, cycle15, smc15), color.orange, true)
+    if showChildren and show15m and not na(d15Time) and not na(d15Top) and not na(d15Bot)
+        bd15 := f_box(d15Time, d15Top, d15Bot, color.green, 93)
+        ld15 := f_lab(futureBars + 40, (d15Top + d15Bot) / 2, compactLabels ? "15M DEM" : "15M DEMAND", f_tip("15M", "Demand", d15Bot, d15Top, dScore15, inD15, dClass15, cycle15, smc15), color.green, true)
+
+    if showChildren and show5m and not na(s5Time) and not na(s5Top) and not na(s5Bot)
+        bs5 := f_box(s5Time, s5Top, s5Bot, color.yellow, 95)
+        ls5 := f_lab(futureBars + 48, (s5Top + s5Bot) / 2, compactLabels ? "5M SUP" : "5M SUPPLY", f_tip("5M", "Supply", s5Bot, s5Top, sScore5, inS5, sClass5, cycle5, smc5), color.yellow, true)
+    if showChildren and show5m and not na(d5Time) and not na(d5Top) and not na(d5Bot)
+        bd5 := f_box(d5Time, d5Top, d5Bot, color.lime, 95)
+        ld5 := f_lab(futureBars + 56, (d5Top + d5Bot) / 2, compactLabels ? "5M DEM" : "5M DEMAND", f_tip("5M", "Demand", d5Bot, d5Top, dScore5, inD5, dClass5, cycle5, smc5), color.lime, true)
+
+    if showSmcEvents
+        evCol = smc4 == "Bullish BOS" ? color.green : smc4 == "Bearish BOS" ? color.red : color.gray
+        evLab := f_lab(futureBars + 14, close, "SMC\n" + smc4, "4H event: " + smc4 + "\nCycle: " + cycle4 + "\nLower TFs must explain this event.", evCol, true)
+
+    if showCyclePath and not na(d4Time) and not na(d4Top) and not na(s4Time) and not na(s4Bot)
+        cPath1 := line.new(d4Time, (d4Top + d4Bot) / 2, s4Time, (s4Top + s4Bot) / 2, xloc=xloc.bar_time, color=color.new(color.blue, 40), width=2)
+        cPath2 := line.new(s4Time, (s4Top + s4Bot) / 2, f_rightTime(8), close, xloc=xloc.bar_time, color=color.new(color.blue, 65), width=1, style=line.style_dashed)
+
+    if showStoryLabel
+        stLab := f_lab(futureBars + 10, close, "NCI STORY\n" + finalStory, "NCI + SMC visual layer: zones, cycle, BOS event and child explanation.", color.gray, false)

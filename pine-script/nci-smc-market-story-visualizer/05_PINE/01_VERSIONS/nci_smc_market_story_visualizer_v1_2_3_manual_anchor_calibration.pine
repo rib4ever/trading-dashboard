@@ -1,0 +1,265 @@
+//@version=6
+indicator("NCI x SMC Market Story Visualizer [Ravi Custom] v1.2.3", shorttitle="NCIStory", overlay=true, max_lines_count=500, max_labels_count=500)
+
+// v1.2.3 Manual-Anchor Calibration Mode
+// Visual only. No entries. No execution.
+// Manual NCI anchor beats automatic KL until auto engine proves alignment.
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Inputs
+// ─────────────────────────────────────────────────────────────────────────────
+grpTF = "01. TF Stack"
+tf1 = input.timeframe("240", "TF1 Parent", group=grpTF)
+tf2 = input.timeframe("60", "TF2", group=grpTF)
+tf3 = input.timeframe("15", "TF3", group=grpTF)
+tf4 = input.timeframe("5", "TF4", group=grpTF)
+
+grpV = "02. Display"
+theme = input.string("Light", "Theme", options=["Light", "Dark"], group=grpV)
+panelMode = input.string("Mobile", "Panel", options=["Mobile", "Normal", "Debug"], group=grpV)
+panelPos = input.string("Top Right", "Panel Position", options=["Top Right", "Top Left", "Bottom Right", "Bottom Left"], group=grpV)
+showAutoKL = input.bool(true, "Show Auto KL", group=grpV)
+showManualKL = input.bool(true, "Show Manual KL", group=grpV)
+showLocalFallback = input.bool(true, "Show Local Fallback", group=grpV)
+maxParentDistAtr = input.float(6.0, "Max Auto Parent KL Distance ATR", minval=1.0, maxval=50.0, step=0.5, group=grpV)
+
+grpM = "03. Manual Anchor Calibration"
+manualMode = input.bool(true, "Enable Manual Anchor Calibration", group=grpM)
+manualTF = input.string("H4", "Manual Anchor TF", options=["H4", "H1", "M15", "M5"], group=grpM)
+manualDirection = input.string("Bullish", "Manual Direction", options=["Bullish", "Bearish", "Range", "Mixed/Unknown"], group=grpM)
+manualKLUp = input.float(na, "Manual KL UP", group=grpM)
+manualKLDown = input.float(na, "Manual KL DOWN", group=grpM)
+manualToleranceAtr = input.float(1.0, "Auto vs Manual Tolerance ATR", minval=0.1, maxval=10.0, step=0.1, group=grpM)
+manualOverrideStory = input.bool(true, "Manual Anchor Overrides Auto Story", group=grpM)
+
+grpC = "04. Auto KL Engine"
+pLeft = input.int(3, "Pivot Left", minval=1, maxval=20, group=grpC)
+pRight = input.int(3, "Pivot Right", minval=1, maxval=20, group=grpC)
+atrLen = input.int(14, "ATR", minval=1, group=grpC)
+minSwingAtr = input.float(0.85, "Min Swing ATR", minval=0.1, maxval=5, step=0.05, group=grpC)
+rangeAtrMult = input.float(1.6, "Range Width ATR", minval=0.5, maxval=5, step=0.05, group=grpC)
+lineLen = input.int(130, "Working Line Len", minval=20, maxval=500, group=grpC)
+parentLineLen = input.int(160, "Parent Line Len", minval=50, maxval=1000, group=grpC)
+manualLineLen = input.int(300, "Manual Line Len", minval=50, maxval=1000, group=grpC)
+maruRatio = input.float(0.70, "Maru Ratio", minval=0.5, maxval=0.95, step=0.05, group=grpC)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Theme / helpers
+// ─────────────────────────────────────────────────────────────────────────────
+isLight = theme == "Light"
+txt = isLight ? color.black : color.white
+headBg = isLight ? color.new(color.silver, 10) : color.new(color.black, 0)
+rowBg = isLight ? color.new(color.white, 72) : color.new(color.gray, 86)
+altBg = isLight ? color.new(color.silver, 80) : color.new(color.gray, 90)
+manualBg = color.new(color.aqua, 75)
+manualRedBg = color.new(color.fuchsia, 75)
+
+f_pos(string p) => p == "Top Left" ? position.top_left : p == "Bottom Right" ? position.bottom_right : p == "Bottom Left" ? position.bottom_left : position.top_right
+f_price(float x) => na(x) ? "n/a" : str.tostring(x, format.mintick)
+f_min(string tf) => tf == "1" ? 1 : tf == "3" ? 3 : tf == "5" ? 5 : tf == "15" ? 15 : tf == "30" ? 30 : tf == "60" ? 60 : tf == "240" ? 240 : tf == "D" ? 1440 : tf == "W" ? 10080 : na
+f_chartMin() => timeframe.isminutes ? timeframe.multiplier : timeframe.isdaily ? 1440 * timeframe.multiplier : timeframe.isweekly ? 10080 * timeframe.multiplier : na
+f_same(string tf) => tf == timeframe.period or f_min(tf) == f_chartMin()
+f_bodyRatio() => high - low > 0 ? math.abs(close - open) / (high - low) : 0.0
+f_isMaru() => f_bodyRatio() >= maruRatio
+
+f_ph(int occ) =>
+    x = ta.pivothigh(high, pLeft, pRight)
+    ta.valuewhen(not na(x), x, occ)
+
+f_pl(int occ) =>
+    x = ta.pivotlow(low, pLeft, pRight)
+    ta.valuewhen(not na(x), x, occ)
+
+f_path(float h0, float h1, float l0, float l1, float atr) =>
+    ok = not na(h0) and not na(h1) and not na(l0) and not na(l1)
+    dist = ok and math.abs(h0 - l0) >= atr * minSwingAtr
+    rangeLike = ok and math.abs(h0 - l0) <= atr * rangeAtrMult
+    hh = ok and h0 > h1
+    hl = ok and l0 > l1
+    lh = ok and h0 < h1
+    ll = ok and l0 < l1
+    dist and hh and hl ? "Strong bullish path" : dist and lh and ll ? "Strong bearish path" : rangeLike ? "Range candidate path" : ok ? "Weak / mixed path" : "Path building"
+
+f_cycle(string path, float c, float h0, float l0) =>
+    str.contains(path, "Strong bullish") and c >= l0 and c <= h0 ? "Bullish continuation" : str.contains(path, "Strong bearish") and c <= h0 and c >= l0 ? "Bearish continuation" : str.contains(path, "Strong bullish") and c < l0 ? "Bullish KL UP break / bearish transition" : str.contains(path, "Strong bearish") and c > h0 ? "Bearish KL DOWN break / bullish transition" : str.contains(path, "Range") ? "Range candidate" : str.contains(path, "Weak") ? "Transition / mixed" : "Building"
+
+f_status(string cycle) =>
+    str.contains(cycle, "Bullish continuation") ? "Confirmed bullish NCI KLs" : str.contains(cycle, "Bearish continuation") ? "Confirmed bearish NCI KLs" : str.contains(cycle, "Range") ? "Candidate range edges only" : str.contains(cycle, "transition") ? "Transition after KL break" : "No confirmed NCI KL yet"
+
+f_klUp(string cycle, float l0) => str.contains(cycle, "continuation") ? l0 : na
+f_klDn(string cycle, float h0) => str.contains(cycle, "continuation") ? h0 : na
+
+f_pressure(float klDn, float klUp) =>
+    upBreak = not na(klDn) and close > klDn
+    dnBreak = not na(klUp) and close < klUp
+    upValid = upBreak and close > open and f_isMaru()
+    dnValid = dnBreak and close < open and f_isMaru()
+    upValid ? "Valid upside KL break" : dnValid ? "Valid downside KL break" : upBreak ? "Upside break needs confirmation" : dnBreak ? "Downside break needs confirmation" : "No KL break"
+
+f_far(float level, float atr) => not na(level) and math.abs(close - level) > atr * maxParentDistAtr
+f_distStatus(float autoLevel, float manLevel, float atr) =>
+    na(manLevel) ? "manual n/a" : na(autoLevel) ? "auto missing" : math.abs(autoLevel - manLevel) <= atr * manualToleranceAtr ? "aligned" : autoLevel > manLevel ? "auto too high" : "auto too low"
+f_dirStatus(string autoCycle, string manualDir) =>
+    autoBull = str.contains(autoCycle, "Bullish")
+    autoBear = str.contains(autoCycle, "Bearish")
+    manualDir == "Mixed/Unknown" ? "manual unknown" : manualDir == "Range" and str.contains(autoCycle, "Range") ? "aligned" : manualDir == "Bullish" and autoBull ? "aligned" : manualDir == "Bearish" and autoBear ? "aligned" : "direction mismatch"
+f_manualReady() => manualMode and (not na(manualKLUp) or not na(manualKLDown) or manualDirection != "Mixed/Unknown")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MTF Auto data
+// ─────────────────────────────────────────────────────────────────────────────
+s1C = request.security(syminfo.tickerid, tf1, close)
+s2C = request.security(syminfo.tickerid, tf2, close)
+s3C = request.security(syminfo.tickerid, tf3, close)
+s1Atr = request.security(syminfo.tickerid, tf1, ta.atr(atrLen))
+s2Atr = request.security(syminfo.tickerid, tf2, ta.atr(atrLen))
+s3Atr = request.security(syminfo.tickerid, tf3, ta.atr(atrLen))
+s1H0 = request.security(syminfo.tickerid, tf1, f_ph(0))
+s1H1 = request.security(syminfo.tickerid, tf1, f_ph(1))
+s1L0 = request.security(syminfo.tickerid, tf1, f_pl(0))
+s1L1 = request.security(syminfo.tickerid, tf1, f_pl(1))
+s2H0 = request.security(syminfo.tickerid, tf2, f_ph(0))
+s2H1 = request.security(syminfo.tickerid, tf2, f_ph(1))
+s2L0 = request.security(syminfo.tickerid, tf2, f_pl(0))
+s2L1 = request.security(syminfo.tickerid, tf2, f_pl(1))
+s3H0 = request.security(syminfo.tickerid, tf3, f_ph(0))
+s3H1 = request.security(syminfo.tickerid, tf3, f_ph(1))
+s3L0 = request.security(syminfo.tickerid, tf3, f_pl(0))
+s3L1 = request.security(syminfo.tickerid, tf3, f_pl(1))
+
+s1Cycle = f_cycle(f_path(s1H0, s1H1, s1L0, s1L1, s1Atr), s1C, s1H0, s1L0)
+s2Cycle = f_cycle(f_path(s2H0, s2H1, s2L0, s2L1, s2Atr), s2C, s2H0, s2L0)
+s3Cycle = f_cycle(f_path(s3H0, s3H1, s3L0, s3L1, s3Atr), s3C, s3H0, s3L0)
+s1KlUp = f_klUp(s1Cycle, s1L0)
+s1KlDn = f_klDn(s1Cycle, s1H0)
+s2KlUp = f_klUp(s2Cycle, s2L0)
+s2KlDn = f_klDn(s2Cycle, s2H0)
+s3KlUp = f_klUp(s3Cycle, s3L0)
+s3KlDn = f_klDn(s3Cycle, s3H0)
+
+chartAtr = ta.atr(atrLen)
+chH0 = f_ph(0)
+chH1 = f_ph(1)
+chL0 = f_pl(0)
+chL1 = f_pl(1)
+chCycle = f_cycle(f_path(chH0, chH1, chL0, chL1, chartAtr), close, chH0, chL0)
+chStatus = f_status(chCycle)
+chKlUp = f_klUp(chCycle, chL0)
+chKlDn = f_klDn(chCycle, chH0)
+
+pCycle = f_same(tf4) ? s3Cycle : f_same(tf3) ? s2Cycle : s1Cycle
+pKlUp = f_same(tf4) ? s3KlUp : f_same(tf3) ? s2KlUp : s1KlUp
+pKlDn = f_same(tf4) ? s3KlDn : f_same(tf3) ? s2KlDn : s1KlDn
+pStatus = f_status(pCycle)
+pPressure = f_pressure(pKlDn, pKlUp)
+parentUpFar = f_far(pKlUp, chartAtr)
+parentDnFar = f_far(pKlDn, chartAtr)
+parentFar = parentUpFar and parentDnFar
+manualReady = f_manualReady()
+manualUpStatus = f_distStatus(pKlUp, manualKLUp, chartAtr)
+manualDnStatus = f_distStatus(pKlDn, manualKLDown, chartAtr)
+manualDirStatus = f_dirStatus(pCycle, manualDirection)
+manualAligned = manualReady and (manualDirStatus == "aligned" or manualDirection == "Mixed/Unknown") and (manualUpStatus == "aligned" or na(manualKLUp)) and (manualDnStatus == "aligned" or na(manualKLDown))
+
+showParentUpNow = showAutoKL and not parentUpFar and not manualOverrideStory
+showParentDnNow = showAutoKL and not parentDnFar and not manualOverrideStory
+showLocalFallbackNow = showLocalFallback and (parentFar or na(chKlUp) or na(chKlDn))
+useManualStory = manualReady and manualOverrideStory
+visibleReason = useManualStory ? "Manual anchor active" : parentFar ? "Parent KL far; local context active" : showLocalFallbackNow ? "Local fallback active" : "Normal story view"
+finalStory = useManualStory ? (manualAligned ? "Manual anchor aligned with auto" : "Manual anchor overrides auto; calibrate KL") : parentFar ? "Parent clear but far; showing local context" : str.contains(pStatus, "No confirmed") ? "No confirmed parent KL yet" : str.contains(chStatus, "No confirmed") ? "Parent clear, child KL not confirmed yet" : str.contains(pPressure, "needs confirmation") ? "At parent KL decision; break needs confirmation" : "Parent continuation active; child explains move"
+confidence = useManualStory ? (manualAligned ? "Manual aligned" : "Manual override") : parentFar ? "Local view" : str.contains(finalStory, "confirmation") ? "Needs confirm" : "Building"
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Panel
+// ─────────────────────────────────────────────────────────────────────────────
+var table t = table.new(f_pos(panelPos), 2, 16, border_width=1)
+f_cell(int c, int r, string s, color bg) => table.cell(t, c, r, s, bgcolor=bg, text_color=txt, text_size=panelMode == "Mobile" ? size.tiny : size.small)
+if barstate.islast
+    table.clear(t, 0, 0, 1, 15)
+    f_cell(0, 0, "NCI Story", headBg)
+    f_cell(1, 0, "v1.2.3", headBg)
+    f_cell(0, 1, "Final", altBg)
+    f_cell(1, 1, finalStory, altBg)
+    f_cell(0, 2, "Confidence", rowBg)
+    f_cell(1, 2, confidence, rowBg)
+    f_cell(0, 3, "Visible", rowBg)
+    f_cell(1, 3, visibleReason, rowBg)
+    f_cell(0, 4, "Manual", manualBg)
+    f_cell(1, 4, manualDirection + " | UP " + f_price(manualKLUp) + " | DOWN " + f_price(manualKLDown), manualBg)
+    f_cell(0, 5, "Auto", rowBg)
+    f_cell(1, 5, pCycle + " | " + pStatus, rowBg)
+    f_cell(0, 6, "Compare", rowBg)
+    f_cell(1, 6, manualDirStatus + " | UP " + manualUpStatus + " | DOWN " + manualDnStatus, rowBg)
+    if panelMode != "Mobile"
+        f_cell(0, 7, "Working", rowBg)
+        f_cell(1, 7, chCycle + " | " + chStatus, rowBg)
+        f_cell(0, 8, "Auto KL", rowBg)
+        f_cell(1, 8, "UP " + f_price(pKlUp) + " | DOWN " + f_price(pKlDn), rowBg)
+        f_cell(0, 9, "Pressure", rowBg)
+        f_cell(1, 9, pPressure, rowBg)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Visuals
+// ─────────────────────────────────────────────────────────────────────────────
+var line manUpLine = na
+var line manDnLine = na
+var line autoUpLine = na
+var line autoDnLine = na
+var line workUpLine = na
+var line workDnLine = na
+var line localHiLine = na
+var line localLoLine = na
+var label manUpLab = na
+var label manDnLab = na
+var label autoUpLab = na
+var label autoDnLab = na
+var label workUpLab = na
+var label workDnLab = na
+var label localHiLab = na
+var label localLoLab = na
+
+if barstate.islast
+    line.delete(manUpLine)
+    line.delete(manDnLine)
+    line.delete(autoUpLine)
+    line.delete(autoDnLine)
+    line.delete(workUpLine)
+    line.delete(workDnLine)
+    line.delete(localHiLine)
+    line.delete(localLoLine)
+    label.delete(manUpLab)
+    label.delete(manDnLab)
+    label.delete(autoUpLab)
+    label.delete(autoDnLab)
+    label.delete(workUpLab)
+    label.delete(workDnLab)
+    label.delete(localHiLab)
+    label.delete(localLoLab)
+
+    if showManualKL and manualMode and not na(manualKLUp)
+        manUpLine := line.new(bar_index - manualLineLen, manualKLUp, bar_index, manualKLUp, extend=extend.right, width=2, color=color.new(color.aqua, 20))
+        manUpLab := label.new(bar_index, manualKLUp, "MANUAL " + manualTF + " KL UP\n" + f_price(manualKLUp), style=label.style_label_left, textcolor=color.black, color=manualBg, size=size.tiny)
+    if showManualKL and manualMode and not na(manualKLDown)
+        manDnLine := line.new(bar_index - manualLineLen, manualKLDown, bar_index, manualKLDown, extend=extend.right, width=2, color=color.new(color.fuchsia, 20))
+        manDnLab := label.new(bar_index, manualKLDown, "MANUAL " + manualTF + " KL DOWN\n" + f_price(manualKLDown), style=label.style_label_left, textcolor=color.black, color=manualRedBg, size=size.tiny)
+
+    if showParentUpNow and not na(pKlUp)
+        autoUpLine := line.new(bar_index - parentLineLen, pKlUp, bar_index, pKlUp, extend=extend.right, width=1, color=color.new(color.green, 55))
+        autoUpLab := label.new(bar_index, pKlUp, "Auto KL UP\n" + f_price(pKlUp), style=label.style_label_left, textcolor=color.black, color=color.new(color.green, 78), size=size.tiny)
+    if showParentDnNow and not na(pKlDn)
+        autoDnLine := line.new(bar_index - parentLineLen, pKlDn, bar_index, pKlDn, extend=extend.right, width=1, color=color.new(color.red, 55))
+        autoDnLab := label.new(bar_index, pKlDn, "Auto KL DOWN\n" + f_price(pKlDn), style=label.style_label_left, textcolor=color.black, color=color.new(color.red, 78), size=size.tiny)
+
+    if showWorkingKL and not na(chKlUp)
+        workUpLine := line.new(bar_index - lineLen, chKlUp, bar_index, chKlUp, extend=extend.right, width=1, color=color.new(color.green, 20))
+        workUpLab := label.new(bar_index, chKlUp, "Working KL UP\n" + f_price(chKlUp), style=label.style_label_left, textcolor=color.white, color=color.new(color.green, 12), size=size.tiny)
+    if showWorkingKL and not na(chKlDn)
+        workDnLine := line.new(bar_index - lineLen, chKlDn, bar_index, chKlDn, extend=extend.right, width=1, color=color.new(color.red, 20))
+        workDnLab := label.new(bar_index, chKlDn, "Working KL DOWN\n" + f_price(chKlDn), style=label.style_label_left, textcolor=color.white, color=color.new(color.red, 12), size=size.tiny)
+
+    if showLocalFallbackNow and not na(chH0)
+        localHiLine := line.new(bar_index - lineLen, chH0, bar_index, chH0, extend=extend.right, width=1, style=line.style_dotted, color=color.new(color.red, 45))
+        localHiLab := label.new(bar_index, chH0, "Local edge high\n" + f_price(chH0), style=label.style_label_left, textcolor=color.black, color=color.new(color.red, 82), size=size.tiny)
+    if showLocalFallbackNow and not na(chL0)
+        localLoLine := line.new(bar_index - lineLen, chL0, bar_index, chL0, extend=extend.right, width=1, style=line.style_dotted, color=color.new(color.green, 45))
+        localLoLab := label.new(bar_index, chL0, "Local edge low\n" + f_price(chL0), style=label.style_label_left, textcolor=color.black, color=color.new(color.green, 82), size=size.tiny)

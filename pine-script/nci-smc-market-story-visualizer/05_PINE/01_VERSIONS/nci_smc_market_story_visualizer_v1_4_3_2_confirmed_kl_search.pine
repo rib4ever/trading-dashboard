@@ -1,0 +1,327 @@
+//@version=6
+indicator("NCI x SMC Market Story Visualizer [Ravi Custom] v1.4.3.2", shorttitle="NCIStory", overlay=true, max_lines_count=500, max_labels_count=500, max_boxes_count=250, max_bars_back=1200)
+
+// v1.4.3.2 — Confirmed KL Search Engine
+// Base direction: v1.4.3 visual style.
+// Main fix: a rejected latest candidate is NOT the final answer.
+// The engine searches backwards for the nearest BOS-origin confirmed KL.
+// If no confirmed KL exists in the search window, it shows latest candidate as NOT KL.
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Inputs
+// ─────────────────────────────────────────────────────────────────────────────
+grpTF = "01. TF Story Stack"
+tf4h  = input.timeframe("240", "Master TF", group=grpTF)
+tf1h  = input.timeframe("60", "Child TF 1", group=grpTF)
+tf15m = input.timeframe("15", "Child TF 2", group=grpTF)
+tf5m  = input.timeframe("5", "Execution TF", group=grpTF)
+
+grpL = "02. NCI + SMC KL Engine"
+swingLen        = input.int(5, "Structure Swing Length", minval=2, maxval=20, group=grpL)
+atrLen          = input.int(14, "ATR Length", minval=1, group=grpL)
+confirmedDepth  = input.int(6, "Confirmed KL Search Depth", minval=1, maxval=6, group=grpL)
+showRejected    = input.bool(true, "Show NOT KL only when no confirmed KL", group=grpL)
+requireBOS      = input.bool(true, "Require BOS to Confirm KL", group=grpL)
+bosUseClose     = input.bool(false, "BOS Requires Close Beyond Structure", group=grpL)
+bosBufferAtr    = input.float(0.05, "BOS Buffer ATR", minval=0.0, maxval=2.0, step=0.01, group=grpL)
+activeBufferAtr = input.float(0.05, "Active / Broken Buffer ATR", minval=0.0, maxval=1.0, step=0.01, group=grpL)
+hugeBodyRatio   = input.float(0.70, "Huge Body Ratio", minval=0.50, maxval=0.95, step=0.05, group=grpL)
+wickBodyRatio   = input.float(1.50, "Huge Wick vs Body Ratio", minval=0.50, maxval=5.0, step=0.10, group=grpL)
+minZoneAtr      = input.float(0.06, "Minimum Zone Thickness ATR", minval=0.01, maxval=1.0, step=0.01, group=grpL)
+
+grpV = "03. Visuals"
+showPanel       = input.bool(true, "Show Story Panel", group=grpV)
+show4h          = input.bool(true, "Show 4H Master KL", group=grpV)
+show1h          = input.bool(true, "Show 1H Context", group=grpV)
+show15m         = input.bool(true, "Show 15M Context", group=grpV)
+show5m          = input.bool(true, "Show 5M Context", group=grpV)
+visualMode      = input.string("Story", "Visual Mode", options=["Story", "Full", "Debug"], group=grpV)
+compactLabels   = input.bool(true, "Compact Child Labels", group=grpV)
+futureBars      = input.int(50, "Right Label Offset", minval=10, maxval=250, group=grpV)
+theme           = input.string("Light", "Theme", options=["Light", "Dark"], group=grpV)
+panelPos        = input.string("Top Right", "Panel Position", options=["Top Right", "Top Left", "Bottom Right", "Bottom Left"], group=grpV)
+panelMode       = input.string("Mobile", "Panel Mode", options=["Mobile", "Normal", "Debug"], group=grpV)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────────────────
+isLight = theme == "Light"
+txtCol = isLight ? color.black : color.white
+headBg = isLight ? color.new(color.silver, 10) : color.new(color.black, 0)
+rowBg  = isLight ? color.new(color.white, 74) : color.new(color.gray, 86)
+altBg  = isLight ? color.new(color.silver, 86) : color.new(color.gray, 90)
+
+f_pos(string p) => p == "Top Left" ? position.top_left : p == "Bottom Right" ? position.bottom_right : p == "Bottom Left" ? position.bottom_left : position.top_right
+f_price(float x) => na(x) ? "n/a" : str.tostring(x, format.mintick)
+f_rightTime(int barsForward) => time + timeframe.in_seconds(timeframe.period) * 1000 * barsForward
+f_body(float o, float c) => math.abs(c - o)
+f_rng(float h, float l) => math.max(h - l, syminfo.mintick)
+f_bodyRatio(float o, float h, float l, float c) => f_body(o, c) / f_rng(h, l)
+f_inside(float top, float bot) => not na(top) and not na(bot) and close <= top and close >= bot
+f_chartMin() => timeframe.isminutes ? timeframe.multiplier : timeframe.isseconds ? 1 : timeframe.isdaily ? 1440 : timeframe.isweekly ? 10080 : 240
+
+f_supplyBottom(float o, float h, float l, float c, float atr) =>
+    body = math.max(f_body(o, c), syminfo.mintick)
+    upperWick = h - math.max(o, c)
+    br = f_bodyRatio(o, h, l, c)
+    hugeWick = upperWick >= body * wickBodyRatio
+    hugeBody = br >= hugeBodyRatio
+    bot = hugeWick ? h - upperWick * 0.50 : hugeBody ? math.max(o, c) : math.min(o, c)
+    math.min(bot, h - atr * minZoneAtr)
+
+f_demandTop(float o, float h, float l, float c, float atr) =>
+    body = math.max(f_body(o, c), syminfo.mintick)
+    lowerWick = math.min(o, c) - l
+    br = f_bodyRatio(o, h, l, c)
+    hugeWick = lowerWick >= body * wickBodyRatio
+    hugeBody = br >= hugeBodyRatio
+    top = hugeWick ? l + lowerWick * 0.50 : hugeBody ? math.min(o, c) : math.max(o, c)
+    math.max(top, l + atr * minZoneAtr)
+
+f_zoneType(float o, float h, float l, float c, bool supplySide) =>
+    body = math.max(f_body(o, c), syminfo.mintick)
+    upperWick = h - math.max(o, c)
+    lowerWick = math.min(o, c) - l
+    br = f_bodyRatio(o, h, l, c)
+    wick = supplySide ? upperWick : lowerWick
+    wick >= body * wickBodyRatio ? "Long wick / half-wick" : br >= hugeBodyRatio ? "Huge body" : "Normal candle"
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Confirmed KL search engine
+// Returns:
+// supplyTop, supplyBot, supplyTime, supplyConfirmed, supplyNote,
+// demandTop, demandBot, demandTime, demandConfirmed, demandNote,
+// bias, story, cycle, event, inSupply, inDemand, supplyType, demandType
+// ─────────────────────────────────────────────────────────────────────────────
+f_state() =>
+    atr = ta.atr(atrLen)
+    ph = ta.pivothigh(high, swingLen, swingLen)
+    pl = ta.pivotlow(low, swingLen, swingLen)
+
+    ph0 = ta.valuewhen(not na(ph), ph, 0)
+    ph1 = ta.valuewhen(not na(ph), ph, 1)
+    ph2 = ta.valuewhen(not na(ph), ph, 2)
+    ph3 = ta.valuewhen(not na(ph), ph, 3)
+    ph4 = ta.valuewhen(not na(ph), ph, 4)
+    ph5 = ta.valuewhen(not na(ph), ph, 5)
+    pl0 = ta.valuewhen(not na(pl), pl, 0)
+    pl1 = ta.valuewhen(not na(pl), pl, 1)
+    pl2 = ta.valuewhen(not na(pl), pl, 2)
+    pl3 = ta.valuewhen(not na(pl), pl, 3)
+    pl4 = ta.valuewhen(not na(pl), pl, 4)
+    pl5 = ta.valuewhen(not na(pl), pl, 5)
+
+    phT0 = ta.valuewhen(not na(ph), time[swingLen], 0)
+    plT0 = ta.valuewhen(not na(pl), time[swingLen], 0)
+    phO0 = ta.valuewhen(not na(ph), open[swingLen], 0)
+    phL0 = ta.valuewhen(not na(ph), low[swingLen], 0)
+    phC0 = ta.valuewhen(not na(ph), close[swingLen], 0)
+    plO0 = ta.valuewhen(not na(pl), open[swingLen], 0)
+    plH0 = ta.valuewhen(not na(pl), high[swingLen], 0)
+    plC0 = ta.valuewhen(not na(pl), close[swingLen], 0)
+
+    latestSTop = ph0
+    latestSBot = f_supplyBottom(phO0, ph0, phL0, phC0, atr)
+    latestDTop = f_demandTop(plO0, plH0, pl0, plC0, atr)
+    latestDBot = pl0
+
+    bullBOS = not na(ph1) and (bosUseClose ? close > ph1 + atr * bosBufferAtr : high > ph1 + atr * bosBufferAtr)
+    bearBOS = not na(pl1) and (bosUseClose ? close < pl1 - atr * bosBufferAtr : low < pl1 - atr * bosBufferAtr)
+
+    // The KL origin is captured when the BOS happens.
+    // Bullish BOS confirms the demand origin that launched the break.
+    // Bearish BOS confirms the supply origin that launched the break.
+    cDTop0 = ta.valuewhen(bullBOS, latestDTop, 0)
+    cDTop1 = ta.valuewhen(bullBOS, latestDTop, 1)
+    cDTop2 = ta.valuewhen(bullBOS, latestDTop, 2)
+    cDTop3 = ta.valuewhen(bullBOS, latestDTop, 3)
+    cDTop4 = ta.valuewhen(bullBOS, latestDTop, 4)
+    cDTop5 = ta.valuewhen(bullBOS, latestDTop, 5)
+    cDBot0 = ta.valuewhen(bullBOS, latestDBot, 0)
+    cDBot1 = ta.valuewhen(bullBOS, latestDBot, 1)
+    cDBot2 = ta.valuewhen(bullBOS, latestDBot, 2)
+    cDBot3 = ta.valuewhen(bullBOS, latestDBot, 3)
+    cDBot4 = ta.valuewhen(bullBOS, latestDBot, 4)
+    cDBot5 = ta.valuewhen(bullBOS, latestDBot, 5)
+    cDTime0 = ta.valuewhen(bullBOS, plT0, 0)
+    cDTime1 = ta.valuewhen(bullBOS, plT0, 1)
+    cDTime2 = ta.valuewhen(bullBOS, plT0, 2)
+    cDTime3 = ta.valuewhen(bullBOS, plT0, 3)
+    cDTime4 = ta.valuewhen(bullBOS, plT0, 4)
+    cDTime5 = ta.valuewhen(bullBOS, plT0, 5)
+
+    cSTop0 = ta.valuewhen(bearBOS, latestSTop, 0)
+    cSTop1 = ta.valuewhen(bearBOS, latestSTop, 1)
+    cSTop2 = ta.valuewhen(bearBOS, latestSTop, 2)
+    cSTop3 = ta.valuewhen(bearBOS, latestSTop, 3)
+    cSTop4 = ta.valuewhen(bearBOS, latestSTop, 4)
+    cSTop5 = ta.valuewhen(bearBOS, latestSTop, 5)
+    cSBot0 = ta.valuewhen(bearBOS, latestSBot, 0)
+    cSBot1 = ta.valuewhen(bearBOS, latestSBot, 1)
+    cSBot2 = ta.valuewhen(bearBOS, latestSBot, 2)
+    cSBot3 = ta.valuewhen(bearBOS, latestSBot, 3)
+    cSBot4 = ta.valuewhen(bearBOS, latestSBot, 4)
+    cSBot5 = ta.valuewhen(bearBOS, latestSBot, 5)
+    cSTime0 = ta.valuewhen(bearBOS, phT0, 0)
+    cSTime1 = ta.valuewhen(bearBOS, phT0, 1)
+    cSTime2 = ta.valuewhen(bearBOS, phT0, 2)
+    cSTime3 = ta.valuewhen(bearBOS, phT0, 3)
+    cSTime4 = ta.valuewhen(bearBOS, phT0, 4)
+    cSTime5 = ta.valuewhen(bearBOS, phT0, 5)
+
+    s0ok = confirmedDepth > 0 and not na(cSTop0) and close <= cSTop0 + atr * activeBufferAtr
+    s1ok = confirmedDepth > 1 and not na(cSTop1) and close <= cSTop1 + atr * activeBufferAtr
+    s2ok = confirmedDepth > 2 and not na(cSTop2) and close <= cSTop2 + atr * activeBufferAtr
+    s3ok = confirmedDepth > 3 and not na(cSTop3) and close <= cSTop3 + atr * activeBufferAtr
+    s4ok = confirmedDepth > 4 and not na(cSTop4) and close <= cSTop4 + atr * activeBufferAtr
+    s5ok = confirmedDepth > 5 and not na(cSTop5) and close <= cSTop5 + atr * activeBufferAtr
+    d0ok = confirmedDepth > 0 and not na(cDBot0) and close >= cDBot0 - atr * activeBufferAtr
+    d1ok = confirmedDepth > 1 and not na(cDBot1) and close >= cDBot1 - atr * activeBufferAtr
+    d2ok = confirmedDepth > 2 and not na(cDBot2) and close >= cDBot2 - atr * activeBufferAtr
+    d3ok = confirmedDepth > 3 and not na(cDBot3) and close >= cDBot3 - atr * activeBufferAtr
+    d4ok = confirmedDepth > 4 and not na(cDBot4) and close >= cDBot4 - atr * activeBufferAtr
+    d5ok = confirmedDepth > 5 and not na(cDBot5) and close >= cDBot5 - atr * activeBufferAtr
+
+    supplyConfirmed = s0ok or s1ok or s2ok or s3ok or s4ok or s5ok
+    demandConfirmed = d0ok or d1ok or d2ok or d3ok or d4ok or d5ok
+
+    supplyTop = supplyConfirmed ? (s0ok ? cSTop0 : s1ok ? cSTop1 : s2ok ? cSTop2 : s3ok ? cSTop3 : s4ok ? cSTop4 : cSTop5) : latestSTop
+    supplyBot = supplyConfirmed ? (s0ok ? cSBot0 : s1ok ? cSBot1 : s2ok ? cSBot2 : s3ok ? cSBot3 : s4ok ? cSBot4 : cSBot5) : latestSBot
+    supplyTime = supplyConfirmed ? (s0ok ? cSTime0 : s1ok ? cSTime1 : s2ok ? cSTime2 : s3ok ? cSTime3 : s4ok ? cSTime4 : cSTime5) : phT0
+    demandTop = demandConfirmed ? (d0ok ? cDTop0 : d1ok ? cDTop1 : d2ok ? cDTop2 : d3ok ? cDTop3 : d4ok ? cDTop4 : cDTop5) : latestDTop
+    demandBot = demandConfirmed ? (d0ok ? cDBot0 : d1ok ? cDBot1 : d2ok ? cDBot2 : d3ok ? cDBot3 : d4ok ? cDBot4 : cDBot5) : latestDBot
+    demandTime = demandConfirmed ? (d0ok ? cDTime0 : d1ok ? cDTime1 : d2ok ? cDTime2 : d3ok ? cDTime3 : d4ok ? cDTime4 : cDTime5) : plT0
+
+    inSupply = f_inside(supplyTop, supplyBot)
+    inDemand = f_inside(demandTop, demandBot)
+    hasBoth = not na(supplyTop) and not na(demandBot)
+    mid = hasBoth ? (supplyBot + demandTop) / 2.0 : close
+    int bias = not hasBoth ? 0 : inSupply or inDemand ? 0 : close > supplyTop ? 1 : close < demandBot ? -1 : close >= mid ? -1 : 1
+
+    supplyNote = supplyConfirmed ? "confirmed KL" : "not KL: no active BOS-origin supply found"
+    demandNote = demandConfirmed ? "confirmed KL" : "not KL: no active BOS-origin demand found"
+    story = inSupply and supplyConfirmed ? "At confirmed supply KL" : inDemand and demandConfirmed ? "At confirmed demand KL" : supplyConfirmed and demandConfirmed ? (bias == -1 ? "4H supply story active" : bias == 1 ? "4H demand story active" : "Inside confirmed KL range") : "Searching confirmed KL; latest candidate is not KL"
+    cycle = inSupply or inDemand ? "Decision" : bullBOS ? "Bullish BOS" : bearBOS ? "Bearish BOS" : bias == 1 ? "Pullback above demand" : bias == -1 ? "Pullback below supply" : "Range / Building"
+    event = bullBOS ? "BOS UP" : bearBOS ? "BOS DOWN" : inSupply ? "Supply decision" : inDemand ? "Demand decision" : "No fresh event"
+    sType = f_zoneType(phO0, ph0, phL0, phC0, true)
+    dType = f_zoneType(plO0, plH0, pl0, plC0, false)
+
+    [supplyTop, supplyBot, supplyTime, supplyConfirmed, supplyNote, demandTop, demandBot, demandTime, demandConfirmed, demandNote, bias, story, cycle, event, inSupply, inDemand, sType, dType]
+
+[s4Top, s4Bot, s4Time, s4Conf, s4Note, d4Top, d4Bot, d4Time, d4Conf, d4Note, b4, story4, cycle4, event4, inS4, inD4, sType4, dType4] = request.security(syminfo.tickerid, tf4h, f_state())
+[s1Top, s1Bot, s1Time, s1Conf, s1Note, d1Top, d1Bot, d1Time, d1Conf, d1Note, b1, story1, cycle1, event1, inS1, inD1, sType1, dType1] = request.security(syminfo.tickerid, tf1h, f_state())
+[s15Top, s15Bot, s15Time, s15Conf, s15Note, d15Top, d15Bot, d15Time, d15Conf, d15Note, b15, story15, cycle15, event15, inS15, inD15, sType15, dType15] = request.security(syminfo.tickerid, tf15m, f_state())
+[s5Top, s5Bot, s5Time, s5Conf, s5Note, d5Top, d5Bot, d5Time, d5Conf, d5Note, b5, story5, cycle5, event5, inS5, inD5, sType5, dType5] = request.security(syminfo.tickerid, tf5m, f_state())
+
+role1 = s1Conf or d1Conf ? (b1 == b4 ? "1H aligns with 4H" : "1H pullback / transition") : "1H candidate only"
+role15 = s15Conf or d15Conf ? (b15 == b1 ? "15M explains 1H" : "15M counter-move") : "15M candidate only"
+role5 = s5Conf or d5Conf ? (b5 == b15 ? "5M execution aligns" : "5M local reaction") : "5M candidate only"
+finalStory = inS4 and s4Conf ? "4H SUPPLY DECISION ACTIVE" : inD4 and d4Conf ? "4H DEMAND DECISION ACTIVE" : b4 == -1 and s4Conf ? "4H SUPPLY STORY ACTIVE" : b4 == 1 and d4Conf ? "4H DEMAND STORY ACTIVE" : "WAIT: confirmed KL search"
+confidence = s4Conf or d4Conf ? "Confirmed KL found by BOS-origin search" : "No confirmed 4H KL in search; showing candidate"
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Panel
+// ─────────────────────────────────────────────────────────────────────────────
+var table panel = table.new(f_pos(panelPos), 2, 16, border_width=1)
+f_cell(int c, int r, string s, color bg) => table.cell(panel, c, r, s, bgcolor=bg, text_color=txtCol, text_size=panelMode == "Mobile" ? size.tiny : size.small)
+
+if barstate.islast and showPanel
+    table.clear(panel, 0, 0, 1, 15)
+    f_cell(0, 0, "NCI x SMC", headBg)
+    f_cell(1, 0, "v1.4.3.2", headBg)
+    f_cell(0, 1, "Final", altBg)
+    f_cell(1, 1, finalStory, altBg)
+    f_cell(0, 2, "Confidence", rowBg)
+    f_cell(1, 2, confidence, rowBg)
+    f_cell(0, 3, "4H Master", rowBg)
+    f_cell(1, 3, story4, rowBg)
+    f_cell(0, 4, "4H Cycle", rowBg)
+    f_cell(1, 4, cycle4, rowBg)
+    f_cell(0, 5, "SMC Event", rowBg)
+    f_cell(1, 5, event4, rowBg)
+    f_cell(0, 6, "1H Role", rowBg)
+    f_cell(1, 6, role1, rowBg)
+    f_cell(0, 7, "15M Role", rowBg)
+    f_cell(1, 7, role15, rowBg)
+    f_cell(0, 8, "5M Role", rowBg)
+    f_cell(1, 8, role5, rowBg)
+    f_cell(0, 9, "4H Supply", rowBg)
+    f_cell(1, 9, f_price(s4Bot) + " - " + f_price(s4Top) + " | " + (s4Conf ? "KL" : "not KL"), rowBg)
+    f_cell(0, 10, "4H Demand", rowBg)
+    f_cell(1, 10, f_price(d4Bot) + " - " + f_price(d4Top) + " | " + (d4Conf ? "KL" : "not KL"), rowBg)
+    if panelMode == "Debug"
+        f_cell(0, 11, "SUP reason", rowBg)
+        f_cell(1, 11, s4Note, rowBg)
+        f_cell(0, 12, "DEM reason", rowBg)
+        f_cell(1, 12, d4Note, rowBg)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Visuals
+// ─────────────────────────────────────────────────────────────────────────────
+var box bs4 = na
+var box bd4 = na
+var box bs1 = na
+var box bd1 = na
+var box bs15 = na
+var box bd15 = na
+var box bs5 = na
+var box bd5 = na
+var label ls4 = na
+var label ld4 = na
+var label ls1 = na
+var label ld1 = na
+var label ls15 = na
+var label ld15 = na
+var label ls5 = na
+var label ld5 = na
+var label evLab = na
+
+f_box(int leftT, float top, float bottom, color col, int tr) =>
+    box.new(left=leftT, top=top, right=f_rightTime(futureBars), bottom=bottom, xloc=xloc.bar_time, bgcolor=color.new(col, tr), border_color=color.new(col, 35), extend=extend.right)
+
+f_lab(int off, float y, string s, string tip, color col, bool smallTxt) =>
+    label.new(x=f_rightTime(off), y=y, text=s, tooltip=tip, xloc=xloc.bar_time, style=label.style_label_left, color=color.new(col, 78), textcolor=color.black, size=smallTxt ? size.tiny : size.small)
+
+f_tip(string tf, string side, float bot, float top, string zoneType, string cycle, string event, string note, bool inside) =>
+    tf + " " + side + "\nZone: " + f_price(bot) + " - " + f_price(top) + "\nNCI draw: " + zoneType + "\nCycle: " + cycle + "\nSMC: " + event + "\nStatus: " + note + "\nPosition: " + (inside ? "inside decision" : "active/reference")
+
+chartM = f_chartMin()
+showFull = visualMode == "Full" or visualMode == "Debug"
+showStoryChildren = visualMode == "Story" ? chartM <= 60 : true
+
+if barstate.islast
+    box.delete(bs4), box.delete(bd4), box.delete(bs1), box.delete(bd1), box.delete(bs15), box.delete(bd15), box.delete(bs5), box.delete(bd5)
+    label.delete(ls4), label.delete(ld4), label.delete(ls1), label.delete(ld1), label.delete(ls15), label.delete(ld15), label.delete(ls5), label.delete(ld5), label.delete(evLab)
+
+    showS4 = show4h and not na(s4Time) and not na(s4Top) and not na(s4Bot) and (s4Conf or showRejected)
+    showD4 = show4h and not na(d4Time) and not na(d4Top) and not na(d4Bot) and (d4Conf or showRejected)
+    if showS4
+        bs4 := f_box(s4Time, s4Top, s4Bot, color.fuchsia, s4Conf ? 88 : 95)
+        ls4 := f_lab(futureBars, (s4Top + s4Bot) / 2, (s4Conf ? "4H SUPPLY\n" : "4H not KL\n") + f_price(s4Bot) + " - " + f_price(s4Top), f_tip("4H", "Supply", s4Bot, s4Top, sType4, cycle4, event4, s4Note, inS4), color.fuchsia, false)
+    if showD4
+        bd4 := f_box(d4Time, d4Top, d4Bot, color.aqua, d4Conf ? 86 : 95)
+        ld4 := f_lab(futureBars + 8, (d4Top + d4Bot) / 2, (d4Conf ? "4H DEMAND\n" : "4H not KL\n") + f_price(d4Bot) + " - " + f_price(d4Top), f_tip("4H", "Demand", d4Bot, d4Top, dType4, cycle4, event4, d4Note, inD4), color.aqua, false)
+
+    if show1h and showStoryChildren and not na(s1Time) and not na(s1Top) and not na(s1Bot) and (s1Conf or visualMode == "Debug")
+        bs1 := f_box(s1Time, s1Top, s1Bot, color.red, s1Conf ? (showFull ? 91 : 95) : 97)
+        ls1 := f_lab(futureBars + 16, (s1Top + s1Bot) / 2, s1Conf ? (compactLabels ? "1H SUP" : "1H SUPPLY") : "1H not KL", f_tip("1H", "Supply", s1Bot, s1Top, sType1, cycle1, event1, s1Note, inS1), color.red, true)
+    if show1h and showStoryChildren and not na(d1Time) and not na(d1Top) and not na(d1Bot) and (d1Conf or visualMode == "Debug")
+        bd1 := f_box(d1Time, d1Top, d1Bot, color.teal, d1Conf ? (showFull ? 91 : 95) : 97)
+        ld1 := f_lab(futureBars + 24, (d1Top + d1Bot) / 2, d1Conf ? (compactLabels ? "1H DEM" : "1H DEMAND") : "1H not KL", f_tip("1H", "Demand", d1Bot, d1Top, dType1, cycle1, event1, d1Note, inD1), color.teal, true)
+
+    if show15m and (showFull or chartM <= 15) and not na(s15Time) and not na(s15Top) and not na(s15Bot) and (s15Conf or visualMode == "Debug")
+        bs15 := f_box(s15Time, s15Top, s15Bot, color.orange, s15Conf ? 94 : 97)
+        ls15 := f_lab(futureBars + 32, (s15Top + s15Bot) / 2, s15Conf ? (compactLabels ? "15M SUP" : "15M SUPPLY") : "15M not KL", f_tip("15M", "Supply", s15Bot, s15Top, sType15, cycle15, event15, s15Note, inS15), color.orange, true)
+    if show15m and (showFull or chartM <= 15) and not na(d15Time) and not na(d15Top) and not na(d15Bot) and (d15Conf or visualMode == "Debug")
+        bd15 := f_box(d15Time, d15Top, d15Bot, color.green, d15Conf ? 94 : 97)
+        ld15 := f_lab(futureBars + 40, (d15Top + d15Bot) / 2, d15Conf ? (compactLabels ? "15M DEM" : "15M DEMAND") : "15M not KL", f_tip("15M", "Demand", d15Bot, d15Top, dType15, cycle15, event15, d15Note, inD15), color.green, true)
+
+    if show5m and (showFull or chartM <= 5) and not na(s5Time) and not na(s5Top) and not na(s5Bot) and (s5Conf or visualMode == "Debug")
+        bs5 := f_box(s5Time, s5Top, s5Bot, color.yellow, s5Conf ? 96 : 98)
+        ls5 := f_lab(futureBars + 48, (s5Top + s5Bot) / 2, s5Conf ? (compactLabels ? "5M SUP" : "5M SUPPLY") : "5M not KL", f_tip("5M", "Supply", s5Bot, s5Top, sType5, cycle5, event5, s5Note, inS5), color.yellow, true)
+    if show5m and (showFull or chartM <= 5) and not na(d5Time) and not na(d5Top) and not na(d5Bot) and (d5Conf or visualMode == "Debug")
+        bd5 := f_box(d5Time, d5Top, d5Bot, color.lime, d5Conf ? 96 : 98)
+        ld5 := f_lab(futureBars + 56, (d5Top + d5Bot) / 2, d5Conf ? (compactLabels ? "5M DEM" : "5M DEMAND") : "5M not KL", f_tip("5M", "Demand", d5Bot, d5Top, dType5, cycle5, event5, d5Note, inD5), color.lime, true)
+
+    evCol = event4 == "BOS UP" ? color.green : event4 == "BOS DOWN" ? color.red : color.gray
+    evLab := f_lab(futureBars + 14, close, "SMC\n" + event4, "4H event: " + event4 + "\nCycle: " + cycle4 + "\nRule: rejected candidate does not replace confirmed KL.", evCol, true)

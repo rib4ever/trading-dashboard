@@ -328,7 +328,149 @@ Correct interpretation:
 
 Official HTF story change requires valid higher-timeframe structure change, not only lower-timeframe reaction.
 
-## 14. No execution priority
+## 14. Always-HTF-KL law
+
+The higher timeframe must always have an active key-level story.
+
+```text
+There is always a latest relevant 4H supply/demand/key-level zone somewhere in the active structure history.
+If the newest candidate is invalid, broken, mitigated, obsolete, or not BOS-created, the engine must search backward until it finds the latest valid NCI key level/zone.
+```
+
+The indicator must not casually return:
+
+```text
+No confirmed 4H parent KL yet
+```
+
+unless there is genuinely not enough chart history loaded.
+
+The 4H KL is the master anchor. Lower timeframes cannot create the main story; they can only explain, refine, react to, or warn against the 4H story.
+
+## 15. BOS-created KL law
+
+A key level is not valid just because a candle, base, swing high, or swing low exists.
+
+A new KL must be created by a wave that breaks structure.
+
+```text
+Demand KL = the pullback low / demand zone that led to a valid break above the previous swing high.
+Supply KL = the pullback high / supply zone that led to a valid break below the previous swing low.
+```
+
+If the latest candidate has not broken the last HH/LL, it is not promoted to active KL.
+
+```text
+No BOS = not active KL.
+No BOS = search previous BOS-created KL.
+```
+
+This must be available as an optional setting, default ON:
+
+```text
+Require BOS to Create KL = ON
+BOS Requires Close Beyond Structure = optional
+```
+
+## 16. KL reaction-candle validation law
+
+A KL candidate must prove that institutions reacted from the zone.
+
+After the KL candle/base is identified, the following 3–4 candles should be checked for reaction pressure.
+
+For demand / KL UP:
+
+```text
+After KL candle/base:
+- buying pressure should appear
+- more bullish pressure than bearish pressure
+- strong body / displacement candles preferred
+- closes should move away from demand
+- price should not immediately deeply re-enter the zone
+- the reaction wave should ideally create BOS above previous high
+```
+
+For supply / KL DOWN:
+
+```text
+After KL candle/base:
+- selling pressure should appear
+- more bearish pressure than bullish pressure
+- strong body / displacement candles preferred
+- closes should move away from supply
+- price should not immediately deeply re-enter the zone
+- the reaction wave should ideally create BOS below previous low
+```
+
+Recommended settings:
+
+```text
+Require Reaction Candles After KL = ON
+Reaction Candle Count = 3
+Minimum Reaction Score = 3
+```
+
+Reaction scoring should be simple and explainable:
+
+```text
++1 correct candle direction
++1 strong body / displacement
++1 close moves away from zone
++1 closes progress in expected direction
++1 no deep immediate re-entry
+```
+
+Scores:
+
+```text
+0–2 = weak / ignore
+3 = candidate reaction
+4–5 = confirmed reaction
+```
+
+## 17. Inside-zone decision law
+
+If price is already inside the candidate zone when the engine identifies or displays it, it must not be treated as a clean fresh execution KL.
+
+```text
+Price inside supply zone = decision area; wait for rejection or breakout.
+Price inside demand zone = decision area; wait for reaction or breakdown.
+```
+
+A clean KL story requires:
+
+```text
+1. KL candle/base exists
+2. correct NCI zone is built
+3. reaction candles move away from the zone
+4. BOS/structure break validates the wave
+5. price later retests/reacts from the zone
+```
+
+If price is inside the zone:
+
+```text
+Do not say execution aligned.
+Say decision zone / reaction pending / wait for trigger.
+```
+
+## 18. Label and mobile visual law
+
+Child timeframe labels must remain readable and low-noise.
+
+Use compact labels by default:
+
+```text
+1H SUP / 1H DEM
+15M SUP / 15M DEM
+5M SUP / 5M DEM
+```
+
+Full explanations should go into tooltip text where TradingView supports hover, and into the story panel for mobile users.
+
+4H labels remain priority and may show fuller text.
+
+## 19. No execution priority
 
 Do not prioritize:
 

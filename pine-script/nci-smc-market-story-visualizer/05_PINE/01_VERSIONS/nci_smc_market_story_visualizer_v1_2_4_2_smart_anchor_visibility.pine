@@ -1,0 +1,231 @@
+//@version=6
+indicator("NCI x SMC Market Story Visualizer [Ravi Custom] v1.2.4.2", shorttitle="NCIStory", overlay=true, max_lines_count=500, max_labels_count=500)
+
+// v1.2.4.2 Smart Anchor Visibility
+// Visual only. No entries. No execution.
+// Fixes: showing all manual anchors can stretch the chart too much when HTF levels are far.
+// Keeps all anchors in panel, but lets chart display only story-relevant / nearby anchors by default.
+
+grpTF = "01. TF Stack"
+tf4h = input.timeframe("240", "Slot 1 / 4H Master", group=grpTF)
+tf1h = input.timeframe("60", "Slot 2 / 1H Child", group=grpTF)
+tf15 = input.timeframe("15", "Slot 3 / 15M Child", group=grpTF)
+tf5 = input.timeframe("5", "Slot 4 / 5M Child", group=grpTF)
+
+grpV = "02. Display"
+theme = input.string("Light", "Theme", options=["Light", "Dark"], group=grpV)
+panelMode = input.string("Mobile", "Panel", options=["Mobile", "Normal", "Debug"], group=grpV)
+panelPos = input.string("Top Right", "Panel Position", options=["Top Right", "Top Left", "Bottom Right", "Bottom Left"], group=grpV)
+anchorViewMode = input.string("Story Focus", "Anchor View Mode", options=["Story Focus", "Show All Manual Anchors", "Current TF Pair Only"], group=grpV)
+maxAnchorDistAtr = input.float(12.0, "Story Focus Max Anchor Distance ATR", minval=2.0, maxval=80.0, step=1.0, group=grpV)
+lineLen = input.int(260, "Line Length", minval=50, maxval=1000, group=grpV)
+
+grp4 = "03. Manual 4H Master Anchor"
+en4 = input.bool(true, "Enable 4H Manual Anchor", group=grp4)
+dir4 = input.string("Bearish", "4H Direction", options=["Bullish", "Bearish", "Range", "Mixed/Unknown"], group=grp4)
+event4 = input.string("KL DOWN touched / pullback", "4H Active Event", options=["None", "KL DOWN touched / pullback", "KL UP touched / pullback", "KL DOWN broken / recalculating bullish", "KL UP broken / recalculating bearish", "Range active", "Breakout building"], group=grp4)
+up4In = input.float(0.0, "4H Manual KL UP - 0 if empty", group=grp4)
+dn4In = input.float(0.0, "4H Manual KL DOWN - 0 if empty", group=grp4)
+
+grp1 = "04. Manual 1H Anchor"
+en1 = input.bool(true, "Enable 1H Manual Anchor", group=grp1)
+dir1 = input.string("Bullish", "1H Direction", options=["Bullish", "Bearish", "Range", "Mixed/Unknown"], group=grp1)
+up1In = input.float(0.0, "1H Manual KL UP - 0 if empty", group=grp1)
+dn1In = input.float(0.0, "1H Manual KL DOWN - 0 if empty", group=grp1)
+
+grp15 = "05. Manual 15M Anchor"
+en15 = input.bool(true, "Enable 15M Manual Anchor", group=grp15)
+dir15 = input.string("Bullish", "15M Direction", options=["Bullish", "Bearish", "Range", "Mixed/Unknown"], group=grp15)
+up15In = input.float(0.0, "15M Manual KL UP - 0 if empty", group=grp15)
+dn15In = input.float(0.0, "15M Manual KL DOWN - 0 if empty", group=grp15)
+
+grp5 = "06. Manual 5M Anchor"
+en5 = input.bool(true, "Enable 5M Manual Anchor", group=grp5)
+dir5 = input.string("Bullish", "5M Direction", options=["Bullish", "Bearish", "Range", "Mixed/Unknown"], group=grp5)
+up5In = input.float(0.0, "5M Manual KL UP - 0 if empty", group=grp5)
+dn5In = input.float(0.0, "5M Manual KL DOWN - 0 if empty", group=grp5)
+
+grpA = "07. Auto Comparison Engine"
+pLeft = input.int(3, "Pivot Left", minval=1, maxval=20, group=grpA)
+pRight = input.int(3, "Pivot Right", minval=1, maxval=20, group=grpA)
+atrLen = input.int(14, "ATR", minval=1, group=grpA)
+minSwingAtr = input.float(0.85, "Min Swing ATR", minval=0.1, maxval=5, step=0.05, group=grpA)
+tolAtr = input.float(1.0, "Auto vs Manual Tolerance ATR", minval=0.1, maxval=10, step=0.1, group=grpA)
+
+up4 = up4In == 0.0 ? na : up4In
+dn4 = dn4In == 0.0 ? na : dn4In
+up1 = up1In == 0.0 ? na : up1In
+dn1 = dn1In == 0.0 ? na : dn1In
+up15 = up15In == 0.0 ? na : up15In
+dn15 = dn15In == 0.0 ? na : dn15In
+up5 = up5In == 0.0 ? na : up5In
+dn5 = dn5In == 0.0 ? na : dn5In
+
+isLight = theme == "Light"
+txt = isLight ? color.black : color.white
+headBg = isLight ? color.new(color.silver, 10) : color.new(color.black, 0)
+rowBg = isLight ? color.new(color.white, 72) : color.new(color.gray, 86)
+altBg = isLight ? color.new(color.silver, 82) : color.new(color.gray, 88)
+
+f_pos(string p) => p == "Top Left" ? position.top_left : p == "Bottom Right" ? position.bottom_right : p == "Bottom Left" ? position.bottom_left : position.top_right
+f_price(float x) => na(x) ? "n/a" : str.tostring(x, format.mintick)
+f_min(string tf) => tf == "1" ? 1 : tf == "3" ? 3 : tf == "5" ? 5 : tf == "15" ? 15 : tf == "30" ? 30 : tf == "60" ? 60 : tf == "240" ? 240 : tf == "D" ? 1440 : tf == "W" ? 10080 : na
+f_chartMin() => timeframe.isminutes ? timeframe.multiplier : timeframe.isdaily ? 1440 * timeframe.multiplier : timeframe.isweekly ? 10080 * timeframe.multiplier : na
+f_same(string tf) => tf == timeframe.period or f_min(tf) == f_chartMin()
+f_near(float level, float atr) => not na(level) and math.abs(close - level) <= atr * maxAnchorDistAtr
+f_pairNear(float up, float dn, float atr) => f_near(up, atr) or f_near(dn, atr)
+
+f_ph(int occ) =>
+    x = ta.pivothigh(high, pLeft, pRight)
+    ta.valuewhen(not na(x), x, occ)
+
+f_pl(int occ) =>
+    x = ta.pivotlow(low, pLeft, pRight)
+    ta.valuewhen(not na(x), x, occ)
+
+f_cycle(float h0, float h1, float l0, float l1, float atr) =>
+    ok = not na(h0) and not na(h1) and not na(l0) and not na(l1)
+    dist = ok and math.abs(h0 - l0) >= atr * minSwingAtr
+    hh = ok and h0 > h1
+    hl = ok and l0 > l1
+    lh = ok and h0 < h1
+    ll = ok and l0 < l1
+    dist and hh and hl ? "Bullish continuation" : dist and lh and ll ? "Bearish continuation" : ok ? "Transition / mixed" : "Building"
+
+f_klUp(string cycle, float l0) => str.contains(cycle, "continuation") ? l0 : na
+f_klDn(string cycle, float h0) => str.contains(cycle, "continuation") ? h0 : na
+f_cmpDir(string autoCycle, string manualDir) => manualDir == "Mixed/Unknown" ? "manual unknown" : manualDir == "Bullish" and str.contains(autoCycle, "Bullish") ? "aligned" : manualDir == "Bearish" and str.contains(autoCycle, "Bearish") ? "aligned" : manualDir == "Range" and str.contains(autoCycle, "Range") ? "aligned" : "direction mismatch"
+f_cmpLevel(float autoLevel, float manualLevel, float atr) => na(manualLevel) ? "manual empty" : na(autoLevel) ? "auto missing" : math.abs(autoLevel - manualLevel) <= atr * tolAtr ? "aligned" : autoLevel > manualLevel ? "auto too high" : "auto too low"
+
+f_childInterpret(string parentEvent, string parentDir, string childDir, string childName) =>
+    isDownPull = parentEvent == "KL DOWN touched / pullback"
+    isUpPull = parentEvent == "KL UP touched / pullback"
+    isRange = parentEvent == "Range active"
+    isBreak = parentEvent == "KL DOWN broken / recalculating bullish" or parentEvent == "KL UP broken / recalculating bearish"
+    isDownPull and childDir == "Bullish" ? childName + " valid pullback explanation" : isDownPull and childDir == "Bearish" ? childName + " possible reaction back from pullback" : isUpPull and childDir == "Bearish" ? childName + " valid pullback explanation" : isUpPull and childDir == "Bullish" ? childName + " possible reaction back from pullback" : isRange ? childName + " explains range edge" : isBreak ? childName + " recalculates after parent break" : childDir == parentDir ? childName + " aligned with parent" : "true mismatch / warning"
+
+chartAtr = ta.atr(atrLen)
+chartM = f_chartMin()
+
+atr4 = request.security(syminfo.tickerid, tf4h, ta.atr(atrLen))
+atr1 = request.security(syminfo.tickerid, tf1h, ta.atr(atrLen))
+atr15 = request.security(syminfo.tickerid, tf15, ta.atr(atrLen))
+atr5 = request.security(syminfo.tickerid, tf5, ta.atr(atrLen))
+h4a = request.security(syminfo.tickerid, tf4h, f_ph(0))
+h4b = request.security(syminfo.tickerid, tf4h, f_ph(1))
+l4a = request.security(syminfo.tickerid, tf4h, f_pl(0))
+l4b = request.security(syminfo.tickerid, tf4h, f_pl(1))
+h1a = request.security(syminfo.tickerid, tf1h, f_ph(0))
+h1b = request.security(syminfo.tickerid, tf1h, f_ph(1))
+l1a = request.security(syminfo.tickerid, tf1h, f_pl(0))
+l1b = request.security(syminfo.tickerid, tf1h, f_pl(1))
+h15a = request.security(syminfo.tickerid, tf15, f_ph(0))
+h15b = request.security(syminfo.tickerid, tf15, f_ph(1))
+l15a = request.security(syminfo.tickerid, tf15, f_pl(0))
+l15b = request.security(syminfo.tickerid, tf15, f_pl(1))
+h5a = request.security(syminfo.tickerid, tf5, f_ph(0))
+h5b = request.security(syminfo.tickerid, tf5, f_ph(1))
+l5a = request.security(syminfo.tickerid, tf5, f_pl(0))
+l5b = request.security(syminfo.tickerid, tf5, f_pl(1))
+
+cy4 = f_cycle(h4a, h4b, l4a, l4b, atr4)
+cy1 = f_cycle(h1a, h1b, l1a, l1b, atr1)
+cy15 = f_cycle(h15a, h15b, l15a, l15b, atr15)
+cy5 = f_cycle(h5a, h5b, l5a, l5b, atr5)
+autoUp4 = f_klUp(cy4, l4a)
+autoDn4 = f_klDn(cy4, h4a)
+autoUp1 = f_klUp(cy1, l1a)
+autoDn1 = f_klDn(cy1, h1a)
+autoUp15 = f_klUp(cy15, l15a)
+autoDn15 = f_klDn(cy15, h15a)
+autoUp5 = f_klUp(cy5, l5a)
+autoDn5 = f_klDn(cy5, h5a)
+
+cmp4 = f_cmpDir(cy4, dir4) + " | U " + f_cmpLevel(autoUp4, up4, atr4) + " | D " + f_cmpLevel(autoDn4, dn4, atr4)
+cmp1 = f_cmpDir(cy1, dir1) + " | U " + f_cmpLevel(autoUp1, up1, atr1) + " | D " + f_cmpLevel(autoDn1, dn1, atr1)
+cmp15 = f_cmpDir(cy15, dir15) + " | U " + f_cmpLevel(autoUp15, up15, atr15) + " | D " + f_cmpLevel(autoDn15, dn15, atr15)
+cmp5 = f_cmpDir(cy5, dir5) + " | U " + f_cmpLevel(autoUp5, up5, atr5) + " | D " + f_cmpLevel(autoDn5, dn5, atr5)
+
+masterStory = event4 == "KL DOWN touched / pullback" ? "4H KL DOWN touched; pullback cycle active" : event4 == "KL UP touched / pullback" ? "4H KL UP touched; pullback cycle active" : event4 == "Range active" ? "4H range active; trade edges" : event4 == "Breakout building" ? "4H breakout building; wait validation" : event4 == "None" ? "4H story building" : "4H break / recalculation active"
+role1 = f_childInterpret(event4, dir4, dir1, "1H")
+role15 = f_childInterpret(event4, dir1, dir15, "15M")
+role5 = f_childInterpret(event4, dir15, dir5, "5M")
+hierarchyStory = role1 + " | " + role15
+confidence = event4 == "None" ? "Needs parent event" : "Hierarchy calibrated"
+
+// Smart visibility logic.
+allMode = anchorViewMode == "Show All Manual Anchors"
+storyFocus = anchorViewMode == "Story Focus"
+currentPair = anchorViewMode == "Current TF Pair Only"
+near4 = f_pairNear(up4, dn4, chartAtr)
+near1 = f_pairNear(up1, dn1, chartAtr)
+near15 = f_pairNear(up15, dn15, chartAtr)
+near5 = f_pairNear(up5, dn5, chartAtr)
+show4 = en4 and (allMode or (storyFocus and near4) or (currentPair and chartM >= 60))
+show1 = en1 and (allMode or (storyFocus and (near1 or chartM <= 60)) or (currentPair and chartM <= 60 and chartM >= 15))
+show15m = en15 and (allMode or (storyFocus and (near15 or chartM <= 15)) or (currentPair and chartM <= 15 and chartM >= 5))
+show5m = en5 and (allMode or (storyFocus and (near5 or chartM <= 5)) or (currentPair and chartM <= 5))
+visibilityNote = allMode ? "All manual anchors shown; chart may stretch" : storyFocus ? "Story Focus: far anchors kept in panel, hidden on chart" : "Current TF Pair Only"
+
+// Panel
+var table t = table.new(f_pos(panelPos), 2, 18, border_width=1)
+f_cell(int c, int r, string s, color bg) => table.cell(t, c, r, s, bgcolor=bg, text_color=txt, text_size=panelMode == "Mobile" ? size.tiny : size.small)
+if barstate.islast
+    table.clear(t, 0, 0, 1, 17)
+    f_cell(0, 0, "NCI Story", headBg)
+    f_cell(1, 0, "v1.2.4.2", headBg)
+    f_cell(0, 1, "Master", altBg)
+    f_cell(1, 1, masterStory, altBg)
+    f_cell(0, 2, "Hierarchy", rowBg)
+    f_cell(1, 2, hierarchyStory, rowBg)
+    f_cell(0, 3, "Visible", rowBg)
+    f_cell(1, 3, visibilityNote, rowBg)
+    f_cell(0, 4, "Confidence", rowBg)
+    f_cell(1, 4, confidence, rowBg)
+    f_cell(0, 5, "4H Compare", rowBg)
+    f_cell(1, 5, cmp4, rowBg)
+    f_cell(0, 6, "1H Role", rowBg)
+    f_cell(1, 6, role1, rowBg)
+    f_cell(0, 7, "15M Role", rowBg)
+    f_cell(1, 7, role15, rowBg)
+    f_cell(0, 8, "5M Role", rowBg)
+    f_cell(1, 8, role5, rowBg)
+    if panelMode != "Mobile"
+        f_cell(0, 9, "1H Compare", rowBg)
+        f_cell(1, 9, cmp1, rowBg)
+        f_cell(0, 10, "15M Compare", rowBg)
+        f_cell(1, 10, cmp15, rowBg)
+        f_cell(0, 11, "5M Compare", rowBg)
+        f_cell(1, 11, cmp5, rowBg)
+
+// Visuals
+var line l4u = na, l4d = na, l1u = na, l1d = na, l15u = na, l15d = na, l5u = na, l5d = na
+var label b4u = na, b4d = na, b1u = na, b1d = na, b15u = na, b15d = na, b5u = na, b5d = na
+
+if barstate.islast
+    line.delete(l4u), line.delete(l4d), line.delete(l1u), line.delete(l1d), line.delete(l15u), line.delete(l15d), line.delete(l5u), line.delete(l5d)
+    label.delete(b4u), label.delete(b4d), label.delete(b1u), label.delete(b1d), label.delete(b15u), label.delete(b15d), label.delete(b5u), label.delete(b5d)
+    if show4 and not na(up4)
+        l4u := line.new(bar_index - lineLen, up4, bar_index, up4, extend=extend.right, width=2, color=color.new(color.aqua, 15))
+        b4u := label.new(bar_index, up4, "MANUAL 4H KL UP\n" + f_price(up4), style=label.style_label_left, textcolor=color.black, color=color.new(color.aqua, 76), size=size.tiny)
+    if show4 and not na(dn4)
+        l4d := line.new(bar_index - lineLen, dn4, bar_index, dn4, extend=extend.right, width=2, color=color.new(color.fuchsia, 15))
+        b4d := label.new(bar_index, dn4, "MANUAL 4H KL DOWN\n" + f_price(dn4), style=label.style_label_left, textcolor=color.black, color=color.new(color.fuchsia, 78), size=size.tiny)
+    if show1 and not na(up1)
+        l1u := line.new(bar_index - lineLen, up1, bar_index, up1, extend=extend.right, width=2, color=color.new(color.teal, 20))
+        b1u := label.new(bar_index, up1, "MANUAL 1H KL UP\n" + f_price(up1), style=label.style_label_left, textcolor=color.black, color=color.new(color.teal, 76), size=size.tiny)
+    if show1 and not na(dn1)
+        l1d := line.new(bar_index - lineLen, dn1, bar_index, dn1, extend=extend.right, width=2, color=color.new(color.red, 25))
+        b1d := label.new(bar_index, dn1, "MANUAL 1H KL DOWN\n" + f_price(dn1), style=label.style_label_left, textcolor=color.black, color=color.new(color.red, 78), size=size.tiny)
+    if show15m and not na(up15)
+        l15u := line.new(bar_index - lineLen, up15, bar_index, up15, extend=extend.right, width=1, color=color.new(color.green, 15))
+        b15u := label.new(bar_index, up15, "MANUAL 15M KL UP\n" + f_price(up15), style=label.style_label_left, textcolor=color.black, color=color.new(color.green, 78), size=size.tiny)
+    if show15m and not na(dn15)
+        l15d := line.new(bar_index - lineLen, dn15, bar_index, dn15, extend=extend.right, width=1, color=color.new(color.red, 15))
+        b15d := label.new(bar_index, dn15, "MANUAL 15M KL DOWN\n" + f_price(dn15), style=label.style_label_left, textcolor=color.black, color=color.new(color.red, 78), size=size.tiny)
+    if show5m and not na(up5)
+        l5u := line.new(bar_index - lineLen, up5, bar_index, up5, extend=extend.right, width=1, style=line.style_dotted, color=color.new(color.green, 25))
+        b5u := label.new(bar_index, up5, "MANUAL 5M KL UP\n" + f_price(up5), style=label.style_label_left, textcolor=color.black, color=color.new(color.green, 84), size=size.tiny)
+    if show5m and not na(dn5)
+        l5d := line.new(bar_index - lineLen, dn5, bar_index, dn5, extend=extend.right, width=1, style=line.style_dotted, color=color.new(color.red, 25))
+        b5d := label.new(bar_index, dn5, "MANUAL 5M KL DOWN\n" + f_price(dn5), style=label.style_label_left, textcolor=color.black, color=color.new(color.red, 84), size=size.tiny)

@@ -1,0 +1,277 @@
+//@version=6
+indicator("NCI x SMC Market Story Visualizer [Ravi Custom] v1.4.5", shorttitle="NCIStory", overlay=true, max_lines_count=500, max_labels_count=500, max_boxes_count=250, max_bars_back=1500)
+
+// v1.4.5 — Zone Life-Cycle + HTF Decision Visual Filter
+// Priority order:
+// 1) 4H master story always controls the narrative.
+// 2) KL must be BOS-created when enabled.
+// 3) KL must show reaction candles after the KL candle/base when enabled.
+// 4) Broken / mitigated child zones are not displayed as clean SUP/DEM.
+// 5) If price is inside 4H supply/demand, lower TFs become explanation only.
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Inputs
+// ─────────────────────────────────────────────────────────────────────────────
+grpTF = "01. TF Story Stack"
+tf4h  = input.timeframe("240", "Master TF", group=grpTF)
+tf1h  = input.timeframe("60", "Child TF 1", group=grpTF)
+tf15m = input.timeframe("15", "Child TF 2", group=grpTF)
+tf5m  = input.timeframe("5", "Execution TF", group=grpTF)
+
+grpL = "02. NCI Logic"
+swingLen          = input.int(5, "Swing Length", minval=4, maxval=20, group=grpL)
+atrLen            = input.int(14, "ATR Length", minval=1, group=grpL)
+requireBOS        = input.bool(true, "Require BOS to Create KL", group=grpL)
+bosUseClose       = input.bool(false, "BOS Requires Close Beyond Structure", group=grpL)
+bosBufferAtr      = input.float(0.05, "BOS Buffer ATR", minval=0.0, maxval=2.0, step=0.01, group=grpL)
+requireReaction   = input.bool(true, "Require Reaction Candles After KL", group=grpL)
+reactionBars      = input.int(3, "Reaction Candle Count", minval=2, maxval=4, group=grpL)
+minReactionScore  = input.int(3, "Minimum Reaction Score", minval=1, maxval=5, group=grpL)
+lifeCycleFilter   = input.bool(true, "Zone Life-Cycle Filter", group=grpL)
+breakAtr          = input.float(0.05, "Zone Broken Buffer ATR", minval=0.0, maxval=1.0, step=0.01, group=grpL)
+insideZoneFilter  = input.bool(true, "Inside Zone = Decision, Not Execution", group=grpL)
+hugeBodyRatio     = input.float(0.70, "Huge Body Ratio", minval=0.50, maxval=0.95, step=0.05, group=grpL)
+wickBodyRatio     = input.float(1.50, "Huge Wick vs Body Ratio", minval=0.50, maxval=5.0, step=0.10, group=grpL)
+minZoneAtr        = input.float(0.06, "Minimum Zone Thickness ATR", minval=0.01, maxval=1.0, step=0.01, group=grpL)
+
+grpV = "03. Visuals"
+showPanel          = input.bool(true, "Show Story Panel", group=grpV)
+show4h             = input.bool(true, "Show 4H Master KL", group=grpV)
+show1h             = input.bool(true, "Show 1H Context", group=grpV)
+show15m            = input.bool(true, "Show 15M Context", group=grpV)
+show5m             = input.bool(true, "Show 5M Context", group=grpV)
+showChildren       = input.bool(true, "Show Child Context Zones", group=grpV)
+hideBrokenChildren = input.bool(true, "Hide Broken Child Zones", group=grpV)
+htfDecisionMode    = input.bool(true, "HTF Decision Mode Visual Filter", group=grpV)
+showStoryLabel     = input.bool(false, "Show Floating Story Label", group=grpV)
+compactLabels      = input.bool(true, "Compact Child Labels", group=grpV)
+futureBars         = input.int(50, "Right Label Offset", minval=10, maxval=250, group=grpV)
+theme              = input.string("Light", "Theme", options=["Light", "Dark"], group=grpV)
+panelPos           = input.string("Top Right", "Panel Position", options=["Top Right", "Top Left", "Bottom Right", "Bottom Left"], group=grpV)
+panelMode          = input.string("Mobile", "Panel Mode", options=["Mobile", "Normal", "Debug"], group=grpV)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────────────────
+isLight = theme == "Light"
+txtCol = isLight ? color.black : color.white
+headBg = isLight ? color.new(color.silver, 10) : color.new(color.black, 0)
+rowBg  = isLight ? color.new(color.white, 76) : color.new(color.gray, 86)
+altBg  = isLight ? color.new(color.silver, 88) : color.new(color.gray, 90)
+
+f_pos(string p) => p == "Top Left" ? position.top_left : p == "Bottom Right" ? position.bottom_right : p == "Bottom Left" ? position.bottom_left : position.top_right
+f_price(float x) => na(x) ? "n/a" : str.tostring(x, format.mintick)
+f_rightTime(int barsForward) => time + timeframe.in_seconds(timeframe.period) * 1000 * barsForward
+f_body(float o, float c) => math.abs(c - o)
+f_rng(float h, float l) => math.max(h - l, syminfo.mintick)
+f_bodyRatio(float o, float h, float l, float c) => f_body(o, c) / f_rng(h, l)
+f_inside(float top, float bot) => not na(top) and not na(bot) and close <= top and close >= bot
+f_chartMin() => timeframe.isminutes ? timeframe.multiplier : timeframe.isseconds ? 1 : timeframe.isdaily ? 1440 : timeframe.isweekly ? 10080 : 240
+
+// NCI no-base / special wick zone builder alpha.
+f_supplyBottom(float o, float h, float l, float c, float atr) =>
+    body = math.max(f_body(o, c), syminfo.mintick)
+    upperWick = h - math.max(o, c)
+    br = f_bodyRatio(o, h, l, c)
+    hugeWick = upperWick >= body * wickBodyRatio
+    hugeBody = br >= hugeBodyRatio
+    bottom = hugeWick ? h - upperWick * 0.50 : hugeBody ? math.max(o, c) : math.min(o, c)
+    math.min(bottom, h - atr * minZoneAtr)
+
+f_demandTop(float o, float h, float l, float c, float atr) =>
+    body = math.max(f_body(o, c), syminfo.mintick)
+    lowerWick = math.min(o, c) - l
+    br = f_bodyRatio(o, h, l, c)
+    hugeWick = lowerWick >= body * wickBodyRatio
+    hugeBody = br >= hugeBodyRatio
+    top = hugeWick ? l + lowerWick * 0.50 : hugeBody ? math.min(o, c) : math.max(o, c)
+    math.max(top, l + atr * minZoneAtr)
+
+// Reaction pressure after KL candle/base.
+f_bullReactionScore(float zTop, float zBot, float atr) =>
+    c1 = close[swingLen - 1] > open[swingLen - 1]
+    c2 = close[swingLen - 2] > open[swingLen - 2]
+    c3 = close[swingLen - 3] > open[swingLen - 3]
+    c4 = close[swingLen - 4] > open[swingLen - 4]
+    dir = (c1 ? 1 : 0) + (c2 ? 1 : 0) + (c3 ? 1 : 0) + (reactionBars >= 4 and c4 ? 1 : 0)
+    strong = (f_bodyRatio(open[swingLen - 1], high[swingLen - 1], low[swingLen - 1], close[swingLen - 1]) >= 0.50 ? 1 : 0) + (f_bodyRatio(open[swingLen - 2], high[swingLen - 2], low[swingLen - 2], close[swingLen - 2]) >= 0.50 ? 1 : 0) + (f_bodyRatio(open[swingLen - 3], high[swingLen - 3], low[swingLen - 3], close[swingLen - 3]) >= 0.50 ? 1 : 0) + (reactionBars >= 4 and f_bodyRatio(open[swingLen - 4], high[swingLen - 4], low[swingLen - 4], close[swingLen - 4]) >= 0.50 ? 1 : 0)
+    away = close[swingLen - 1] > zTop or close[swingLen - 2] > zTop or close[swingLen - 3] > zTop or (reactionBars >= 4 and close[swingLen - 4] > zTop) ? 1 : 0
+    progress = close[swingLen - 1] > close[swingLen] and close[swingLen - 2] >= close[swingLen - 1] ? 1 : 0
+    noDeep = math.min(math.min(low[swingLen - 1], low[swingLen - 2]), low[swingLen - 3]) >= zBot - atr * 0.10 ? 1 : 0
+    math.min(5, (dir >= math.max(2, reactionBars - 1) ? 1 : 0) + (strong >= math.max(1, reactionBars - 1) ? 1 : 0) + away + progress + noDeep)
+
+f_bearReactionScore(float zTop, float zBot, float atr) =>
+    c1 = close[swingLen - 1] < open[swingLen - 1]
+    c2 = close[swingLen - 2] < open[swingLen - 2]
+    c3 = close[swingLen - 3] < open[swingLen - 3]
+    c4 = close[swingLen - 4] < open[swingLen - 4]
+    dir = (c1 ? 1 : 0) + (c2 ? 1 : 0) + (c3 ? 1 : 0) + (reactionBars >= 4 and c4 ? 1 : 0)
+    strong = (f_bodyRatio(open[swingLen - 1], high[swingLen - 1], low[swingLen - 1], close[swingLen - 1]) >= 0.50 ? 1 : 0) + (f_bodyRatio(open[swingLen - 2], high[swingLen - 2], low[swingLen - 2], close[swingLen - 2]) >= 0.50 ? 1 : 0) + (f_bodyRatio(open[swingLen - 3], high[swingLen - 3], low[swingLen - 3], close[swingLen - 3]) >= 0.50 ? 1 : 0) + (reactionBars >= 4 and f_bodyRatio(open[swingLen - 4], high[swingLen - 4], low[swingLen - 4], close[swingLen - 4]) >= 0.50 ? 1 : 0)
+    away = close[swingLen - 1] < zBot or close[swingLen - 2] < zBot or close[swingLen - 3] < zBot or (reactionBars >= 4 and close[swingLen - 4] < zBot) ? 1 : 0
+    progress = close[swingLen - 1] < close[swingLen] and close[swingLen - 2] <= close[swingLen - 1] ? 1 : 0
+    noDeep = math.max(math.max(high[swingLen - 1], high[swingLen - 2]), high[swingLen - 3]) <= zTop + atr * 0.10 ? 1 : 0
+    math.min(5, (dir >= math.max(2, reactionBars - 1) ? 1 : 0) + (strong >= math.max(1, reactionBars - 1) ? 1 : 0) + away + progress + noDeep)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Timeframe state
+// Status codes: 0 active/outside, 1 inside decision, 2 broken/flip, 3 building/none
+// ─────────────────────────────────────────────────────────────────────────────
+f_state() =>
+    atr = ta.atr(atrLen)
+    ph = ta.pivothigh(high, swingLen, swingLen)
+    pl = ta.pivotlow(low, swingLen, swingLen)
+
+    ph0 = ta.valuewhen(not na(ph), ph, 0)
+    ph1 = ta.valuewhen(not na(ph), ph, 1)
+    pl0 = ta.valuewhen(not na(pl), pl, 0)
+    pl1 = ta.valuewhen(not na(pl), pl, 1)
+
+    phT0 = ta.valuewhen(not na(ph), time[swingLen], 0)
+    plT0 = ta.valuewhen(not na(pl), time[swingLen], 0)
+    phO0 = ta.valuewhen(not na(ph), open[swingLen], 0)
+    phL0 = ta.valuewhen(not na(ph), low[swingLen], 0)
+    phC0 = ta.valuewhen(not na(ph), close[swingLen], 0)
+    plO0 = ta.valuewhen(not na(pl), open[swingLen], 0)
+    plH0 = ta.valuewhen(not na(pl), high[swingLen], 0)
+    plC0 = ta.valuewhen(not na(pl), close[swingLen], 0)
+
+    sBot0 = f_supplyBottom(phO0, ph0, phL0, phC0, atr)
+    dTop0 = f_demandTop(plO0, plH0, pl0, plC0, atr)
+    sScoreNow = not na(ph) ? f_bearReactionScore(ph0, sBot0, atr) : 0
+    dScoreNow = not na(pl) ? f_bullReactionScore(dTop0, pl0, atr) : 0
+    sScore0 = ta.valuewhen(not na(ph), sScoreNow, 0)
+    dScore0 = ta.valuewhen(not na(pl), dScoreNow, 0)
+
+    bullBreak = not na(ph1) and (bosUseClose ? close > ph1 + atr * bosBufferAtr : high > ph1 + atr * bosBufferAtr)
+    bearBreak = not na(pl1) and (bosUseClose ? close < pl1 - atr * bosBufferAtr : low < pl1 - atr * bosBufferAtr)
+    sReactionOk = not requireReaction or sScore0 >= minReactionScore
+    dReactionOk = not requireReaction or dScore0 >= minReactionScore
+    validSupplyCreate = (not requireBOS or bearBreak) and sReactionOk and not na(ph0)
+    validDemandCreate = (not requireBOS or bullBreak) and dReactionOk and not na(pl0)
+
+    sTop = ta.valuewhen(validSupplyCreate, ph0, 0)
+    sBot = ta.valuewhen(validSupplyCreate, sBot0, 0)
+    sTime = ta.valuewhen(validSupplyCreate, phT0, 0)
+    sScore = ta.valuewhen(validSupplyCreate, sScore0, 0)
+    dTop = ta.valuewhen(validDemandCreate, dTop0, 0)
+    dBot = ta.valuewhen(validDemandCreate, pl0, 0)
+    dTime = ta.valuewhen(validDemandCreate, plT0, 0)
+    dScore = ta.valuewhen(validDemandCreate, dScore0, 0)
+
+    sBars = ta.barssince(time == sTime)
+    dBars = ta.barssince(time == dTime)
+    sBroken = lifeCycleFilter and not na(sTop) and not na(sBars) and ta.highest(high, math.min(sBars + 1, 500)) > sTop + atr * breakAtr
+    dBroken = lifeCycleFilter and not na(dBot) and not na(dBars) and ta.lowest(low, math.min(dBars + 1, 500)) < dBot - atr * breakAtr
+    sInside = f_inside(sTop, sBot)
+    dInside = f_inside(dTop, dBot)
+
+    int sStatus = na(sTop) ? 3 : sBroken ? 2 : sInside ? 1 : 0
+    int dStatus = na(dBot) ? 3 : dBroken ? 2 : dInside ? 1 : 0
+    hasBoth = not na(sTop) and not na(dBot)
+    mid = hasBoth ? (sBot + dTop) / 2.0 : close
+    int bias = not hasBoth ? 0 : sStatus == 1 or dStatus == 1 ? 0 : close >= mid ? -1 : 1
+    story = not hasBoth ? "Building KL memory" : sStatus == 1 ? "Inside supply decision — wait reject/break" : dStatus == 1 ? "Inside demand decision — wait react/break" : sStatus == 2 and dStatus == 2 ? "Broken zones — search next structure" : sStatus == 2 ? "Supply broken/flip — not clean supply" : dStatus == 2 ? "Demand broken/flip — not clean demand" : bias == -1 ? "Working below supply; watching demand" : "Working above demand; watching supply"
+    rule = (requireBOS ? "BOS" : "No BOS") + " + " + (requireReaction ? "Reaction" : "No reaction")
+    [sTop, sBot, sTime, dTop, dBot, dTime, bias, story, atr, rule, sStatus, dStatus, sScore, dScore]
+
+[s4Top, s4Bot, s4Time, d4Top, d4Bot, d4Time, b4, story4, atr4, rule4, sStat4, dStat4, sScore4, dScore4] = request.security(syminfo.tickerid, tf4h, f_state())
+[s1Top, s1Bot, s1Time, d1Top, d1Bot, d1Time, b1, story1, atr1, rule1, sStat1, dStat1, sScore1, dScore1] = request.security(syminfo.tickerid, tf1h, f_state())
+[s15Top, s15Bot, s15Time, d15Top, d15Bot, d15Time, b15, story15, atr15, rule15, sStat15, dStat15, sScore15, dScore15] = request.security(syminfo.tickerid, tf15m, f_state())
+[s5Top, s5Bot, s5Time, d5Top, d5Bot, d5Time, b5, story5, atr5, rule5, sStat5, dStat5, sScore5, dScore5] = request.security(syminfo.tickerid, tf5m, f_state())
+
+htfDecision = htfDecisionMode and (sStat4 == 1 or dStat4 == 1)
+role1 = sStat1 == 2 or dStat1 == 2 ? "1H broken/flip — context only" : sStat1 == 1 or dStat1 == 1 ? "1H decision zone — wait" : b1 == b4 ? "1H explains 4H" : b1 == 0 ? "1H building" : "1H pullback against 4H"
+role15 = htfDecision ? "15M reaction only inside 4H" : sStat15 == 2 or dStat15 == 2 ? "15M broken/flip — hide if noisy" : sStat15 == 1 or dStat15 == 1 ? "15M decision zone — wait" : b15 == b1 ? "15M explains 1H" : "15M counter-move"
+role5 = htfDecision ? "5M wait trigger inside 4H" : sStat5 == 2 or dStat5 == 2 ? "5M broken/flip — no clean KL" : sStat5 == 1 or dStat5 == 1 ? "5M decision zone — wait trigger" : b5 == b15 ? "5M aligned — wait trigger" : "5M local reaction"
+finalStory = sStat4 == 1 ? "4H SUPPLY DECISION ACTIVE" : dStat4 == 1 ? "4H DEMAND DECISION ACTIVE" : b4 == -1 ? "4H SUPPLY STORY ACTIVE" : b4 == 1 ? "4H DEMAND STORY ACTIVE" : "4H RANGE / WAIT"
+confidence = requireBOS and requireReaction ? "BOS + reaction validated" : requireBOS ? "BOS validated" : requireReaction ? "Reaction validated" : "Loose KL mode"
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Panel
+// ─────────────────────────────────────────────────────────────────────────────
+var table panel = table.new(f_pos(panelPos), 2, 16, border_width=1)
+f_cell(int c, int r, string s, color bg) => table.cell(panel, c, r, s, bgcolor=bg, text_color=txtCol, text_size=panelMode == "Mobile" ? size.tiny : size.small)
+
+if barstate.islast and showPanel
+    table.clear(panel, 0, 0, 1, 15)
+    f_cell(0, 0, "NCI x SMC", headBg)
+    f_cell(1, 0, "v1.4.5", headBg)
+    f_cell(0, 1, "Final", altBg)
+    f_cell(1, 1, finalStory, altBg)
+    f_cell(0, 2, "Confidence", rowBg)
+    f_cell(1, 2, confidence, rowBg)
+    f_cell(0, 3, "4H Master", rowBg)
+    f_cell(1, 3, story4, rowBg)
+    f_cell(0, 4, "KL Rule", rowBg)
+    f_cell(1, 4, rule4, rowBg)
+    f_cell(0, 5, "1H Role", rowBg)
+    f_cell(1, 5, role1, rowBg)
+    f_cell(0, 6, "15M Role", rowBg)
+    f_cell(1, 6, role15, rowBg)
+    f_cell(0, 7, "5M Role", rowBg)
+    f_cell(1, 7, role5, rowBg)
+    f_cell(0, 8, "4H Supply", rowBg)
+    f_cell(1, 8, f_price(s4Bot) + " - " + f_price(s4Top) + " | S" + str.tostring(sScore4), rowBg)
+    f_cell(0, 9, "4H Demand", rowBg)
+    f_cell(1, 9, f_price(d4Bot) + " - " + f_price(d4Top) + " | S" + str.tostring(dScore4), rowBg)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Visuals
+// ─────────────────────────────────────────────────────────────────────────────
+var box bs4 = na, bd4 = na, bs1 = na, bd1 = na, bs15 = na, bd15 = na, bs5 = na, bd5 = na
+var label ls4 = na, ld4 = na, ls1 = na, ld1 = na, ls15 = na, ld15 = na, ls5 = na, ld5 = na, stLab = na
+
+f_box(int leftT, float top, float bottom, color col, int transp) =>
+    box.new(left=leftT, top=top, right=f_rightTime(futureBars), bottom=bottom, xloc=xloc.bar_time, bgcolor=color.new(col, transp), border_color=color.new(col, 35), extend=extend.right)
+
+f_lab(int off, float y, string s, string tip, color col, bool smallTxt) =>
+    label.new(x=f_rightTime(off), y=y, text=s, tooltip=tip, xloc=xloc.bar_time, style=label.style_label_left, color=color.new(col, 78), textcolor=color.black, size=smallTxt ? size.tiny : size.small)
+
+f_status(int st) => st == 1 ? "inside decision" : st == 2 ? "broken/flip" : st == 3 ? "building" : "active"
+f_tip(string tf, string side, float bot, float top, int score, int st) =>
+    tf + " " + side + "\nZone: " + f_price(bot) + " - " + f_price(top) + "\nReaction score: " + str.tostring(score) + "\nStatus: " + f_status(st)
+
+chartM = f_chartMin()
+showChild1 = showChildren and show1h
+showChild15 = showChildren and show15m and (not htfDecision or chartM <= 60)
+showChild5 = showChildren and show5m and (not htfDecision or chartM <= 5)
+
+if barstate.islast
+    box.delete(bs4), box.delete(bd4), box.delete(bs1), box.delete(bd1), box.delete(bs15), box.delete(bd15), box.delete(bs5), box.delete(bd5)
+    label.delete(ls4), label.delete(ld4), label.delete(ls1), label.delete(ld1), label.delete(ls15), label.delete(ld15), label.delete(ls5), label.delete(ld5), label.delete(stLab)
+
+    if show4h and not na(s4Time) and not na(s4Top) and not na(s4Bot)
+        bs4 := f_box(s4Time, s4Top, s4Bot, color.fuchsia, 88)
+        ls4 := f_lab(futureBars, (s4Top + s4Bot) / 2, "4H SUPPLY\n" + f_price(s4Bot) + " - " + f_price(s4Top), f_tip("4H", "Supply", s4Bot, s4Top, sScore4, sStat4), color.fuchsia, false)
+    if show4h and not na(d4Time) and not na(d4Top) and not na(d4Bot)
+        bd4 := f_box(d4Time, d4Top, d4Bot, color.aqua, 86)
+        ld4 := f_lab(futureBars + 8, (d4Top + d4Bot) / 2, "4H DEMAND\n" + f_price(d4Bot) + " - " + f_price(d4Top), f_tip("4H", "Demand", d4Bot, d4Top, dScore4, dStat4), color.aqua, false)
+
+    okS1 = showChild1 and not na(s1Time) and not na(s1Top) and not na(s1Bot) and (not hideBrokenChildren or sStat1 != 2)
+    okD1 = showChild1 and not na(d1Time) and not na(d1Top) and not na(d1Bot) and (not hideBrokenChildren or dStat1 != 2)
+    okS15 = showChild15 and not na(s15Time) and not na(s15Top) and not na(s15Bot) and (not hideBrokenChildren or sStat15 != 2)
+    okD15 = showChild15 and not na(d15Time) and not na(d15Top) and not na(d15Bot) and (not hideBrokenChildren or dStat15 != 2)
+    okS5 = showChild5 and not na(s5Time) and not na(s5Top) and not na(s5Bot) and (not hideBrokenChildren or sStat5 != 2)
+    okD5 = showChild5 and not na(d5Time) and not na(d5Top) and not na(d5Bot) and (not hideBrokenChildren or dStat5 != 2)
+
+    if okS1
+        bs1 := f_box(s1Time, s1Top, s1Bot, color.red, htfDecision ? 95 : 91)
+        ls1 := f_lab(futureBars + 16, (s1Top + s1Bot) / 2, sStat1 == 2 ? "1H FLIP" : compactLabels ? "1H SUP" : "1H SUPPLY", f_tip("1H", "Supply", s1Bot, s1Top, sScore1, sStat1), color.red, true)
+    if okD1
+        bd1 := f_box(d1Time, d1Top, d1Bot, color.teal, htfDecision ? 95 : 91)
+        ld1 := f_lab(futureBars + 24, (d1Top + d1Bot) / 2, dStat1 == 2 ? "1H FLIP" : compactLabels ? "1H DEM" : "1H DEMAND", f_tip("1H", "Demand", d1Bot, d1Top, dScore1, dStat1), color.teal, true)
+    if okS15
+        bs15 := f_box(s15Time, s15Top, s15Bot, color.orange, htfDecision ? 96 : 93)
+        ls15 := f_lab(futureBars + 32, (s15Top + s15Bot) / 2, sStat15 == 2 ? "15M FLIP" : compactLabels ? "15M SUP" : "15M SUPPLY", f_tip("15M", "Supply", s15Bot, s15Top, sScore15, sStat15), color.orange, true)
+    if okD15
+        bd15 := f_box(d15Time, d15Top, d15Bot, color.green, htfDecision ? 96 : 93)
+        ld15 := f_lab(futureBars + 40, (d15Top + d15Bot) / 2, dStat15 == 2 ? "15M FLIP" : compactLabels ? "15M DEM" : "15M DEMAND", f_tip("15M", "Demand", d15Bot, d15Top, dScore15, dStat15), color.green, true)
+    if okS5
+        bs5 := f_box(s5Time, s5Top, s5Bot, color.yellow, 96)
+        ls5 := f_lab(futureBars + 48, (s5Top + s5Bot) / 2, sStat5 == 2 ? "5M FLIP" : compactLabels ? "5M SUP" : "5M SUPPLY", f_tip("5M", "Supply", s5Bot, s5Top, sScore5, sStat5), color.yellow, true)
+    if okD5
+        bd5 := f_box(d5Time, d5Top, d5Bot, color.lime, 96)
+        ld5 := f_lab(futureBars + 56, (d5Top + d5Bot) / 2, dStat5 == 2 ? "5M FLIP" : compactLabels ? "5M DEM" : "5M DEMAND", f_tip("5M", "Demand", d5Bot, d5Top, dScore5, dStat5), color.lime, true)
+
+    if showStoryLabel
+        stLab := f_lab(futureBars + 10, close, "NCI STORY\n" + finalStory, "HTF decision mode filters child noise. Broken child zones are hidden or marked as flip/retest.", color.gray, false)

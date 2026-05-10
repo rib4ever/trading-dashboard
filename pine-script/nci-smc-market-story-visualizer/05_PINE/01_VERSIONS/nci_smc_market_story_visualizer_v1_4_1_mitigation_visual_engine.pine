@@ -1,0 +1,335 @@
+//@version=6
+indicator("NCI x SMC Market Story Visualizer [Ravi Custom] v1.4.1", shorttitle="NCIStory", overlay=true, max_lines_count=500, max_labels_count=500, max_boxes_count=200, max_bars_back=1000)
+
+// v1.4.1 — Mitigation Filter + Visual Engine
+// Core upgrade from Ravi feedback:
+// 1) Confirmed 4H KL direction is kept.
+// 2) Mitigated/broken candidates are not kept as active candidates.
+// 3) Candidate search scans backward for the first unmitigated candidate.
+// 4) Labels are staggered to the right to reduce overlap.
+// 5) Levels are visualized as thin rectangular zones from their creation point where possible.
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 01. Inputs
+// ─────────────────────────────────────────────────────────────────────────────
+grpTF = "01. TF Story Stack"
+tf4h  = input.timeframe("240", "Master TF", group=grpTF)
+tf1h  = input.timeframe("60",  "Child TF 1", group=grpTF)
+tf15m = input.timeframe("15",  "Child TF 2", group=grpTF)
+tf5m  = input.timeframe("5",   "Execution TF", group=grpTF)
+
+grpLogic = "02. NCI Logic"
+swingLen        = input.int(5, "SMC Swing Length", minval=2, maxval=20, group=grpLogic)
+atrLen          = input.int(14, "ATR Length", minval=1, group=grpLogic)
+maruRatio       = input.float(0.70, "NCI Maru Body Ratio", minval=0.50, maxval=0.95, step=0.05, group=grpLogic)
+specialMaruBody = input.float(0.50, "Special Maru Body Ratio", minval=0.35, maxval=0.80, step=0.05, group=grpLogic)
+closeNearEdge   = input.float(0.85, "Special Maru Close Near Edge", minval=0.70, maxval=0.98, step=0.01, group=grpLogic)
+legAtrMin       = input.float(1.20, "Minimum Pulse Leg ATR", minval=0.30, maxval=10.0, step=0.10, group=grpLogic)
+rangeAtrMax     = input.float(2.20, "Range Width ATR Max", minval=0.50, maxval=20.0, step=0.10, group=grpLogic)
+breakCloseAtr   = input.float(0.15, "Break Close Buffer ATR", minval=0.00, maxval=2.0, step=0.05, group=grpLogic)
+touchTolAtr     = input.float(0.35, "KL Touch Tolerance ATR", minval=0.05, maxval=3.0, step=0.05, group=grpLogic)
+mitigateAtr     = input.float(0.20, "Candidate Mitigation Buffer ATR", minval=0.00, maxval=2.0, step=0.05, group=grpLogic)
+searchDepth     = input.int(5, "Candidate Search Depth", minval=1, maxval=8, group=grpLogic)
+
+grpView = "03. Visual Story"
+showPanel       = input.bool(true, "Show Story Panel", group=grpView)
+show4h          = input.bool(true, "Show 4H", group=grpView)
+show1h          = input.bool(true, "Show 1H", group=grpView)
+show15m         = input.bool(true, "Show 15M", group=grpView)
+show5m          = input.bool(true, "Show 5M", group=grpView)
+showCandidates  = input.bool(true, "Show Active Candidates", group=grpView)
+showZones       = input.bool(true, "Show Rectangular Zones", group=grpView)
+showEventLabel  = input.bool(true, "Show Current Story Label", group=grpView)
+zoneAtrThick    = input.float(0.08, "Zone Thickness ATR", minval=0.01, maxval=1.00, step=0.01, group=grpView)
+futureBars      = input.int(40, "Label Right Offset Base", minval=5, maxval=200, group=grpView)
+theme           = input.string("Light", "Theme", options=["Light", "Dark"], group=grpView)
+panelPos        = input.string("Top Right", "Panel Position", options=["Top Right", "Top Left", "Bottom Right", "Bottom Left"], group=grpView)
+panelMode       = input.string("Mobile", "Panel Mode", options=["Mobile", "Normal", "Debug"], group=grpView)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 02. Helpers
+// ─────────────────────────────────────────────────────────────────────────────
+isLight = theme == "Light"
+txtCol  = isLight ? color.black : color.white
+headBg  = isLight ? color.new(color.silver, 10) : color.new(color.black, 0)
+rowBg   = isLight ? color.new(color.white, 72) : color.new(color.gray, 86)
+altBg   = isLight ? color.new(color.silver, 84) : color.new(color.gray, 90)
+
+f_pos(string p) => p == "Top Left" ? position.top_left : p == "Bottom Right" ? position.bottom_right : p == "Bottom Left" ? position.bottom_left : position.top_right
+f_price(float x) => na(x) ? "n/a" : str.tostring(x, format.mintick)
+f_bodyRatio(float o, float h, float l, float c) => h - l > 0 ? math.abs(c - o) / (h - l) : 0.0
+f_closePos(float h, float l, float c) => h - l > 0 ? (c - l) / (h - l) : 0.5
+f_isBull(float o, float c) => c > o
+f_isBear(float o, float c) => c < o
+f_isMaru(float o, float h, float l, float c) => f_bodyRatio(o, h, l, c) >= maruRatio
+f_isSpecialBull(float o, float h, float l, float c) => f_isBull(o, c) and f_bodyRatio(o, h, l, c) >= specialMaruBody and f_closePos(h, l, c) >= closeNearEdge
+f_isSpecialBear(float o, float h, float l, float c) => f_isBear(o, c) and f_bodyRatio(o, h, l, c) >= specialMaruBody and f_closePos(h, l, c) <= 1.0 - closeNearEdge
+f_isPowerBull(float o, float h, float l, float c) => f_isBull(o, c) and (f_isMaru(o, h, l, c) or f_isSpecialBull(o, h, l, c))
+f_isPowerBear(float o, float h, float l, float c) => f_isBear(o, c) and (f_isMaru(o, h, l, c) or f_isSpecialBear(o, h, l, c))
+f_mid(float a, float b) => (a + b) / 2.0
+f_rightTime(int barsForward) => time + timeframe.in_seconds(timeframe.period) * 1000 * barsForward
+
+f_phVal(int occ) =>
+    ph = ta.pivothigh(high, swingLen, swingLen)
+    ta.valuewhen(not na(ph), ph, occ)
+
+f_plVal(int occ) =>
+    pl = ta.pivotlow(low, swingLen, swingLen)
+    ta.valuewhen(not na(pl), pl, occ)
+
+f_phTime(int occ) =>
+    ph = ta.pivothigh(high, swingLen, swingLen)
+    ta.valuewhen(not na(ph), time[swingLen], occ)
+
+f_plTime(int occ) =>
+    pl = ta.pivotlow(low, swingLen, swingLen)
+    ta.valuewhen(not na(pl), time[swingLen], occ)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 03. Mitigation-aware candidate selection
+// ─────────────────────────────────────────────────────────────────────────────
+f_highMitigated(float level, float atr) => not na(level) and close > level + atr * mitigateAtr
+f_lowMitigated(float level, float atr) => not na(level) and close < level - atr * mitigateAtr
+
+f_activeHighCandidate() =>
+    atr = ta.atr(atrLen)
+    float selected = na
+    int selectedTime = na
+    for i = 0 to 7
+        if i < searchDepth and na(selected)
+            v = f_phVal(i)
+            t = f_phTime(i)
+            if not na(v) and not f_highMitigated(v, atr)
+                selected := v
+                selectedTime := t
+    [selected, selectedTime]
+
+f_activeLowCandidate() =>
+    atr = ta.atr(atrLen)
+    float selected = na
+    int selectedTime = na
+    for i = 0 to 7
+        if i < searchDepth and na(selected)
+            v = f_plVal(i)
+            t = f_plTime(i)
+            if not na(v) and not f_lowMitigated(v, atr)
+                selected := v
+                selectedTime := t
+    [selected, selectedTime]
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 04. NCI breakout standards
+// ─────────────────────────────────────────────────────────────────────────────
+f_twoBullBreak(float bol, float atr) =>
+    okLine = not na(bol)
+    c1 = close[1] > bol + atr * breakCloseAtr and f_isPowerBull(open[1], high[1], low[1], close[1])
+    c2 = close > close[1] and close > bol + atr * breakCloseAtr and f_isPowerBull(open, high, low, close)
+    okLine and c1 and c2
+
+f_twoBearBreak(float bol, float atr) =>
+    okLine = not na(bol)
+    c1 = close[1] < bol - atr * breakCloseAtr and f_isPowerBear(open[1], high[1], low[1], close[1])
+    c2 = close < close[1] and close < bol - atr * breakCloseAtr and f_isPowerBear(open, high, low, close)
+    okLine and c1 and c2
+
+f_bigSmallBullBreak(float bol, float atr) =>
+    okLine = not na(bol)
+    big1 = f_isPowerBull(open[1], high[1], low[1], close[1]) and math.abs(close[1] - open[1]) >= ta.sma(math.abs(close - open), 5)[1]
+    small2 = low > f_mid(open[1], close[1]) and close > bol + atr * breakCloseAtr
+    bodyAbove = (close[1] - math.max(open[1], bol)) / math.max(math.abs(close[1] - open[1]), syminfo.mintick) >= 0.30
+    okLine and big1 and small2 and bodyAbove
+
+f_bigSmallBearBreak(float bol, float atr) =>
+    okLine = not na(bol)
+    big1 = f_isPowerBear(open[1], high[1], low[1], close[1]) and math.abs(close[1] - open[1]) >= ta.sma(math.abs(close - open), 5)[1]
+    small2 = high < f_mid(open[1], close[1]) and close < bol - atr * breakCloseAtr
+    bodyBelow = (math.min(open[1], bol) - close[1]) / math.max(math.abs(close[1] - open[1]), syminfo.mintick) >= 0.30
+    okLine and big1 and small2 and bodyBelow
+
+f_validBullBreak(float bol, float atr) => f_twoBullBreak(bol, atr) or f_bigSmallBullBreak(bol, atr)
+f_validBearBreak(float bol, float atr) => f_twoBearBreak(bol, atr) or f_bigSmallBearBreak(bol, atr)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 05. NCI state per timeframe
+// Return: cycle, event, dir, candLow, candHigh, candLowTime, candHighTime, KL up/down, zone top/bot, reason, atr
+// ─────────────────────────────────────────────────────────────────────────────
+f_state() =>
+    atr = ta.atr(atrLen)
+    [activeHigh, activeHighTime] = f_activeHighCandidate()
+    [activeLow, activeLowTime] = f_activeLowCandidate()
+    ph1 = f_phVal(1)
+    pl1 = f_plVal(1)
+    hasSwings = not na(activeHigh) and not na(activeLow) and not na(ph1) and not na(pl1)
+    width = hasSwings ? math.abs(activeHigh - activeLow) : na
+    higherHigh = hasSwings and activeHigh > ph1
+    higherLow  = hasSwings and activeLow > pl1
+    lowerHigh  = hasSwings and activeHigh < ph1
+    lowerLow   = hasSwings and activeLow < pl1
+    rangeLike  = hasSwings and width <= atr * rangeAtrMax
+    legOk      = hasSwings and width >= atr * legAtrMin
+    bullBreak  = hasSwings and higherLow and f_validBullBreak(ph1, atr)
+    bearBreak  = hasSwings and lowerHigh and f_validBearBreak(pl1, atr)
+    bullCandidate = hasSwings and higherHigh and higherLow and legOk
+    bearCandidate = hasSwings and lowerHigh and lowerLow and legOk
+    int dir = bullBreak ? 1 : bearBreak ? -1 : 0
+    string cycle = bullBreak ? "Bullish cycle confirmed" : bearBreak ? "Bearish cycle confirmed" : bullCandidate ? "Bullish cycle candidate" : bearCandidate ? "Bearish cycle candidate" : rangeLike ? "Range / absorption candidate" : hasSwings ? "Transition / wait" : "Building swing memory"
+    string event = bullBreak ? "Valid bullish breakout; KL from active unmitigated pullback low" : bearBreak ? "Valid bearish breakdown; KL from active unmitigated pullback high" : bullCandidate ? "Bullish candidate active; wait for NCI breakout" : bearCandidate ? "Bearish candidate active; wait for NCI breakdown" : rangeLike ? "Range candidate; trade edges only after confirmation" : hasSwings ? "No valid NCI break/pullback yet" : "Not enough swing data"
+    float klUp = bullBreak ? activeLow : na
+    float klDn = bearBreak ? activeHigh : na
+    float zTop = bullBreak ? activeLow + atr * zoneAtrThick : bearBreak ? activeHigh + atr * zoneAtrThick : na
+    float zBot = bullBreak ? activeLow - atr * zoneAtrThick : bearBreak ? activeHigh - atr * zoneAtrThick : na
+    string reason = bullBreak or bearBreak ? "Confirmed; mitigated candidates skipped" : "Candidate only; mitigated candidates skipped"
+    [cycle, event, dir, activeLow, activeHigh, activeLowTime, activeHighTime, klUp, klDn, zTop, zBot, reason, atr]
+
+[cy4, ev4, dir4, candLow4, candHigh4, candLowTime4, candHighTime4, klUp4, klDn4, zTop4, zBot4, reason4, atr4] = request.security(syminfo.tickerid, tf4h, f_state())
+[cy1, ev1, dir1, candLow1, candHigh1, candLowTime1, candHighTime1, klUp1, klDn1, zTop1, zBot1, reason1, atr1] = request.security(syminfo.tickerid, tf1h, f_state())
+[cy15, ev15, dir15, candLow15, candHigh15, candLowTime15, candHighTime15, klUp15, klDn15, zTop15, zBot15, reason15, atr15] = request.security(syminfo.tickerid, tf15m, f_state())
+[cy5, ev5, dir5, candLow5, candHigh5, candLowTime5, candHighTime5, klUp5, klDn5, zTop5, zBot5, reason5, atr5] = request.security(syminfo.tickerid, tf5m, f_state())
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 06. Story hierarchy
+// ─────────────────────────────────────────────────────────────────────────────
+f_role(int parentDir, string parentCycle, int childDir, string childCycle, string layer) =>
+    parentConfirmed = parentDir != 0
+    childConfirmed = childDir != 0
+    parentConfirmed == false ? layer + " waits; parent has no confirmed KL" : childConfirmed and childDir == parentDir ? layer + " aligned; explains parent continuation" : childConfirmed and childDir != parentDir ? layer + " counter-move; possible pullback against parent" : str.contains(childCycle, "Range") ? layer + " range/absorption inside parent" : layer + " transition; wait for NCI confirmation"
+
+role1  = f_role(dir4, cy4, dir1, cy1, "1H")
+role15 = f_role(dir1, cy1, dir15, cy15, "15M")
+role5  = f_role(dir15, cy15, dir5, cy5, "5M")
+master = dir4 == 1 ? "4H bullish story active" : dir4 == -1 ? "4H bearish story active" : "No confirmed 4H parent KL yet"
+finalStory = dir4 == 0 ? "WAIT: parent not confirmed" : dir1 != 0 and dir1 != dir4 ? "PULLBACK: child counter-move against 4H" : dir1 == dir4 and dir15 == dir4 ? "CONTINUATION: 4H/1H/15M aligned" : "STORY BUILDING: wait for lower TF confirmation"
+confidence = dir4 != 0 and dir1 == dir4 and dir15 == dir4 ? "Structured" : dir4 != 0 ? "Parent confirmed; child building" : "Building"
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 07. Panel
+// ─────────────────────────────────────────────────────────────────────────────
+var table panel = table.new(f_pos(panelPos), 2, 16, border_width=1)
+f_cell(int c, int r, string s, color bg) => table.cell(panel, c, r, s, bgcolor=bg, text_color=txtCol, text_size=panelMode == "Mobile" ? size.tiny : size.small)
+
+if barstate.islast and showPanel
+    table.clear(panel, 0, 0, 1, 15)
+    f_cell(0, 0, "NCI x SMC", headBg)
+    f_cell(1, 0, "v1.4.1", headBg)
+    f_cell(0, 1, "Final", altBg)
+    f_cell(1, 1, finalStory, altBg)
+    f_cell(0, 2, "Confidence", rowBg)
+    f_cell(1, 2, confidence, rowBg)
+    f_cell(0, 3, "Master", rowBg)
+    f_cell(1, 3, master, rowBg)
+    f_cell(0, 4, "4H Event", rowBg)
+    f_cell(1, 4, ev4, rowBg)
+    f_cell(0, 5, "1H Role", rowBg)
+    f_cell(1, 5, role1, rowBg)
+    f_cell(0, 6, "15M Role", rowBg)
+    f_cell(1, 6, role15, rowBg)
+    f_cell(0, 7, "5M Role", rowBg)
+    f_cell(1, 7, role5, rowBg)
+    f_cell(0, 8, "4H KL", rowBg)
+    f_cell(1, 8, "UP " + f_price(klUp4) + " | DOWN " + f_price(klDn4), rowBg)
+    f_cell(0, 9, "1H KL", rowBg)
+    f_cell(1, 9, "UP " + f_price(klUp1) + " | DOWN " + f_price(klDn1), rowBg)
+    if panelMode == "Debug"
+        f_cell(0, 10, "Candidate Rule", rowBg)
+        f_cell(1, 10, "Mitigated/broken skipped", rowBg)
+        f_cell(0, 11, "1H Candidate", rowBg)
+        f_cell(1, 11, f_price(candLow1) + " / " + f_price(candHigh1), rowBg)
+        f_cell(0, 12, "15M Candidate", rowBg)
+        f_cell(1, 12, f_price(candLow15) + " / " + f_price(candHigh15), rowBg)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 08. Visual Engine
+// ─────────────────────────────────────────────────────────────────────────────
+var box b4uBox = na
+var box b4dBox = na
+var box b1uBox = na
+var box b1dBox = na
+var box b15uBox = na
+var box b15dBox = na
+var box b5uBox = na
+var box b5dBox = na
+var box cand1hBox = na
+var box cand1lBox = na
+var box cand15hBox = na
+var box cand15lBox = na
+var box cand5hBox = na
+var box cand5lBox = na
+var label lab4u = na
+var label lab4d = na
+var label lab1u = na
+var label lab1d = na
+var label lab15u = na
+var label lab15d = na
+var label lab5u = na
+var label lab5d = na
+var label cand1hLab = na
+var label cand1lLab = na
+var label cand15hLab = na
+var label cand15lLab = na
+var label cand5hLab = na
+var label cand5lLab = na
+var label storyLab = na
+
+f_zoneTime(int leftT, float level, float atr, color col) =>
+    top = level + atr * zoneAtrThick
+    bot = level - atr * zoneAtrThick
+    box.new(left=leftT, top=top, right=f_rightTime(futureBars), bottom=bot, xloc=xloc.bar_time, bgcolor=color.new(col, 88), border_color=color.new(col, 35), extend=extend.right)
+
+f_labelTime(int barsForward, float level, string s, color bg) =>
+    label.new(x=f_rightTime(barsForward), y=level, text=s, xloc=xloc.bar_time, style=label.style_label_left, color=bg, textcolor=color.black, size=size.tiny)
+
+if barstate.islast
+    box.delete(b4uBox), box.delete(b4dBox), box.delete(b1uBox), box.delete(b1dBox), box.delete(b15uBox), box.delete(b15dBox), box.delete(b5uBox), box.delete(b5dBox)
+    box.delete(cand1hBox), box.delete(cand1lBox), box.delete(cand15hBox), box.delete(cand15lBox), box.delete(cand5hBox), box.delete(cand5lBox)
+    label.delete(lab4u), label.delete(lab4d), label.delete(lab1u), label.delete(lab1d), label.delete(lab15u), label.delete(lab15d), label.delete(lab5u), label.delete(lab5d)
+    label.delete(cand1hLab), label.delete(cand1lLab), label.delete(cand15hLab), label.delete(cand15lLab), label.delete(cand5hLab), label.delete(cand5lLab)
+    label.delete(storyLab)
+
+    // Confirmed KL zones. Left side uses the active candidate creation time when available.
+    if showZones and show4h and not na(klUp4)
+        b4uBox := f_zoneTime(candLowTime4, klUp4, atr4, color.aqua)
+        lab4u := f_labelTime(futureBars + 0, klUp4, "4H CONFIRMED KL UP\n" + f_price(klUp4), color.new(color.aqua, 74))
+    if showZones and show4h and not na(klDn4)
+        b4dBox := f_zoneTime(candHighTime4, klDn4, atr4, color.fuchsia)
+        lab4d := f_labelTime(futureBars + 0, klDn4, "4H CONFIRMED KL DOWN\n" + f_price(klDn4), color.new(color.fuchsia, 74))
+    if showZones and show1h and not na(klUp1)
+        b1uBox := f_zoneTime(candLowTime1, klUp1, atr1, color.teal)
+        lab1u := f_labelTime(futureBars + 8, klUp1, "1H CONFIRMED KL UP\n" + f_price(klUp1), color.new(color.teal, 78))
+    if showZones and show1h and not na(klDn1)
+        b1dBox := f_zoneTime(candHighTime1, klDn1, atr1, color.red)
+        lab1d := f_labelTime(futureBars + 8, klDn1, "1H CONFIRMED KL DOWN\n" + f_price(klDn1), color.new(color.red, 80))
+    if showZones and show15m and not na(klUp15)
+        b15uBox := f_zoneTime(candLowTime15, klUp15, atr15, color.green)
+        lab15u := f_labelTime(futureBars + 16, klUp15, "15M CONFIRMED KL UP\n" + f_price(klUp15), color.new(color.green, 82))
+    if showZones and show15m and not na(klDn15)
+        b15dBox := f_zoneTime(candHighTime15, klDn15, atr15, color.red)
+        lab15d := f_labelTime(futureBars + 16, klDn15, "15M CONFIRMED KL DOWN\n" + f_price(klDn15), color.new(color.red, 84))
+    if showZones and show5m and not na(klUp5)
+        b5uBox := f_zoneTime(candLowTime5, klUp5, atr5, color.lime)
+        lab5u := f_labelTime(futureBars + 24, klUp5, "5M KL UP\n" + f_price(klUp5), color.new(color.lime, 86))
+    if showZones and show5m and not na(klDn5)
+        b5dBox := f_zoneTime(candHighTime5, klDn5, atr5, color.orange)
+        lab5d := f_labelTime(futureBars + 24, klDn5, "5M KL DOWN\n" + f_price(klDn5), color.new(color.orange, 86))
+
+    // Active unmitigated candidates only. They are candidates, not KL.
+    if showCandidates and show1h and na(klDn1) and not na(candHigh1)
+        cand1hBox := f_zoneTime(candHighTime1, candHigh1, atr1, color.red)
+        cand1hLab := f_labelTime(futureBars + 8, candHigh1, "1H candidate HIGH\nnot KL", color.new(color.red, 92))
+    if showCandidates and show1h and na(klUp1) and not na(candLow1)
+        cand1lBox := f_zoneTime(candLowTime1, candLow1, atr1, color.teal)
+        cand1lLab := f_labelTime(futureBars + 8, candLow1, "1H candidate LOW\nnot KL", color.new(color.teal, 92))
+    if showCandidates and show15m and na(klDn15) and not na(candHigh15)
+        cand15hBox := f_zoneTime(candHighTime15, candHigh15, atr15, color.red)
+        cand15hLab := f_labelTime(futureBars + 16, candHigh15, "15M candidate HIGH\nnot KL", color.new(color.red, 94))
+    if showCandidates and show15m and na(klUp15) and not na(candLow15)
+        cand15lBox := f_zoneTime(candLowTime15, candLow15, atr15, color.green)
+        cand15lLab := f_labelTime(futureBars + 16, candLow15, "15M candidate LOW\nnot KL", color.new(color.green, 94))
+    if showCandidates and show5m and na(klDn5) and not na(candHigh5)
+        cand5hBox := f_zoneTime(candHighTime5, candHigh5, atr5, color.orange)
+        cand5hLab := f_labelTime(futureBars + 24, candHigh5, "5M candidate HIGH\nnot KL", color.new(color.orange, 94))
+    if showCandidates and show5m and na(klUp5) and not na(candLow5)
+        cand5lBox := f_zoneTime(candLowTime5, candLow5, atr5, color.lime)
+        cand5lLab := f_labelTime(futureBars + 24, candLow5, "5M candidate LOW\nnot KL", color.new(color.lime, 94))
+
+    if showEventLabel
+        storyLab := label.new(x=f_rightTime(futureBars + 32), y=close, text="NCI STORY\n" + finalStory, xloc=xloc.bar_time, style=label.style_label_left, color=color.new(color.silver, 70), textcolor=txtCol, size=size.tiny)

@@ -1,0 +1,75 @@
+// ══════════════════════════════════════════════════════════════════════════════
+// 11 THREE OK DASHBOARD ALERTS — v0.1.4
+// Standalone injection block. Do not run as a separate indicator.
+//
+// Purpose:
+// - Trigger TradingView notifications when the three dashboard checks align:
+//   1) HTF POI B/S
+//   2) Exec Zone B/S
+//   3) Key Touch B/S
+// - BUY alert = HTF POI Buy OK + Exec Zone Buy OK + Key Touch Buy OK.
+// - SELL alert = HTF POI Sell OK + Exec Zone Sell OK + Key Touch Sell OK.
+// - Does not change entry logic, alerts already existing in SMC/SATS, risk,
+//   SATS filters, OB/FVG drawing, or liquidity logic.
+// ══════════════════════════════════════════════════════════════════════════════
+
+GRP_NCI_3OK_ALERTS = "14 NCI Three-OK Alerts"
+
+nci3OkAlertsEnabled = input.bool(true, "Enable Three-OK Alerts", group = GRP_NCI_3OK_ALERTS)
+nci3OkAlertSide = input.string("Both", "Alert Side", options = ["Both", "Buy only", "Sell only"], group = GRP_NCI_3OK_ALERTS)
+nci3OkRequireBarClose = input.bool(true, "Trigger Only After Candle Close", group = GRP_NCI_3OK_ALERTS)
+nci3OkCooldownBars = input.int(10, "Cooldown Bars After Alert", minval = 0, maxval = 500, group = GRP_NCI_3OK_ALERTS)
+nci3OkShowChartLabels = input.bool(true, "Show Alert Label On Chart", group = GRP_NCI_3OK_ALERTS)
+nci3OkLabelOffsetAtr = input.float(1.0, "Alert Label ATR Offset", minval = 0.0, maxval = 10.0, step = 0.25, group = GRP_NCI_3OK_ALERTS)
+nci3OkMessagePrefix = input.string("NCI x SMC/SATS", "Alert Message Prefix", group = GRP_NCI_3OK_ALERTS)
+nci3OkBuyMessage = input.string("BUY 3 checks OK: HTF POI + Exec Zone + Key Touch", "Buy Alert Text", group = GRP_NCI_3OK_ALERTS)
+nci3OkSellMessage = input.string("SELL 3 checks OK: HTF POI + Exec Zone + Key Touch", "Sell Alert Text", group = GRP_NCI_3OK_ALERTS)
+nci3OkUseAlertFunction = input.bool(true, "Use alert() Dynamic Notifications", group = GRP_NCI_3OK_ALERTS, tooltip = "Create TradingView alert with condition: Any alert() function call. This allows symbol/timeframe/price in the message.")
+
+// These variables come from the existing SMC/SATS dashboard logic:
+// HTF POI B/S     => htfBullPoiContext / htfBearPoiContext
+// Exec Zone B/S   => executionBullZoneOk / executionBearZoneOk
+// Key Touch B/S   => bullKeyReaction / bearKeyReaction
+nciBuyThreeOkRaw = htfBullPoiContext and executionBullZoneOk and bullKeyReaction
+nciSellThreeOkRaw = htfBearPoiContext and executionBearZoneOk and bearKeyReaction
+
+nci3OkTimingOk = nci3OkRequireBarClose ? barstate.isconfirmed : true
+nci3OkBuySideEnabled = nci3OkAlertSide == "Both" or nci3OkAlertSide == "Buy only"
+nci3OkSellSideEnabled = nci3OkAlertSide == "Both" or nci3OkAlertSide == "Sell only"
+
+var int nci3OkLastBuyAlertBar = na
+var int nci3OkLastSellAlertBar = na
+nci3OkBuyCooldownOk = na(nci3OkLastBuyAlertBar) or bar_index - nci3OkLastBuyAlertBar > nci3OkCooldownBars
+nci3OkSellCooldownOk = na(nci3OkLastSellAlertBar) or bar_index - nci3OkLastSellAlertBar > nci3OkCooldownBars
+
+nciBuyThreeOkAlert = nci3OkAlertsEnabled and nci3OkBuySideEnabled and nci3OkTimingOk and nciBuyThreeOkRaw and nci3OkBuyCooldownOk
+nciSellThreeOkAlert = nci3OkAlertsEnabled and nci3OkSellSideEnabled and nci3OkTimingOk and nciSellThreeOkRaw and nci3OkSellCooldownOk
+
+nci3OkPriceTxt = str.tostring(close, format.mintick)
+nci3OkTfTxt = timeframe.period
+nci3OkBuyFullMessage = nci3OkMessagePrefix + " | " + syminfo.ticker + " " + nci3OkTfTxt + " | " + nci3OkBuyMessage + " | Price: " + nci3OkPriceTxt
+nci3OkSellFullMessage = nci3OkMessagePrefix + " | " + syminfo.ticker + " " + nci3OkTfTxt + " | " + nci3OkSellMessage + " | Price: " + nci3OkPriceTxt
+
+if nciBuyThreeOkAlert
+    nci3OkLastBuyAlertBar := bar_index
+    if nci3OkUseAlertFunction
+        alert(nci3OkBuyFullMessage, alert.freq_once_per_bar_close)
+
+if nciSellThreeOkAlert
+    nci3OkLastSellAlertBar := bar_index
+    if nci3OkUseAlertFunction
+        alert(nci3OkSellFullMessage, alert.freq_once_per_bar_close)
+
+// Static alert conditions for TradingView's normal alert-condition dropdown.
+alertcondition(nciBuyThreeOkAlert, title = "NCI BUY 3 OK", message = "NCI x SMC/SATS: BUY 3 checks OK — HTF POI + Exec Zone + Key Touch")
+alertcondition(nciSellThreeOkAlert, title = "NCI SELL 3 OK", message = "NCI x SMC/SATS: SELL 3 checks OK — HTF POI + Exec Zone + Key Touch")
+
+// Optional visual confirmation label. This is intentionally lightweight.
+nci3OkAtr = ta.atr(14)
+if nci3OkShowChartLabels and nciBuyThreeOkAlert
+    label.new(bar_index, low - nci3OkAtr * nci3OkLabelOffsetAtr, "BUY 3 OK", style = label.style_label_up, color = color.new(bullColor, 0), textcolor = color.white, size = size.small)
+
+if nci3OkShowChartLabels and nciSellThreeOkAlert
+    label.new(bar_index, high + nci3OkAtr * nci3OkLabelOffsetAtr, "SELL 3 OK", style = label.style_label_down, color = color.new(bearColor, 0), textcolor = color.white, size = size.small)
+
+// End of 11 THREE OK DASHBOARD ALERTS — v0.1.4

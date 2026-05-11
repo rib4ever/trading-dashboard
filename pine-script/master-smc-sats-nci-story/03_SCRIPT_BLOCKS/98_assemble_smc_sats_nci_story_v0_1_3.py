@@ -24,10 +24,51 @@ def count_active(text: str, token: str) -> int:
     return sum(1 for line in text.splitlines() if line.strip().startswith(token))
 
 
+def replace_string_literals_only(line: str, replacements: dict[str, str]) -> str:
+    # Pine string literals use double quotes. This function only applies wording
+    # changes inside those quotes, so identifiers like nciStoryShowExecution are
+    # never accidentally changed into invalid Pine names.
+    out = []
+    buf = []
+    in_str = False
+    escaped = False
+
+    for ch in line:
+        if in_str:
+            if escaped:
+                buf.append(ch)
+                escaped = False
+            elif ch == "\\":
+                buf.append(ch)
+                escaped = True
+            elif ch == '"':
+                text = "".join(buf)
+                for old, new in replacements.items():
+                    text = text.replace(old, new)
+                out.append('"' + text + '"')
+                buf = []
+                in_str = False
+            else:
+                buf.append(ch)
+        else:
+            if ch == '"':
+                in_str = True
+                buf = []
+            else:
+                out.append(ch)
+
+    if in_str:
+        out.append('"' + "".join(buf))
+    return "".join(out)
+
+
 def make_easy_wording(block: str) -> str:
+    # Header/comment replacements are safe on the full block.
+    block = block.replace("v0.1.2 STRONG OB STORY", "v0.1.3 EASY STORY")
+    block = block.replace("v0.1.2", "v0.1.3")
+
+    # These replacements must only apply to user-facing string literals.
     replacements = {
-        "v0.1.2 STRONG OB STORY": "v0.1.3 EASY STORY",
-        "v0.1.2": "v0.1.3",
         "NCI x SMC/SATS": "NCI Story",
         "Final": "Big Picture",
         "Key Source": "Main Levels",
@@ -64,9 +105,7 @@ def make_easy_wording(block: str) -> str:
         "EXEC WATCH: 5M supply OB reaction": "WATCH SELL: 5M supply",
         "EXEC WAIT: no 5M OB reaction": "WAIT: no clear 5M reaction",
     }
-    for old, new in replacements.items():
-        block = block.replace(old, new)
-    return block
+    return "\n".join(replace_string_literals_only(line, replacements) for line in block.splitlines())
 
 
 def main():
@@ -105,6 +144,9 @@ def main():
     ]:
         if required not in c:
             raise RuntimeError(f"Candidate missing required content: {required}")
+
+    if "nciStoryShowEntry Watch" in c:
+        raise RuntimeError("Wording patch corrupted Pine identifier nciStoryShowExecution")
 
     if "<!DOCTYPE html>" in c or "<html" in c:
         raise RuntimeError("Candidate contains HTML, not raw Pine")

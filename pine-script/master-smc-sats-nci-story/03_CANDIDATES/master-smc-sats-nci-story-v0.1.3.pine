@@ -2293,7 +2293,7 @@ nciObAtrLen = input.int(14, "Strong OB ATR Length", minval = 1, maxval = 50, gro
 nciObBosBufferAtr = input.float(0.05, "Strong OB BOS Buffer ATR", minval = 0.0, maxval = 1.0, step = 0.01, group = GRP_NCI_STORY_OB)
 nciObMinImpulseAtr = input.float(0.60, "Strong OB Min Impulse ATR", minval = 0.10, maxval = 5.0, step = 0.05, group = GRP_NCI_STORY_OB)
 nciObHideBroken = input.bool(true, "Hide Broken Story OB", group = GRP_NCI_STORY_OB)
-nciStoryShowEntry Watch = input.bool(true, "Show 5M Entry Watch Story", group = GRP_NCI_STORY_OB)
+nciStoryShowExecution = input.bool(true, "Show 5M Entry Watch Story", group = GRP_NCI_STORY_OB)
 
 f_nci_pos_ob(string p) => p == "Top Left" ? position.top_left : p == "Bottom Right" ? position.bottom_right : p == "Bottom Left" ? position.bottom_left : position.top_right
 f_nci_price_ob(float x) => na(x) ? "n/a" : str.tostring(x, format.mintick)
@@ -2377,9 +2377,9 @@ nciRole5 = f_nci_role_ob("5M", nci5Bias, nci15Bias, nci5InD, nci5InS)
 
 nciHierarchyOk = nci4Bias != 0 and (nci1Bias == nci4Bias or nci1Bias == 0 or nci1InD or nci1InS) and (nci15Bias == nci1Bias or nci15Bias == nci4Bias or nci15Bias == 0 or nci15InD or nci15InS)
 nciExecSide = nci5InD or nci5Bias == 1 ? "5M demand OB reaction" : nci5InS or nci5Bias == -1 ? "5M supply OB reaction" : "5M reaction"
-nciEntry Watch = not nciStoryShowEntry Watch ? "Hidden" : not nciHierarchyOk ? "WAIT: story not aligned" : nci5InD or nci5InS ? "EXEC WATCH: " + nciExecSide : "WAIT: no clear 5M reaction"
-nciBig PictureStory = "4H " + nci4Story
-nciLevel Quality = nci4DScore >= 70 or nci4SScore >= 70 ? "Strong level" : nci4DScore >= 45 or nci4SScore >= 45 ? "Good level" : "Weak /: building"
+nciExecution = not nciStoryShowExecution ? "Hidden" : not nciHierarchyOk ? "WAIT: story not aligned" : nci5InD or nci5InS ? "EXEC WATCH: " + nciExecSide : "WAIT: no clear 5M reaction"
+nciFinalStory = "4H " + nci4Story
+nciConfidence = nci4DScore >= 70 or nci4SScore >= 70 ? "Strong level" : nci4DScore >= 45 or nci4SScore >= 45 ? "Good level" : "Weak /: building"
 
 var table nciStoryPanel = table.new(f_nci_pos_ob(nciStoryPanelPosition), 2, 12, border_width = 1)
 f_nci_cell_ob(int c, int r, string txt) => table.cell(nciStoryPanel, c, r, txt, bgcolor = themePanelBg, text_color = themePanelText, text_size = nciStoryPanelMode == "Mobile" ? size.tiny : size.small)
@@ -2389,13 +2389,13 @@ if barstate.islast and showNciStoryLayer
     f_nci_cell_ob(0, 0, "NCI Story")
     f_nci_cell_ob(1, 0, "v0.1.3")
     f_nci_cell_ob(0, 1, "Big Picture")
-    f_nci_cell_ob(1, 1, nciBig PictureStory)
+    f_nci_cell_ob(1, 1, nciFinalStory)
     f_nci_cell_ob(0, 2, "Main Levels")
     f_nci_cell_ob(1, 2, "Strong Buy/Sell OB")
     f_nci_cell_ob(0, 3, "Where Price Is")
     f_nci_cell_ob(1, 3, nci4Loc)
     f_nci_cell_ob(0, 4, "Level Quality")
-    f_nci_cell_ob(1, 4, nciLevel Quality)
+    f_nci_cell_ob(1, 4, nciConfidence)
     f_nci_cell_ob(0, 5, "4H Levels")
     f_nci_cell_ob(1, 5, "B " + f_nci_bool_ob(nci4HasD) + " / S " + f_nci_bool_ob(nci4HasS))
     f_nci_cell_ob(0, 6, "1H")
@@ -2405,7 +2405,7 @@ if barstate.islast and showNciStoryLayer
     f_nci_cell_ob(0, 8, "5M")
     f_nci_cell_ob(1, 8, nciRole5)
     f_nci_cell_ob(0, 9, "Entry Watch")
-    f_nci_cell_ob(1, 9, nciEntry Watch)
+    f_nci_cell_ob(1, 9, nciExecution)
     if nciStoryPanelMode == "Debug"
         f_nci_cell_ob(0, 10, "4H Demand")
         f_nci_cell_ob(1, 10, f_nci_price_ob(nci4DBot) + " - " + f_nci_price_ob(nci4DTop) + " | " + nci4DLife + " | " + str.tostring(nci4DScore))

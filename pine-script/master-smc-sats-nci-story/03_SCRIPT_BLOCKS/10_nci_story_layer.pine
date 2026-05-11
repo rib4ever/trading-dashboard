@@ -1,0 +1,86 @@
+// ══════════════════════════════════════════════════════════════════════════════
+// 10 NCI STORY LAYER — SMC/SATS INTEGRATION v0.1
+// Standalone injection block. Do not run as a separate indicator.
+// It is designed to be appended to the existing SMC/SATS script.
+//
+// Purpose:
+// - Use existing SMC/SATS as the market-structure source of truth.
+// - Add NCI story interpretation without changing entries, alerts, risk, OB/FVG,
+//   liquidity, SATS, or existing dashboard logic.
+// - First pass is intentionally panel-only and lightweight.
+// ══════════════════════════════════════════════════════════════════════════════
+
+GRP_NCI_STORY = "13 NCI Story Layer"
+
+showNciStoryLayer = input.bool(true, "Show NCI Story Layer", group = GRP_NCI_STORY)
+nciStoryPanelPosition = input.string("Top Right", "NCI Story Panel Position", options = ["Top Right", "Top Left", "Bottom Right", "Bottom Left"], group = GRP_NCI_STORY)
+nciStoryPanelMode = input.string("Mobile", "NCI Story Panel Mode", options = ["Mobile", "Normal", "Debug"], group = GRP_NCI_STORY)
+nciStoryUseSatsQuality = input.bool(true, "Use SATS Quality In Story Confidence", group = GRP_NCI_STORY)
+nciStoryShowExecution = input.bool(true, "Show 5M Execution Story", group = GRP_NCI_STORY)
+
+f_nci_pos(string p) => p == "Top Left" ? position.top_left : p == "Bottom Right" ? position.bottom_right : p == "Bottom Left" ? position.bottom_left : position.top_right
+f_nci_boolTxt(bool x) => x ? "YES" : "NO"
+f_nci_quality(float tqi, float er) => tqi >= effectiveUltraTqi and er >= effectiveMinEr ? "High quality" : tqi >= effectiveMinTqi and er >= effectiveMinEr ? "Acceptable quality" : "Low quality / wait"
+f_nci_biasTxt(int b) => b > 0 ? "Bullish" : b < 0 ? "Bearish" : "Neutral"
+f_nci_storyFromBias(int b, bool bullPoi, bool bearPoi) => bullPoi and not bearPoi ? "DEMAND STORY ACTIVE" : bearPoi and not bullPoi ? "SUPPLY STORY ACTIVE" : bullPoi and bearPoi ? "RANGE / DECISION STORY" : b > 0 ? "BULLISH STORY — WATCH DEMAND" : b < 0 ? "BEARISH STORY — WATCH SUPPLY" : "BUILDING STORY"
+f_nci_role(string child, int childBias, int parentBias, bool childBullPoi, bool childBearPoi) => childBullPoi or childBearPoi ? child + " decision inside parent" : childBias == parentBias and childBias != 0 ? child + " continues parent" : childBias == 0 ? child + " building inside parent" : "" + child + " pullback against parent"
+f_nci_exec(bool bullOk, bool bearOk, bool qualityOk) => not nciStoryShowExecution ? "Hidden" : bullOk and qualityOk ? "EXEC WATCH: demand reaction" : bearOk and qualityOk ? "EXEC WATCH: supply reaction" : bullOk or bearOk ? "EXEC WAIT: quality not ready" : "EXEC WAIT: no execution POI"
+
+// Existing SMC/SATS variables are expected from the base script.
+// The fallback names below intentionally use already-known SMC/SATS concepts:
+// - bias
+// - tqi / er
+// - htfBullPoi / htfBearPoi style conditions may differ in the base script.
+// If a future compile error shows a missing variable name, map the corresponding
+// existing SMC/SATS variable here instead of rewriting the SMC engine.
+
+// Conservative first-pass mapping based on stable SMC/SATS dashboard concepts.
+// These expressions are intentionally simple so they do not interfere with entries.
+int nciMasterBias = bias
+int nciOneBias = bias
+int nciFifteenBias = bias
+int nciFiveBias = bias
+
+bool nciHasBullPoi = htfPoiBullOk
+bool nciHasBearPoi = htfPoiBearOk
+bool nciHasExecutionBull = bullZoneOk
+bool nciHasExecutionBear = bearZoneOk
+bool nciQualityOk = not nciStoryUseSatsQuality or (tqi >= effectiveMinTqi and er >= effectiveMinEr)
+
+string nciFinalStory = "4H " + f_nci_storyFromBias(nciMasterBias, nciHasBullPoi, nciHasBearPoi)
+string nciConfidence = f_nci_quality(tqi, er)
+string nciRole1 = f_nci_role("1H", nciOneBias, nciMasterBias, nciHasBullPoi, nciHasBearPoi)
+string nciRole15 = f_nci_role("15M", nciFifteenBias, nciOneBias, nciHasBullPoi, nciHasBearPoi)
+string nciRole5 = f_nci_role("5M", nciFiveBias, nciFifteenBias, nciHasExecutionBull, nciHasExecutionBear)
+string nciExecution = f_nci_exec(nciHasExecutionBull, nciHasExecutionBear, nciQualityOk)
+
+var table nciStoryPanel = table.new(f_nci_pos(nciStoryPanelPosition), 2, 11, border_width = 1)
+f_nci_cell(int c, int r, string txt) => table.cell(nciStoryPanel, c, r, txt, bgcolor = themePanelBg, text_color = themePanelText, text_size = nciStoryPanelMode == "Mobile" ? size.tiny : size.small)
+
+if barstate.islast and showNciStoryLayer
+    table.clear(nciStoryPanel, 0, 0, 1, 10)
+    f_nci_cell(0, 0, "NCI x SMC/SATS")
+    f_nci_cell(1, 0, "v0.1")
+    f_nci_cell(0, 1, "Final")
+    f_nci_cell(1, 1, nciFinalStory)
+    f_nci_cell(0, 2, "Confidence")
+    f_nci_cell(1, 2, nciConfidence)
+    f_nci_cell(0, 3, "Master Bias")
+    f_nci_cell(1, 3, f_nci_biasTxt(nciMasterBias))
+    f_nci_cell(0, 4, "HTF POI")
+    f_nci_cell(1, 4, "B " + f_nci_boolTxt(nciHasBullPoi) + " / S " + f_nci_boolTxt(nciHasBearPoi))
+    f_nci_cell(0, 5, "1H Role")
+    f_nci_cell(1, 5, nciRole1)
+    f_nci_cell(0, 6, "15M Role")
+    f_nci_cell(1, 6, nciRole15)
+    f_nci_cell(0, 7, "5M Role")
+    f_nci_cell(1, 7, nciRole5)
+    f_nci_cell(0, 8, "Execution")
+    f_nci_cell(1, 8, nciExecution)
+    if nciStoryPanelMode == "Debug"
+        f_nci_cell(0, 9, "TQI / ER")
+        f_nci_cell(1, 9, str.tostring(tqi, "#.##") + " / " + str.tostring(er, "#.##"))
+        f_nci_cell(0, 10, "Exec POI")
+        f_nci_cell(1, 10, "B " + f_nci_boolTxt(nciHasExecutionBull) + " / S " + f_nci_boolTxt(nciHasExecutionBear))
+
+// End of 10 NCI STORY LAYER — SMC/SATS INTEGRATION v0.1

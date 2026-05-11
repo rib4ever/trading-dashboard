@@ -1,0 +1,97 @@
+// ══════════════════════════════════════════════════════════════════════════════
+// 10 NCI STORY LAYER — SMC/SATS INTEGRATION v0.1.1 COMPILE-SAFE
+// Standalone injection block. Do not run as a separate indicator.
+//
+// Purpose:
+// - Compile-safe first integration.
+// - Does NOT reference assumed SMC/SATS variable names like bias, tqi, er,
+//   htfPoiBullOk, htfPoiBearOk, bullZoneOk, bearZoneOk.
+// - Preserves the base SMC/SATS engine untouched.
+// - Adds NCI story panel using lightweight internal fallback mapping.
+// - Future v0.2 can replace fallback mapping with exact SMC/SATS variables after
+//   we inspect/confirm the exact names inside the base.
+// ══════════════════════════════════════════════════════════════════════════════
+
+GRP_NCI_STORY = "13 NCI Story Layer"
+
+showNciStoryLayer = input.bool(true, "Show NCI Story Layer", group = GRP_NCI_STORY)
+nciStoryPanelPosition = input.string("Top Right", "NCI Story Panel Position", options = ["Top Right", "Top Left", "Bottom Right", "Bottom Left"], group = GRP_NCI_STORY)
+nciStoryPanelMode = input.string("Mobile", "NCI Story Panel Mode", options = ["Mobile", "Normal", "Debug"], group = GRP_NCI_STORY)
+nciStoryUseInternalMap = input.bool(true, "Use Compile-Safe Internal Story Map", group = GRP_NCI_STORY, tooltip = "v0.1.1 uses a safe internal fallback so the SMC/SATS base remains untouched and compiles. Later builds will map to exact SMC/SATS variables.")
+nciStoryShowExecution = input.bool(true, "Show 5M Execution Story", group = GRP_NCI_STORY)
+nciStoryFastLen = input.int(20, "NCI Story Fast MA", minval = 1, maxval = 200, group = GRP_NCI_STORY)
+nciStorySlowLen = input.int(50, "NCI Story Slow MA", minval = 2, maxval = 300, group = GRP_NCI_STORY)
+nciStorySwingLen = input.int(5, "NCI Story Swing Length", minval = 2, maxval = 20, group = GRP_NCI_STORY)
+
+f_nci_pos(string p) => p == "Top Left" ? position.top_left : p == "Bottom Right" ? position.bottom_right : p == "Bottom Left" ? position.bottom_left : position.top_right
+f_nci_boolTxt(bool x) => x ? "YES" : "NO"
+f_nci_biasTxt(int b) => b > 0 ? "Bullish" : b < 0 ? "Bearish" : "Neutral"
+f_nci_storyFromBias(int b, bool bullPoi, bool bearPoi) => bullPoi and not bearPoi ? "DEMAND STORY ACTIVE" : bearPoi and not bullPoi ? "SUPPLY STORY ACTIVE" : bullPoi and bearPoi ? "RANGE / DECISION STORY" : b > 0 ? "BULLISH STORY — WATCH DEMAND" : b < 0 ? "BEARISH STORY — WATCH SUPPLY" : "BUILDING STORY"
+f_nci_role(string child, int childBias, int parentBias, bool childBullPoi, bool childBearPoi) => childBullPoi or childBearPoi ? child + " decision inside parent" : childBias == parentBias and childBias != 0 ? child + " continues parent" : childBias == 0 ? child + " building inside parent" : child + " pullback against parent"
+f_nci_exec(bool bullOk, bool bearOk, bool qualityOk) => not nciStoryShowExecution ? "Hidden" : bullOk and qualityOk ? "EXEC WATCH: demand reaction" : bearOk and qualityOk ? "EXEC WATCH: supply reaction" : bullOk or bearOk ? "EXEC WAIT: quality not ready" : "EXEC WAIT: no execution POI"
+
+f_nci_tfState() =>
+    fast = ta.ema(close, nciStoryFastLen)
+    slow = ta.ema(close, nciStorySlowLen)
+    int b = fast > slow ? 1 : fast < slow ? -1 : 0
+    ph = ta.pivothigh(high, nciStorySwingLen, nciStorySwingLen)
+    pl = ta.pivotlow(low, nciStorySwingLen, nciStorySwingLen)
+    lastPh = ta.valuewhen(not na(ph), ph, 0)
+    lastPl = ta.valuewhen(not na(pl), pl, 0)
+    atr = ta.atr(14)
+    bullPoi = not na(lastPl) and close >= lastPl and close <= lastPl + atr * 2.0
+    bearPoi = not na(lastPh) and close <= lastPh and close >= lastPh - atr * 2.0
+    // Simple quality: enough movement efficiency for story confidence.
+    erDen = math.sum(math.abs(close - close[1]), 10)
+    erVal = erDen == 0.0 ? 0.0 : math.abs(close - close[10]) / erDen
+    quality = erVal >= 0.25
+    [b, bullPoi, bearPoi, quality, erVal]
+
+[nciMasterBias, nciMasterBullPoi, nciMasterBearPoi, nciMasterQuality, nciMasterEr] = request.security(syminfo.tickerid, "240", f_nci_tfState())
+[nciOneBias, nciOneBullPoi, nciOneBearPoi, nciOneQuality, nciOneEr] = request.security(syminfo.tickerid, "60", f_nci_tfState())
+[nciFifteenBias, nciFifteenBullPoi, nciFifteenBearPoi, nciFifteenQuality, nciFifteenEr] = request.security(syminfo.tickerid, "15", f_nci_tfState())
+[nciFiveBias, nciFiveBullPoi, nciFiveBearPoi, nciFiveQuality, nciFiveEr] = request.security(syminfo.tickerid, "5", f_nci_tfState())
+
+bool nciHasBullPoi = nciMasterBullPoi or nciOneBullPoi
+bool nciHasBearPoi = nciMasterBearPoi or nciOneBearPoi
+bool nciHasExecutionBull = nciFiveBullPoi
+bool nciHasExecutionBear = nciFiveBearPoi
+bool nciQualityOk = nciMasterQuality or nciOneQuality or nciFifteenQuality
+
+string nciFinalStory = "4H " + f_nci_storyFromBias(nciMasterBias, nciHasBullPoi, nciHasBearPoi)
+string nciConfidence = nciQualityOk ? "Story quality OK" : "Story quality low / wait"
+string nciRole1 = f_nci_role("1H", nciOneBias, nciMasterBias, nciOneBullPoi, nciOneBearPoi)
+string nciRole15 = f_nci_role("15M", nciFifteenBias, nciOneBias, nciFifteenBullPoi, nciFifteenBearPoi)
+string nciRole5 = f_nci_role("5M", nciFiveBias, nciFifteenBias, nciHasExecutionBull, nciHasExecutionBear)
+string nciExecution = f_nci_exec(nciHasExecutionBull, nciHasExecutionBear, nciQualityOk)
+
+var table nciStoryPanel = table.new(f_nci_pos(nciStoryPanelPosition), 2, 11, border_width = 1)
+f_nci_cell(int c, int r, string txt) => table.cell(nciStoryPanel, c, r, txt, bgcolor = themePanelBg, text_color = themePanelText, text_size = nciStoryPanelMode == "Mobile" ? size.tiny : size.small)
+
+if barstate.islast and showNciStoryLayer
+    table.clear(nciStoryPanel, 0, 0, 1, 10)
+    f_nci_cell(0, 0, "NCI x SMC/SATS")
+    f_nci_cell(1, 0, "v0.1.1")
+    f_nci_cell(0, 1, "Final")
+    f_nci_cell(1, 1, nciFinalStory)
+    f_nci_cell(0, 2, "Confidence")
+    f_nci_cell(1, 2, nciConfidence)
+    f_nci_cell(0, 3, "Master Bias")
+    f_nci_cell(1, 3, f_nci_biasTxt(nciMasterBias))
+    f_nci_cell(0, 4, "HTF POI")
+    f_nci_cell(1, 4, "B " + f_nci_boolTxt(nciHasBullPoi) + " / S " + f_nci_boolTxt(nciHasBearPoi))
+    f_nci_cell(0, 5, "1H Role")
+    f_nci_cell(1, 5, nciRole1)
+    f_nci_cell(0, 6, "15M Role")
+    f_nci_cell(1, 6, nciRole15)
+    f_nci_cell(0, 7, "5M Role")
+    f_nci_cell(1, 7, nciRole5)
+    f_nci_cell(0, 8, "Execution")
+    f_nci_cell(1, 8, nciExecution)
+    if nciStoryPanelMode == "Debug"
+        f_nci_cell(0, 9, "ER 4H/1H")
+        f_nci_cell(1, 9, str.tostring(nciMasterEr, "#.##") + " / " + str.tostring(nciOneEr, "#.##"))
+        f_nci_cell(0, 10, "Exec POI")
+        f_nci_cell(1, 10, "B " + f_nci_boolTxt(nciHasExecutionBull) + " / S " + f_nci_boolTxt(nciHasExecutionBear))
+
+// End of 10 NCI STORY LAYER — SMC/SATS INTEGRATION v0.1.1 COMPILE-SAFE

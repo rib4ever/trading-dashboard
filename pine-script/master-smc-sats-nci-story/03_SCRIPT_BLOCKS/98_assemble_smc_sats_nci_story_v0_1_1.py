@@ -33,6 +33,20 @@ def main():
     if count_active(block, "//@version") != 0 or count_active(block, "indicator(") != 0:
         raise RuntimeError("NCI story block must not contain active version or indicator declaration")
 
+    # These identifiers were unsafe only inside the injected v0.1 story block.
+    # Do not scan the full SMC/SATS base, because the base may legitimately contain
+    # words like bias inside its own working logic.
+    for forbidden in [
+        "htfPoiBullOk",
+        "htfPoiBearOk",
+        "bullZoneOk",
+        "bearZoneOk",
+        "str.tostring(tqi",
+        "str.tostring(er",
+    ]:
+        if forbidden in block:
+            raise RuntimeError(f"Injected NCI block still contains unsafe assumed variable: {forbidden}")
+
     if "// MASTER SMC + SATS SNIPER SYSTEM [Ravi Custom 01]" in c:
         c = c.replace("// MASTER SMC + SATS SNIPER SYSTEM [Ravi Custom 01]", "// MASTER SMC + SATS SNIPER SYSTEM [Ravi Custom 01]\n" + NOTE, 1)
     else:
@@ -57,19 +71,6 @@ def main():
     ]:
         if required not in c:
             raise RuntimeError(f"Candidate missing required content: {required}")
-
-    # These are intentionally forbidden in v0.1.1 because they caused compile errors in v0.1.
-    for forbidden in [
-        " = bias",
-        "htfPoiBullOk",
-        "htfPoiBearOk",
-        "bullZoneOk",
-        "bearZoneOk",
-        "str.tostring(tqi",
-        "str.tostring(er",
-    ]:
-        if forbidden in c:
-            raise RuntimeError(f"Candidate still contains unsafe assumed variable: {forbidden}")
 
     if "<!DOCTYPE html>" in c or "<html" in c:
         raise RuntimeError("Candidate contains HTML, not raw Pine")

@@ -1,0 +1,460 @@
+//@version=6
+indicator("NCI x SMC Market Story Visualizer [Ravi Custom] v1.4.3.1.7", shorttitle="NCIStory", overlay=true, max_lines_count=500, max_labels_count=500, max_boxes_count=350, max_bars_back=2000)
+
+// v1.4.3.1.7 — Hybrid Zone Diagnostic Build
+// Purpose:
+// - Keep the NCI 4H → 1H → 15M → 5M story hierarchy.
+// - Add an SMC/SATS-style candidate zone engine for comparison.
+// - Do NOT replace the NCI logic blindly.
+// - Show NCI Pivot KL, SMC OB/FVG candidate, and Hybrid selected KL.
+// - Execution remains a monitor zone, not a buy/sell signal.
+//
+// Core mindset:
+// 1) 4H is the master story.
+// 2) 1H explains 4H.
+// 3) 15M explains 1H.
+// 4) 5M is the execution reaction layer.
+// 5) The same verification logic must repeat fractally on each timeframe.
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Inputs
+// ─────────────────────────────────────────────────────────────────────────────
+grpTF = "01. TF Story Stack"
+tf4h  = input.timeframe("240", "Master TF", group=grpTF)
+tf1h  = input.timeframe("60", "Child TF 1", group=grpTF)
+tf15m = input.timeframe("15", "Child TF 2", group=grpTF)
+tf5m  = input.timeframe("5", "Execution TF", group=grpTF)
+
+grpL = "02. NCI + Hybrid KL Logic"
+swingLen      = input.int(5, "Swing Length", minval=2, maxval=20, group=grpL)
+atrLen        = input.int(14, "ATR Length", minval=1, group=grpL)
+requireBOS    = input.bool(true, "Require BOS to Confirm KL", group=grpL)
+bosUseClose   = input.bool(false, "BOS Requires Close Beyond Structure", group=grpL)
+bosBufferAtr  = input.float(0.05, "BOS Buffer ATR", minval=0.0, maxval=2.0, step=0.01, group=grpL)
+mitigateAtr   = input.float(0.05, "Break/Mitigation Buffer ATR", minval=0.0, maxval=1.0, step=0.01, group=grpL)
+klSource      = input.string("Hybrid NCI + SMC", "Key Level Source", options=["NCI Pivot BOS", "SMC OB / FVG", "Hybrid NCI + SMC"], group=grpL)
+klDrawMode    = input.string("Whole Candle", "NCI KL Draw Mode", options=["Whole Candle", "NCI Dynamic"], group=grpL)
+obLookback    = input.int(18, "SMC Origin Search Lookback", minval=3, maxval=80, group=grpL)
+preferFvgNear = input.bool(true, "Hybrid: Prefer Near FVG if Closer", group=grpL)
+
+// NCI pressure standards, repeated inside every security() timeframe call.
+grpP = "03. NCI Pressure Standards"
+maruBodyRatio    = input.float(0.70, "Marubozu Body Ratio", minval=0.50, maxval=0.95, step=0.05, group=grpP)
+specialMaruBody  = input.float(0.50, "Special Maru Body Ratio", minval=0.35, maxval=0.90, step=0.05, group=grpP)
+smallCandleRatio = input.float(0.55, "Small 2nd Candle vs 1st", minval=0.20, maxval=1.00, step=0.05, group=grpP)
+nearZoneAtr      = input.float(2.0, "Near Zone ATR", minval=0.25, maxval=10.0, step=0.25, group=grpP)
+minZoneAtr       = input.float(0.06, "Minimum Zone Thickness ATR", minval=0.01, maxval=1.0, step=0.01, group=grpP)
+
+// Visuals
+grpV = "04. Visuals"
+showPanel        = input.bool(true, "Show Story Panel", group=grpV)
+show4h           = input.bool(true, "Show 4H Master KL", group=grpV)
+show1h           = input.bool(true, "Show 1H Context", group=grpV)
+show15m          = input.bool(true, "Show 15M Context", group=grpV)
+show5m           = input.bool(true, "Show 5M Context", group=grpV)
+showDiagnostic   = input.bool(true, "Show Diagnostic Candidate Zones", group=grpV)
+showOnlyRelevant = input.bool(true, "Show Only Story-Relevant Child Zones", group=grpV)
+visualDensity    = input.string("Balanced", "Visual Density", options=["Clean", "Balanced", "Full", "Debug"], group=grpV)
+compactLabels    = input.bool(true, "Compact Child Labels", group=grpV)
+futureBars       = input.int(50, "Right Label Offset", minval=10, maxval=250, group=grpV)
+theme            = input.string("Light", "Theme", options=["Light", "Dark"], group=grpV)
+panelPos         = input.string("Top Right", "Panel Position", options=["Top Right", "Top Left", "Bottom Right", "Bottom Left"], group=grpV)
+panelMode        = input.string("Mobile", "Panel Mode", options=["Mobile", "Normal", "Debug"], group=grpV)
+
+// Execution
+grpE = "05. 5M Execution Monitor"
+showExecZone       = input.bool(true, "Show 5M Execution Zone", group=grpE)
+execVisibility     = input.string("15M and below", "Execution Zone Visibility", options=["Execution TF only", "15M and below", "All timeframes"], group=grpE)
+execNeedsFullStory = input.bool(true, "Execution Requires Full Story Alignment", group=grpE)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────────────────
+isLight = theme == "Light"
+txtCol = isLight ? color.black : color.white
+headBg = isLight ? color.new(color.silver, 10) : color.new(color.black, 0)
+rowBg  = isLight ? color.new(color.white, 74) : color.new(color.gray, 86)
+altBg  = isLight ? color.new(color.silver, 86) : color.new(color.gray, 90)
+
+f_pos(string p) => p == "Top Left" ? position.top_left : p == "Bottom Right" ? position.bottom_right : p == "Bottom Left" ? position.bottom_left : position.top_right
+f_price(float x) => na(x) ? "n/a" : str.tostring(x, format.mintick)
+f_rightTime(int barsForward) => time + timeframe.in_seconds(timeframe.period) * 1000 * barsForward
+f_body(float o, float c) => math.abs(c - o)
+f_rng(float h, float l) => math.max(h - l, syminfo.mintick)
+f_bodyRatio(float o, float h, float l, float c) => f_body(o, c) / f_rng(h, l)
+f_isMaru(float o, float h, float l, float c) => f_bodyRatio(o, h, l, c) >= maruBodyRatio
+f_isSpecialBull(float o, float h, float l, float c) => c > o and f_bodyRatio(o, h, l, c) >= specialMaruBody and (c - l) / f_rng(h, l) >= 0.90
+f_isSpecialBear(float o, float h, float l, float c) => c < o and f_bodyRatio(o, h, l, c) >= specialMaruBody and (h - c) / f_rng(h, l) >= 0.90
+f_isPinbar(float o, float h, float l, float c) => f_bodyRatio(o, h, l, c) < 0.50 and f_rng(h, l) > syminfo.mintick
+f_isDoji(float o, float h, float l, float c) => f_bodyRatio(o, h, l, c) <= 0.15
+f_inside(float top, float bot) => not na(top) and not na(bot) and close <= top and close >= bot
+f_zoneOk(float top, float bot) => not na(top) and not na(bot) and top > bot
+f_chartMin() => timeframe.isminutes ? timeframe.multiplier : timeframe.isseconds ? 1 : timeframe.isdaily ? 1440 : timeframe.isweekly ? 10080 : 240
+
+f_supplyBottom(float o, float h, float l, float c) =>
+    body = math.max(f_body(o, c), syminfo.mintick)
+    upperWick = h - math.max(o, c)
+    hugeWick = upperWick >= body * 1.50
+    hugeBody = f_bodyRatio(o, h, l, c) >= 0.70
+    dynamicBottom = hugeWick ? h - upperWick * 0.50 : hugeBody ? math.max(o, c) : math.min(o, c)
+    klDrawMode == "Whole Candle" ? l : dynamicBottom
+
+f_demandTop(float o, float h, float l, float c) =>
+    body = math.max(f_body(o, c), syminfo.mintick)
+    lowerWick = math.min(o, c) - l
+    hugeWick = lowerWick >= body * 1.50
+    hugeBody = f_bodyRatio(o, h, l, c) >= 0.70
+    dynamicTop = hugeWick ? l + lowerWick * 0.50 : hugeBody ? math.min(o, c) : math.max(o, c)
+    klDrawMode == "Whole Candle" ? h : dynamicTop
+
+f_fixSupplyBottom(float top, float bottom, float atr) => math.min(bottom, top - atr * minZoneAtr)
+f_fixDemandTop(float bottom, float top, float atr) => math.max(top, bottom + atr * minZoneAtr)
+
+f_life(float top, float bot, bool supplySide, float atr) =>
+    not f_zoneOk(top, bot) ? "None" : supplySide ? close > top + atr * mitigateAtr ? "Broken" : high >= bot and close <= top ? "Mitigating" : "Active" : close < bot - atr * mitigateAtr ? "Broken" : low <= top and close >= bot ? "Mitigating" : "Active"
+
+f_score(bool hasBos, bool pressure, bool isFvg, bool near, string life) =>
+    base = 0
+    base += hasBos ? 35 : 0
+    base += pressure ? 25 : 0
+    base += isFvg ? 15 : 10
+    base += near ? 15 : 0
+    base += life == "Active" ? 10 : life == "Mitigating" ? 5 : 0
+    math.min(base, 100)
+
+f_nearZone(float top, float bot, float atr) => f_zoneOk(top, bot) and close <= top + atr * nearZoneAtr and close >= bot - atr * nearZoneAtr
+
+f_findDemand() =>
+    float bestTop = na
+    float bestBot = na
+    int bestTime = na
+    // SMC-style bullish origin: search for the meaningful bearish candle / lowest origin inside the impulse leg.
+    for i = 1 to obLookback
+        isDown = close[i] < open[i]
+        candidate = isDown or f_isSpecialBull(open[i], high[i], low[i], close[i])
+        if candidate
+            bot = low[i]
+            top = math.max(open[i], close[i])
+            if na(bestBot) or bot < bestBot
+                bestBot := bot
+                bestTop := top
+                bestTime := time[i]
+    [bestTop, bestBot, bestTime]
+
+f_findSupply() =>
+    float bestTop = na
+    float bestBot = na
+    int bestTime = na
+    // SMC-style bearish origin: search for the meaningful bullish candle / highest origin inside the impulse leg.
+    for i = 1 to obLookback
+        isUp = close[i] > open[i]
+        candidate = isUp or f_isSpecialBear(open[i], high[i], low[i], close[i])
+        if candidate
+            top = high[i]
+            bot = math.min(open[i], close[i])
+            if na(bestTop) or top > bestTop
+                bestTop := top
+                bestBot := bot
+                bestTime := time[i]
+    [bestTop, bestBot, bestTime]
+
+f_pickTop(float nTop, float nBot, float sTop, float sBot, float fTop, float fBot, bool supplySide) =>
+    useSmc = f_zoneOk(sTop, sBot)
+    useFvg = f_zoneOk(fTop, fBot)
+    useNci = f_zoneOk(nTop, nBot)
+    float outTop = na
+    if klSource == "NCI Pivot BOS"
+        outTop := nTop
+    else if klSource == "SMC OB / FVG"
+        outTop := useSmc ? sTop : useFvg ? fTop : nTop
+    else
+        smcDist = useSmc ? math.abs(close - (sTop + sBot) / 2.0) : 10e10
+        fvgDist = useFvg ? math.abs(close - (fTop + fBot) / 2.0) : 10e10
+        nciDist = useNci ? math.abs(close - (nTop + nBot) / 2.0) : 10e10
+        outTop := preferFvgNear and useFvg and fvgDist <= smcDist ? fTop : useSmc ? sTop : useFvg ? fTop : nciDist < 10e10 ? nTop : na
+    outTop
+
+f_pickBot(float nTop, float nBot, float sTop, float sBot, float fTop, float fBot) =>
+    useSmc = f_zoneOk(sTop, sBot)
+    useFvg = f_zoneOk(fTop, fBot)
+    useNci = f_zoneOk(nTop, nBot)
+    float outBot = na
+    if klSource == "NCI Pivot BOS"
+        outBot := nBot
+    else if klSource == "SMC OB / FVG"
+        outBot := useSmc ? sBot : useFvg ? fBot : nBot
+    else
+        smcDist = useSmc ? math.abs(close - (sTop + sBot) / 2.0) : 10e10
+        fvgDist = useFvg ? math.abs(close - (fTop + fBot) / 2.0) : 10e10
+        nciDist = useNci ? math.abs(close - (nTop + nBot) / 2.0) : 10e10
+        outBot := preferFvgNear and useFvg and fvgDist <= smcDist ? fBot : useSmc ? sBot : useFvg ? fBot : nciDist < 10e10 ? nBot : na
+    outBot
+
+f_pickTime(int nTime, int sTime, int fTime, float nTop, float nBot, float sTop, float sBot, float fTop, float fBot) =>
+    useSmc = f_zoneOk(sTop, sBot)
+    useFvg = f_zoneOk(fTop, fBot)
+    useNci = f_zoneOk(nTop, nBot)
+    int outTime = na
+    if klSource == "NCI Pivot BOS"
+        outTime := nTime
+    else if klSource == "SMC OB / FVG"
+        outTime := useSmc ? sTime : useFvg ? fTime : nTime
+    else
+        smcDist = useSmc ? math.abs(close - (sTop + sBot) / 2.0) : 10e10
+        fvgDist = useFvg ? math.abs(close - (fTop + fBot) / 2.0) : 10e10
+        nciDist = useNci ? math.abs(close - (nTop + nBot) / 2.0) : 10e10
+        outTime := preferFvgNear and useFvg and fvgDist <= smcDist ? fTime : useSmc ? sTime : useFvg ? fTime : nciDist < 10e10 ? nTime : na
+    outTime
+
+f_selectedSource(float nTop, float nBot, float sTop, float sBot, float fTop, float fBot) =>
+    useSmc = f_zoneOk(sTop, sBot)
+    useFvg = f_zoneOk(fTop, fBot)
+    string out = "None"
+    if klSource == "NCI Pivot BOS"
+        out := "NCI Pivot KL"
+    else if klSource == "SMC OB / FVG"
+        out := useSmc ? "SMC OB" : useFvg ? "SMC FVG" : "NCI fallback"
+    else
+        smcDist = useSmc ? math.abs(close - (sTop + sBot) / 2.0) : 10e10
+        fvgDist = useFvg ? math.abs(close - (fTop + fBot) / 2.0) : 10e10
+        out := preferFvgNear and useFvg and fvgDist <= smcDist ? "Hybrid FVG" : useSmc ? "Hybrid OB" : useFvg ? "Hybrid FVG" : "Hybrid NCI fallback"
+    out
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Timeframe engine
+// ─────────────────────────────────────────────────────────────────────────────
+f_state() =>
+    atr = ta.atr(atrLen)
+    ph = ta.pivothigh(high, swingLen, swingLen)
+    pl = ta.pivotlow(low, swingLen, swingLen)
+
+    ph0 = ta.valuewhen(not na(ph), ph, 0)
+    ph1 = ta.valuewhen(not na(ph), ph, 1)
+    pl0 = ta.valuewhen(not na(pl), pl, 0)
+    pl1 = ta.valuewhen(not na(pl), pl, 1)
+
+    phT0 = ta.valuewhen(not na(ph), time[swingLen], 0)
+    plT0 = ta.valuewhen(not na(pl), time[swingLen], 0)
+    phO0 = ta.valuewhen(not na(ph), open[swingLen], 0)
+    phL0 = ta.valuewhen(not na(ph), low[swingLen], 0)
+    phC0 = ta.valuewhen(not na(ph), close[swingLen], 0)
+    plO0 = ta.valuewhen(not na(pl), open[swingLen], 0)
+    plH0 = ta.valuewhen(not na(pl), high[swingLen], 0)
+    plC0 = ta.valuewhen(not na(pl), close[swingLen], 0)
+
+    bullBreak = not na(ph1) and (bosUseClose ? close > ph1 + atr * bosBufferAtr : high > ph1 + atr * bosBufferAtr)
+    bearBreak = not na(pl1) and (bosUseClose ? close < pl1 - atr * bosBufferAtr : low < pl1 - atr * bosBufferAtr)
+
+    // NCI pivot KL candidate.
+    nciSTopRaw = ph0
+    nciSBotRaw = f_fixSupplyBottom(ph0, f_supplyBottom(phO0, ph0, phL0, phC0), atr)
+    nciDTopRaw = f_fixDemandTop(pl0, f_demandTop(plO0, plH0, pl0, plC0), atr)
+    nciDBotRaw = pl0
+
+    nciSTop = requireBOS ? ta.valuewhen(bearBreak, nciSTopRaw, 0) : nciSTopRaw
+    nciSBot = requireBOS ? ta.valuewhen(bearBreak, nciSBotRaw, 0) : nciSBotRaw
+    nciSTime = requireBOS ? ta.valuewhen(bearBreak, phT0, 0) : phT0
+    nciDTop = requireBOS ? ta.valuewhen(bullBreak, nciDTopRaw, 0) : nciDTopRaw
+    nciDBot = requireBOS ? ta.valuewhen(bullBreak, nciDBotRaw, 0) : nciDBotRaw
+    nciDTime = requireBOS ? ta.valuewhen(bullBreak, plT0, 0) : plT0
+
+    // SMC origin candidate from impulse leg.
+    [dObTopNow, dObBotNow, dObTimeNow] = f_findDemand()
+    [sObTopNow, sObBotNow, sObTimeNow] = f_findSupply()
+    smcDTop = ta.valuewhen(bullBreak, dObTopNow, 0)
+    smcDBot = ta.valuewhen(bullBreak, dObBotNow, 0)
+    smcDTime = ta.valuewhen(bullBreak, dObTimeNow, 0)
+    smcSTop = ta.valuewhen(bearBreak, sObTopNow, 0)
+    smcSBot = ta.valuewhen(bearBreak, sObBotNow, 0)
+    smcSTime = ta.valuewhen(bearBreak, sObTimeNow, 0)
+
+    // FVG candidate, stored only after structural direction appears.
+    bullFvg = low > high[2]
+    bearFvg = high < low[2]
+    fvgDTopNow = low
+    fvgDBotNow = high[2]
+    fvgDTimeNow = time[1]
+    fvgSTopNow = low[2]
+    fvgSBotNow = high
+    fvgSTimeNow = time[1]
+    fvgDTop = ta.valuewhen(bullBreak and bullFvg, fvgDTopNow, 0)
+    fvgDBot = ta.valuewhen(bullBreak and bullFvg, fvgDBotNow, 0)
+    fvgDTime = ta.valuewhen(bullBreak and bullFvg, fvgDTimeNow, 0)
+    fvgSTop = ta.valuewhen(bearBreak and bearFvg, fvgSTopNow, 0)
+    fvgSBot = ta.valuewhen(bearBreak and bearFvg, fvgSBotNow, 0)
+    fvgSTime = ta.valuewhen(bearBreak and bearFvg, fvgSTimeNow, 0)
+
+    selSTop = f_pickTop(nciSTop, nciSBot, smcSTop, smcSBot, fvgSTop, fvgSBot, true)
+    selSBot = f_pickBot(nciSTop, nciSBot, smcSTop, smcSBot, fvgSTop, fvgSBot)
+    selSTime = f_pickTime(nciSTime, smcSTime, fvgSTime, nciSTop, nciSBot, smcSTop, smcSBot, fvgSTop, fvgSBot)
+    selDTop = f_pickTop(nciDTop, nciDBot, smcDTop, smcDBot, fvgDTop, fvgDBot, false)
+    selDBot = f_pickBot(nciDTop, nciDBot, smcDTop, smcDBot, fvgDTop, fvgDBot)
+    selDTime = f_pickTime(nciDTime, smcDTime, fvgDTime, nciDTop, nciDBot, smcDTop, smcDBot, fvgDTop, fvgDBot)
+
+    sLife = f_life(selSTop, selSBot, true, atr)
+    dLife = f_life(selDTop, selDBot, false, atr)
+    inS = f_inside(selSTop, selSBot)
+    inD = f_inside(selDTop, selDBot)
+    hasBoth = f_zoneOk(selSTop, selSBot) and f_zoneOk(selDTop, selDBot)
+    mid = hasBoth ? (selSBot + selDTop) / 2.0 : close
+    bias = not hasBoth ? 0 : inS or inD ? 0 : close > selSTop ? 1 : close < selDBot ? -1 : close >= mid ? -1 : 1
+
+    pressureBull = (close > open and close[1] > open[1] and f_isMaru(open, high, low, close) and f_isMaru(open[1], high[1], low[1], close[1])) or f_isSpecialBull(open, high, low, close)
+    pressureBear = (close < open and close[1] < open[1] and f_isMaru(open, high, low, close) and f_isMaru(open[1], high[1], low[1], close[1])) or f_isSpecialBear(open, high, low, close)
+    event = bullBreak ? "Bullish BOS" : bearBreak ? "Bearish BOS" : inS ? "Supply decision" : inD ? "Demand decision" : "No fresh event"
+    loc = not hasBoth ? "Building KL memory" : inS ? "Inside Supply" : inD ? "Inside Demand" : close > selSTop ? "Above Supply" : close < selDBot ? "Below Demand" : "Between Supply and Demand"
+    story = not hasBoth ? "Building story" : inS ? "Supply decision active" : inD ? "Demand decision active" : bias == 1 ? "Demand story active" : bias == -1 ? "Supply story active" : "Range / decision story"
+
+    srcS = f_selectedSource(nciSTop, nciSBot, smcSTop, smcSBot, fvgSTop, fvgSBot)
+    srcD = f_selectedSource(nciDTop, nciDBot, smcDTop, smcDBot, fvgDTop, fvgDBot)
+    scoreS = f_score(bearBreak, pressureBear, srcS == "Hybrid FVG" or srcS == "SMC FVG", f_nearZone(selSTop, selSBot, atr), sLife)
+    scoreD = f_score(bullBreak, pressureBull, srcD == "Hybrid FVG" or srcD == "SMC FVG", f_nearZone(selDTop, selDBot, atr), dLife)
+
+    [selSTop, selSBot, selSTime, selDTop, selDBot, selDTime, nciSTop, nciSBot, nciSTime, nciDTop, nciDBot, nciDTime, smcSTop, smcSBot, smcSTime, smcDTop, smcDBot, smcDTime, fvgSTop, fvgSBot, fvgSTime, fvgDTop, fvgDBot, fvgDTime, bias, story, loc, event, sLife, dLife, srcS, srcD, scoreS, scoreD, atr]
+
+[s4Top, s4Bot, s4Time, d4Top, d4Bot, d4Time, n4STop, n4SBot, n4STime, n4DTop, n4DBot, n4DTime, o4STop, o4SBot, o4STime, o4DTop, o4DBot, o4DTime, f4STop, f4SBot, f4STime, f4DTop, f4DBot, f4DTime, b4, story4, loc4, event4, sLife4, dLife4, srcS4, srcD4, scoreS4, scoreD4, atr4] = request.security(syminfo.tickerid, tf4h, f_state())
+[s1Top, s1Bot, s1Time, d1Top, d1Bot, d1Time, n1STop, n1SBot, n1STime, n1DTop, n1DBot, n1DTime, o1STop, o1SBot, o1STime, o1DTop, o1DBot, o1DTime, f1STop, f1SBot, f1STime, f1DTop, f1DBot, f1DTime, b1, story1, loc1, event1, sLife1, dLife1, srcS1, srcD1, scoreS1, scoreD1, atr1] = request.security(syminfo.tickerid, tf1h, f_state())
+[s15Top, s15Bot, s15Time, d15Top, d15Bot, d15Time, n15STop, n15SBot, n15STime, n15DTop, n15DBot, n15DTime, o15STop, o15SBot, o15STime, o15DTop, o15DBot, o15DTime, f15STop, f15SBot, f15STime, f15DTop, f15DBot, f15DTime, b15, story15, loc15, event15, sLife15, dLife15, srcS15, srcD15, scoreS15, scoreD15, atr15] = request.security(syminfo.tickerid, tf15m, f_state())
+[s5Top, s5Bot, s5Time, d5Top, d5Bot, d5Time, n5STop, n5SBot, n5STime, n5DTop, n5DBot, n5DTime, o5STop, o5SBot, o5STime, o5DTop, o5DBot, o5DTime, f5STop, f5SBot, f5STime, f5DTop, f5DBot, f5DTime, b5, story5, loc5, event5, sLife5, dLife5, srcS5, srcD5, scoreS5, scoreD5, atr5] = request.security(syminfo.tickerid, tf5m, f_state())
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Hierarchy relation + execution wording
+// ─────────────────────────────────────────────────────────────────────────────
+f_valid(float top, float bot) => f_zoneOk(top, bot)
+f_childInsideRange(float cTop, float cBot, float psTop, float psBot, float pdTop, float pdBot) => f_valid(cTop, cBot) and f_valid(psTop, psBot) and f_valid(pdTop, pdBot) and cTop <= psTop and cBot >= pdBot
+f_role(string fromTf, string toTf, int childBias, int parentBias, string childLoc) =>
+    childBias == parentBias and parentBias != 0 ? toTf + " continues " + fromTf : childBias == 0 ? toTf + " decision inside " + fromTf : childBias != 0 and parentBias != 0 and childBias != parentBias ? toTf + " pullback against " + fromTf : toTf + " building inside " + fromTf
+
+role1 = f_role("4H", "1H", b1, b4, loc1)
+role15 = f_role("1H", "15M", b15, b1, loc15)
+role5 = f_role("15M", "5M", b5, b15, loc5)
+
+fullStoryOk = b4 != 0 or loc4 == "Inside Supply" or loc4 == "Inside Demand" or loc4 == "Between Supply and Demand"
+fifteenOk = fullStoryOk and (b15 == b1 or b15 == b4 or b15 == 0)
+fiveOk = fifteenOk and (b5 == b15 or b5 == 0 or loc5 == "Inside Supply" or loc5 == "Inside Demand")
+
+execSide = loc5 == "Inside Supply" or (b5 == -1 and f_valid(s5Top, s5Bot)) ? "5M supply" : loc5 == "Inside Demand" or (b5 == 1 and f_valid(d5Top, d5Bot)) ? "5M demand" : "5M reaction"
+executionStatus = not fullStoryOk ? "EXEC WAIT: 4H story not clear" : not fifteenOk ? "EXEC WAIT: 15M not aligned" : execNeedsFullStory and not fiveOk ? "EXEC WAIT: 5M not aligned" : "EXEC WATCH: " + execSide + " inside story"
+finalStory = loc4 == "Inside Supply" ? "4H SUPPLY DECISION STORY" : loc4 == "Inside Demand" ? "4H DEMAND DECISION STORY" : b4 == 1 ? "4H DEMAND STORY ACTIVE" : b4 == -1 ? "4H SUPPLY STORY ACTIVE" : "4H RANGE / DECISION STORY"
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Panel
+// ─────────────────────────────────────────────────────────────────────────────
+var table panel = table.new(f_pos(panelPos), 2, 16, border_width=1)
+f_cell(int c, int r, string s, color bg) => table.cell(panel, c, r, s, bgcolor=bg, text_color=txtCol, text_size=panelMode == "Mobile" ? size.tiny : size.small)
+
+if barstate.islast and showPanel
+    table.clear(panel, 0, 0, 1, 15)
+    f_cell(0, 0, "NCI x SMC", headBg)
+    f_cell(1, 0, "v1.4.3.1.7", headBg)
+    f_cell(0, 1, "Final", altBg)
+    f_cell(1, 1, finalStory, altBg)
+    f_cell(0, 2, "KL Source", rowBg)
+    f_cell(1, 2, klSource, rowBg)
+    f_cell(0, 3, "4H Location", rowBg)
+    f_cell(1, 3, loc4, rowBg)
+    f_cell(0, 4, "4H Event", rowBg)
+    f_cell(1, 4, event4, rowBg)
+    f_cell(0, 5, "4H Supply", rowBg)
+    f_cell(1, 5, f_price(s4Bot) + " - " + f_price(s4Top) + " | " + srcS4 + " | " + sLife4, rowBg)
+    f_cell(0, 6, "4H Demand", rowBg)
+    f_cell(1, 6, f_price(d4Bot) + " - " + f_price(d4Top) + " | " + srcD4 + " | " + dLife4, rowBg)
+    f_cell(0, 7, "4H Scores", rowBg)
+    f_cell(1, 7, "S " + str.tostring(scoreS4) + " / D " + str.tostring(scoreD4), rowBg)
+    f_cell(0, 8, "4H→1H", rowBg)
+    f_cell(1, 8, role1, rowBg)
+    f_cell(0, 9, "1H→15M", rowBg)
+    f_cell(1, 9, role15, rowBg)
+    f_cell(0, 10, "15M→5M", rowBg)
+    f_cell(1, 10, role5, rowBg)
+    f_cell(0, 11, "Execution", rowBg)
+    f_cell(1, 11, executionStatus, rowBg)
+    f_cell(0, 12, "5M Source", rowBg)
+    f_cell(1, 12, srcS5 + " / " + srcD5, rowBg)
+    if panelMode == "Debug" or visualDensity == "Debug"
+        f_cell(0, 13, "NCI 4H S/D", rowBg)
+        f_cell(1, 13, f_price(n4SBot) + "-" + f_price(n4STop) + " / " + f_price(n4DBot) + "-" + f_price(n4DTop), rowBg)
+        f_cell(0, 14, "SMC 4H S/D", rowBg)
+        f_cell(1, 14, f_price(o4SBot) + "-" + f_price(o4STop) + " / " + f_price(o4DBot) + "-" + f_price(o4DTop), rowBg)
+        f_cell(0, 15, "FVG 4H S/D", rowBg)
+        f_cell(1, 15, f_price(f4SBot) + "-" + f_price(f4STop) + " / " + f_price(f4DBot) + "-" + f_price(f4DTop), rowBg)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Visuals
+// ─────────────────────────────────────────────────────────────────────────────
+var box bs4 = na
+var box bd4 = na
+var box bs1 = na
+var box bd1 = na
+var box bs15 = na
+var box bd15 = na
+var box bs5 = na
+var box bd5 = na
+var box bxDiag1 = na
+var box bxDiag2 = na
+var label ls4 = na
+var label ld4 = na
+var label ls1 = na
+var label ld1 = na
+var label ls15 = na
+var label ld15 = na
+var label ls5 = na
+var label ld5 = na
+var label diagLab = na
+
+f_box(int leftT, float top, float bottom, color col, int tr) =>
+    f_valid(top, bottom) and not na(leftT) ? box.new(left=leftT, top=top, right=f_rightTime(futureBars), bottom=bottom, xloc=xloc.bar_time, bgcolor=color.new(col, tr), border_color=color.new(col, 35), extend=extend.right) : na
+
+f_lab(int off, float y, string s, string tip, color col, bool smallTxt) =>
+    label.new(x=f_rightTime(off), y=y, text=s, tooltip=tip, xloc=xloc.bar_time, style=label.style_label_left, color=color.new(col, 78), textcolor=color.black, size=smallTxt ? size.tiny : size.small)
+
+f_tip(string tf, string side, float bot, float top, string source, string life, int score) =>
+    tf + " " + side + "\nZone: " + f_price(bot) + " - " + f_price(top) + "\nSelected by: " + source + "\nLifecycle: " + life + "\nScore: " + str.tostring(score) + "\nEngine: " + klSource + "\nExecution: " + executionStatus
+
+chartM = f_chartMin()
+showFull = visualDensity == "Full" or visualDensity == "Debug"
+showDebug = visualDensity == "Debug"
+showStoryChildren = showOnlyRelevant ? chartM <= 60 : true
+showExec = showExecZone and (execVisibility == "All timeframes" or execVisibility == "15M and below" and chartM <= 15 or execVisibility == "Execution TF only" and chartM <= 5)
+
+if barstate.islast
+    box.delete(bs4), box.delete(bd4), box.delete(bs1), box.delete(bd1), box.delete(bs15), box.delete(bd15), box.delete(bs5), box.delete(bd5), box.delete(bxDiag1), box.delete(bxDiag2)
+    label.delete(ls4), label.delete(ld4), label.delete(ls1), label.delete(ld1), label.delete(ls15), label.delete(ld15), label.delete(ls5), label.delete(ld5), label.delete(diagLab)
+
+    if show4h
+        bs4 := f_box(s4Time, s4Top, s4Bot, color.fuchsia, 88)
+        bd4 := f_box(d4Time, d4Top, d4Bot, color.aqua, 86)
+        if f_valid(s4Top, s4Bot)
+            ls4 := f_lab(futureBars, (s4Top + s4Bot) / 2, "4H SUPPLY\n" + f_price(s4Bot) + " - " + f_price(s4Top), f_tip("4H", "Supply", s4Bot, s4Top, srcS4, sLife4, scoreS4), color.fuchsia, false)
+        if f_valid(d4Top, d4Bot)
+            ld4 := f_lab(futureBars + 8, (d4Top + d4Bot) / 2, "4H DEMAND\n" + f_price(d4Bot) + " - " + f_price(d4Top), f_tip("4H", "Demand", d4Bot, d4Top, srcD4, dLife4, scoreD4), color.aqua, false)
+
+    if show1h and showStoryChildren
+        bs1 := f_box(s1Time, s1Top, s1Bot, color.red, showFull ? 91 : 95)
+        bd1 := f_box(d1Time, d1Top, d1Bot, color.teal, showFull ? 91 : 95)
+        if f_valid(s1Top, s1Bot)
+            ls1 := f_lab(futureBars + 16, (s1Top + s1Bot) / 2, compactLabels ? "1H SUP" : "1H SUPPLY", f_tip("1H", "Supply", s1Bot, s1Top, srcS1, sLife1, scoreS1), color.red, true)
+        if f_valid(d1Top, d1Bot)
+            ld1 := f_lab(futureBars + 24, (d1Top + d1Bot) / 2, compactLabels ? "1H DEM" : "1H DEMAND", f_tip("1H", "Demand", d1Bot, d1Top, srcD1, dLife1, scoreD1), color.teal, true)
+
+    if show15m and (showFull or chartM <= 15)
+        bs15 := f_box(s15Time, s15Top, s15Bot, color.orange, 94)
+        bd15 := f_box(d15Time, d15Top, d15Bot, color.green, 94)
+        if f_valid(s15Top, s15Bot)
+            ls15 := f_lab(futureBars + 32, (s15Top + s15Bot) / 2, compactLabels ? "15M SUP" : "15M SUPPLY", f_tip("15M", "Supply", s15Bot, s15Top, srcS15, sLife15, scoreS15), color.orange, true)
+        if f_valid(d15Top, d15Bot)
+            ld15 := f_lab(futureBars + 40, (d15Top + d15Bot) / 2, compactLabels ? "15M DEM" : "15M DEMAND", f_tip("15M", "Demand", d15Bot, d15Top, srcD15, dLife15, scoreD15), color.green, true)
+
+    if show5m and showExec
+        bs5 := f_box(s5Time, s5Top, s5Bot, color.yellow, 95)
+        bd5 := f_box(d5Time, d5Top, d5Bot, color.lime, 95)
+        if f_valid(s5Top, s5Bot)
+            ls5 := f_lab(futureBars + 48, (s5Top + s5Bot) / 2, compactLabels ? "5M EXEC SUP" : "5M EXECUTION SUPPLY", f_tip("5M", "Execution Supply", s5Bot, s5Top, srcS5, sLife5, scoreS5), color.yellow, true)
+        if f_valid(d5Top, d5Bot)
+            ld5 := f_lab(futureBars + 56, (d5Top + d5Bot) / 2, compactLabels ? "5M EXEC DEM" : "5M EXECUTION DEMAND", f_tip("5M", "Execution Demand", d5Bot, d5Top, srcD5, dLife5, scoreD5), color.lime, true)
+
+    // Diagnostic comparison on current chart: shows raw NCI vs SMC candidate behind selected KL.
+    if showDiagnostic and showDebug
+        bxDiag1 := f_box(n5STime, n5STop, n5SBot, color.gray, 92)
+        bxDiag2 := f_box(o5STime, o5STop, o5SBot, color.purple, 92)
+        diagLab := f_lab(futureBars + 64, close, "DIAG\nNCI vs SMC", "Diagnostic only. NCI Pivot KL and SMC/SATS-style origin candidate are compared before Hybrid selection.\nNCI 5M Supply: " + f_price(n5SBot) + " - " + f_price(n5STop) + "\nSMC 5M Supply: " + f_price(o5SBot) + " - " + f_price(o5STop) + "\nSelected: " + srcS5 + " / " + srcD5, color.gray, true)

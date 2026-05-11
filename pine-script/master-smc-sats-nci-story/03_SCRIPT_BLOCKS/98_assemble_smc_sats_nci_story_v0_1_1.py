@@ -23,19 +23,29 @@ def count_active(text: str, token: str) -> int:
     return sum(1 for line in text.splitlines() if line.strip().startswith(token))
 
 
+def without_line_comments(text: str) -> str:
+    # Pine line comments start with //. For this assembler guard, only active code
+    # should be checked. Commented documentation may mention old placeholder names.
+    active_lines = []
+    for line in text.splitlines():
+        active = line.split("//", 1)[0]
+        active_lines.append(active)
+    return "\n".join(active_lines)
+
+
 def main():
     source = BASE if BASE.exists() else FALLBACK
     if not source.exists():
         raise RuntimeError("No SMC/SATS base candidate found")
     c = source.read_text(encoding="utf-8")
     block = NCI_BLOCK.read_text(encoding="utf-8")
+    active_block = without_line_comments(block)
 
     if count_active(block, "//@version") != 0 or count_active(block, "indicator(") != 0:
         raise RuntimeError("NCI story block must not contain active version or indicator declaration")
 
-    # These identifiers were unsafe only inside the injected v0.1 story block.
-    # Do not scan the full SMC/SATS base, because the base may legitimately contain
-    # words like bias inside its own working logic.
+    # These identifiers were unsafe only inside active code of the injected v0.1 block.
+    # Do not scan comments or the full SMC/SATS base.
     for forbidden in [
         "htfPoiBullOk",
         "htfPoiBearOk",
@@ -44,8 +54,8 @@ def main():
         "str.tostring(tqi",
         "str.tostring(er",
     ]:
-        if forbidden in block:
-            raise RuntimeError(f"Injected NCI block still contains unsafe assumed variable: {forbidden}")
+        if forbidden in active_block:
+            raise RuntimeError(f"Injected NCI block still contains unsafe assumed variable in active code: {forbidden}")
 
     if "// MASTER SMC + SATS SNIPER SYSTEM [Ravi Custom 01]" in c:
         c = c.replace("// MASTER SMC + SATS SNIPER SYSTEM [Ravi Custom 01]", "// MASTER SMC + SATS SNIPER SYSTEM [Ravi Custom 01]\n" + NOTE, 1)

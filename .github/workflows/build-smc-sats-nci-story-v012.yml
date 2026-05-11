@@ -1,0 +1,43 @@
+name: Build SMC SATS NCI Story v0.1.2 Candidate
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'pine-script/master-smc-sats-nci-story/03_SCRIPT_BLOCKS/10_nci_story_layer_v0_1_2_strong_ob_story.pine'
+      - 'pine-script/master-smc-sats-nci-story/03_SCRIPT_BLOCKS/98_assemble_smc_sats_nci_story_v0_1_2.py'
+      - 'pine-script/master-smc-sats/00_MASTER_COMPILED/master-smc-sats-ravi-custom-01-v1.7-CONFIRMED-WORKING.pine'
+      - '.github/workflows/build-smc-sats-nci-story-v012.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: smc-sats-nci-story-v012-main
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Build SMC/SATS + NCI Story v0.1.2 candidate
+        run: python pine-script/master-smc-sats-nci-story/03_SCRIPT_BLOCKS/98_assemble_smc_sats_nci_story_v0_1_2.py
+
+      - name: Commit generated candidate
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pine-script/master-smc-sats-nci-story/03_CANDIDATES/master-smc-sats-nci-story-v0.1.2.pine
+          if git diff --cached --quiet; then
+            echo "No v0.1.2 candidate changes to commit."
+            exit 0
+          fi
+          git commit -m "Build SMC SATS NCI Story v0.1.2 candidate"
+          git pull --rebase --autostash origin main
+          git push origin HEAD:main

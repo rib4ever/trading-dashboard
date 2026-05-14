@@ -1,0 +1,449 @@
+//@version=6
+// ══════════════════════════════════════════════════════════════════════════════
+// SMC VISUAL ENTRY MODEL MASTER [Ravi v0.1.1]
+// Educational TradingView study indicator
+// Patch v0.1.1: Entry Outline Box Layer
+// Models:
+// 1) Liquidity Sweep Reversal
+// 2) Continuation Pullback
+// 3) Range Raid Reversal
+// ══════════════════════════════════════════════════════════════════════════════
+
+indicator(
+     title = "SMC Visual Entry Model Master [Ravi v0.1.1]",
+     shorttitle = "SMC Entry Models",
+     overlay = true,
+     max_boxes_count = 300,
+     max_lines_count = 300,
+     max_labels_count = 400,
+     max_bars_back = 5000)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 01. SETTINGS
+// ══════════════════════════════════════════════════════════════════════════════
+GRP_MASTER = "01 Master Controls"
+GRP_STRUCT = "02 Structure / Liquidity"
+GRP_ZONE   = "03 POI / Zones"
+GRP_MODEL  = "04 Entry Models"
+GRP_RISK   = "05 SL / TP Visuals"
+GRP_VIS    = "06 Visuals / Dashboard"
+GRP_ALERT  = "07 Alerts"
+
+preset = input.string("XAUUSD Sniper", "Preset", options = ["XAUUSD Sniper", "NAS100", "BTCUSD", "Forex", "Manual Custom"], group = GRP_MASTER)
+tradeSide = input.string("Both", "Allowed Study Direction", options = ["Both", "Buy Only", "Sell Only"], group = GRP_MASTER)
+showDebug = input.bool(true, "Show Debug Dashboard", group = GRP_MASTER)
+
+swingLenInput = input.int(5, "Major Swing Length", minval = 2, maxval = 30, group = GRP_STRUCT)
+internalLenInput = input.int(2, "Internal Swing Length", minval = 1, maxval = 10, group = GRP_STRUCT)
+sweepLookback = input.int(80, "Sweep Lookback Bars", minval = 10, maxval = 300, group = GRP_STRUCT)
+reclaimBars = input.int(5, "Max Bars After Sweep for Reclaim", minval = 1, maxval = 20, group = GRP_STRUCT)
+
+useHtfBias = input.bool(true, "Use HTF EMA Bias Filter", group = GRP_STRUCT)
+htfTf = input.timeframe("60", "HTF Bias Timeframe", group = GRP_STRUCT)
+htfEmaLen = input.int(50, "HTF EMA Length", minval = 10, maxval = 300, group = GRP_STRUCT)
+
+fibLookback = input.int(150, "Premium/Discount Range Lookback", minval = 50, maxval = 500, group = GRP_ZONE)
+fvgMinAtr = input.float(0.15, "Minimum FVG Size ATR Multiplier", minval = 0.0, maxval = 3.0, step = 0.05, group = GRP_ZONE)
+dispAtrMult = input.float(0.85, "Displacement Body ATR Multiplier", minval = 0.1, maxval = 5.0, step = 0.05, group = GRP_ZONE)
+zoneValidBars = input.int(80, "Zone Valid Bars", minval = 10, maxval = 300, group = GRP_ZONE)
+
+model1On = input.bool(true, "Model 1: Liquidity Sweep Reversal", group = GRP_MODEL)
+model2On = input.bool(true, "Model 2: Continuation Pullback", group = GRP_MODEL)
+model3On = input.bool(true, "Model 3: Range Raid Reversal", group = GRP_MODEL)
+strictMode = input.bool(true, "Strict Mode: Require Bias + Zone + MSS", group = GRP_MODEL)
+
+asianSession = input.session("0000-0600", "Asian Range Session", group = GRP_MODEL)
+rangeReturnBars = input.int(10, "Max Bars After Raid to Return Inside", minval = 1, maxval = 30, group = GRP_MODEL)
+
+riskReward = input.float(2.0, "Default R Multiple Projection", minval = 0.5, maxval = 10.0, step = 0.25, group = GRP_RISK)
+useLiquidityTp = input.bool(true, "Prefer Liquidity Target When Available", group = GRP_RISK)
+showRiskLines = input.bool(true, "Show SL / TP Projection", group = GRP_RISK)
+
+showSwings = input.bool(true, "Show Swing Liquidity", group = GRP_VIS)
+showZones = input.bool(true, "Show FVG / OB Zones", group = GRP_VIS)
+showRange = input.bool(true, "Show Asian Range", group = GRP_VIS)
+showSignals = input.bool(true, "Show Model Labels", group = GRP_VIS)
+showDashboard = input.bool(true, "Show Dashboard", group = GRP_VIS)
+
+showEntryBoxes = input.bool(true, "Show Entry Outline Boxes", group = GRP_VIS, tooltip = "Draws a transparent outline rectangle around every identified entry zone, with the strategy name printed at the top of the box.")
+entryBoxBars = input.int(24, "Entry Box Forward Bars", minval = 5, maxval = 120, group = GRP_VIS)
+entryBoxPadAtr = input.float(0.15, "Entry Box Padding ATR", minval = 0.0, maxval = 2.0, step = 0.05, group = GRP_VIS)
+entryBoxUseZone = input.bool(true, "Use Active FVG Zone for Entry Box", group = GRP_VIS, tooltip = "When enabled, entry boxes wrap the active FVG/entry zone. If no valid zone is available, the box wraps the signal candle with ATR padding.")
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 02. THEME
+// ══════════════════════════════════════════════════════════════════════════════
+bullColor = color.rgb(0, 200, 140)
+bearColor = color.rgb(240, 70, 85)
+neutralColor = color.rgb(160, 165, 175)
+goldColor = color.rgb(230, 185, 80)
+blueColor = color.rgb(80, 170, 255)
+slColor = color.rgb(255, 70, 90)
+tpColor = color.rgb(0, 220, 140)
+zoneBullColor = color.new(bullColor, 84)
+zoneBearColor = color.new(bearColor, 84)
+panelBg = color.new(color.black, 15)
+panelText = color.white
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 03. HELPERS
+// ══════════════════════════════════════════════════════════════════════════════
+canBuy = tradeSide == "Both" or tradeSide == "Buy Only"
+canSell = tradeSide == "Both" or tradeSide == "Sell Only"
+
+atr = ta.atr(14)
+body = math.abs(close - open)
+bodyStrong = body > atr * dispAtrMult
+bullDisp = close > open and bodyStrong
+bearDisp = close < open and bodyStrong
+
+f_priceInRange(_price, _top, _bottom) =>
+    not na(_top) and not na(_bottom) and _price <= math.max(_top, _bottom) and _price >= math.min(_top, _bottom)
+
+f_mid(_a, _b) =>
+    (_a + _b) / 2.0
+
+f_entryBoxColor(_title, _isBuy) =>
+    _title == "M1 Sweep Reversal" ? (_isBuy ? bullColor : bearColor) :
+     _title == "M2 Pullback" ? blueColor :
+     _title == "M3 Range Raid" ? goldColor :
+     (_isBuy ? bullColor : bearColor)
+
+f_drawEntryBox(_isBuy, _title, _zoneTop, _zoneBot) =>
+    if showEntryBoxes and _title != ""
+        bool hasZone = entryBoxUseZone and not na(_zoneTop) and not na(_zoneBot)
+        float rawTop = hasZone ? math.max(_zoneTop, _zoneBot) : high
+        float rawBot = hasZone ? math.min(_zoneTop, _zoneBot) : low
+        float pad = atr * entryBoxPadAtr
+        float boxTop = rawTop + pad
+        float boxBot = rawBot - pad
+        color bxColor = f_entryBoxColor(_title, _isBuy)
+        box.new(
+             left = bar_index,
+             top = boxTop,
+             right = bar_index + entryBoxBars,
+             bottom = boxBot,
+             border_color = color.new(bxColor, 0),
+             bgcolor = color.new(bxColor, 94),
+             border_width = 2,
+             border_style = line.style_solid)
+        label.new(
+             x = bar_index,
+             y = boxTop,
+             text = _title + "\nENTRY ZONE",
+             style = label.style_label_down,
+             color = color.new(bxColor, 0),
+             textcolor = color.white,
+             size = size.tiny)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 04. HTF BIAS + PREMIUM / DISCOUNT
+// ══════════════════════════════════════════════════════════════════════════════
+htfClose = request.security(syminfo.tickerid, htfTf, close)
+htfEma = request.security(syminfo.tickerid, htfTf, ta.ema(close, htfEmaLen))
+htfBull = htfClose > htfEma
+htfBear = htfClose < htfEma
+biasBuyOk = not useHtfBias or htfBull
+biasSellOk = not useHtfBias or htfBear
+
+rangeHigh = ta.highest(high, fibLookback)
+rangeLow = ta.lowest(low, fibLookback)
+eq = f_mid(rangeHigh, rangeLow)
+inDiscount = close < eq
+inPremium = close > eq
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 05. STRUCTURE ENGINE
+// ══════════════════════════════════════════════════════════════════════════════
+majorPivotHigh = ta.pivothigh(high, swingLenInput, swingLenInput)
+majorPivotLow = ta.pivotlow(low, swingLenInput, swingLenInput)
+internalPivotHigh = ta.pivothigh(high, internalLenInput, internalLenInput)
+internalPivotLow = ta.pivotlow(low, internalLenInput, internalLenInput)
+
+var float lastSwingHigh = na
+var float lastSwingLow = na
+var int lastSwingHighBar = na
+var int lastSwingLowBar = na
+var float prevSwingHigh = na
+var float prevSwingLow = na
+
+if not na(majorPivotHigh)
+    prevSwingHigh := lastSwingHigh
+    lastSwingHigh := majorPivotHigh
+    lastSwingHighBar := bar_index - swingLenInput
+
+if not na(majorPivotLow)
+    prevSwingLow := lastSwingLow
+    lastSwingLow := majorPivotLow
+    lastSwingLowBar := bar_index - swingLenInput
+
+var float lastInternalHigh = na
+var float lastInternalLow = na
+if not na(internalPivotHigh)
+    lastInternalHigh := internalPivotHigh
+if not na(internalPivotLow)
+    lastInternalLow := internalPivotLow
+
+bullBos = not na(lastSwingHigh) and close > lastSwingHigh and close[1] <= lastSwingHigh
+bearBos = not na(lastSwingLow) and close < lastSwingLow and close[1] >= lastSwingLow
+bullMss = not na(lastInternalHigh) and close > lastInternalHigh and close[1] <= lastInternalHigh and bullDisp
+bearMss = not na(lastInternalLow) and close < lastInternalLow and close[1] >= lastInternalLow and bearDisp
+
+// Swing liquidity visuals
+if showSwings and not na(majorPivotHigh)
+    line.new(bar_index - swingLenInput, majorPivotHigh, bar_index, majorPivotHigh, color = color.new(bearColor, 55), style = line.style_dotted, width = 1)
+    label.new(bar_index - swingLenInput, majorPivotHigh, "BSL", style = label.style_label_down, textcolor = color.white, color = color.new(bearColor, 65), size = size.tiny)
+
+if showSwings and not na(majorPivotLow)
+    line.new(bar_index - swingLenInput, majorPivotLow, bar_index, majorPivotLow, color = color.new(bullColor, 55), style = line.style_dotted, width = 1)
+    label.new(bar_index - swingLenInput, majorPivotLow, "SSL", style = label.style_label_up, textcolor = color.white, color = color.new(bullColor, 65), size = size.tiny)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 06. FVG / ZONE ENGINE
+// ══════════════════════════════════════════════════════════════════════════════
+bullFvg = low > high[2] and (low - high[2]) > atr * fvgMinAtr
+bearFvg = high < low[2] and (low[2] - high) > atr * fvgMinAtr
+
+var float bullZoneTop = na
+var float bullZoneBot = na
+var int bullZoneBar = na
+var float bearZoneTop = na
+var float bearZoneBot = na
+var int bearZoneBar = na
+
+if bullFvg and bullDisp
+    bullZoneTop := low
+    bullZoneBot := high[2]
+    bullZoneBar := bar_index
+    if showZones
+        box.new(left = bar_index - 2, top = bullZoneTop, right = bar_index + zoneValidBars, bottom = bullZoneBot, border_color = color.new(bullColor, 40), bgcolor = zoneBullColor)
+
+if bearFvg and bearDisp
+    bearZoneTop := low[2]
+    bearZoneBot := high
+    bearZoneBar := bar_index
+    if showZones
+        box.new(left = bar_index - 2, top = bearZoneTop, right = bar_index + zoneValidBars, bottom = bearZoneBot, border_color = color.new(bearColor, 40), bgcolor = zoneBearColor)
+
+bullZoneValid = not na(bullZoneBar) and bar_index - bullZoneBar <= zoneValidBars
+bearZoneValid = not na(bearZoneBar) and bar_index - bearZoneBar <= zoneValidBars
+bullZoneTouch = bullZoneValid and f_priceInRange(low, bullZoneTop, bullZoneBot)
+bearZoneTouch = bearZoneValid and f_priceInRange(high, bearZoneTop, bearZoneBot)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 07. LIQUIDITY SWEEP ENGINE
+// ══════════════════════════════════════════════════════════════════════════════
+sweepSellSide = not na(lastSwingLow) and low < lastSwingLow and close > lastSwingLow
+sweepBuySide = not na(lastSwingHigh) and high > lastSwingHigh and close < lastSwingHigh
+
+var int lastSellSweepBar = na
+var float lastSellSweepLow = na
+var int lastBuySweepBar = na
+var float lastBuySweepHigh = na
+
+if sweepSellSide
+    lastSellSweepBar := bar_index
+    lastSellSweepLow := low
+    if showSignals
+        label.new(bar_index, low, "SSL Sweep", style = label.style_label_up, color = color.new(bullColor, 25), textcolor = color.white, size = size.tiny)
+
+if sweepBuySide
+    lastBuySweepBar := bar_index
+    lastBuySweepHigh := high
+    if showSignals
+        label.new(bar_index, high, "BSL Sweep", style = label.style_label_down, color = color.new(bearColor, 25), textcolor = color.white, size = size.tiny)
+
+sellSweepFresh = not na(lastSellSweepBar) and bar_index - lastSellSweepBar <= reclaimBars
+buySweepFresh = not na(lastBuySweepBar) and bar_index - lastBuySweepBar <= reclaimBars
+bullReclaim = sellSweepFresh and close > lastSwingLow
+bearReclaim = buySweepFresh and close < lastSwingHigh
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 08. ASIAN RANGE / RAID ENGINE
+// ══════════════════════════════════════════════════════════════════════════════
+inAsian = not na(time(timeframe.period, asianSession))
+asianStart = inAsian and not inAsian[1]
+asianEnd = not inAsian and inAsian[1]
+
+var float asianHigh = na
+var float asianLow = na
+var int asianStartBar = na
+var int asianEndBar = na
+
+if asianStart
+    asianHigh := high
+    asianLow := low
+    asianStartBar := bar_index
+
+if inAsian
+    asianHigh := na(asianHigh) ? high : math.max(asianHigh, high)
+    asianLow := na(asianLow) ? low : math.min(asianLow, low)
+
+if asianEnd
+    asianEndBar := bar_index
+
+if showRange and asianEnd
+    line.new(asianStartBar, asianHigh, bar_index + 100, asianHigh, color = color.new(goldColor, 35), style = line.style_solid, width = 1)
+    line.new(asianStartBar, asianLow, bar_index + 100, asianLow, color = color.new(goldColor, 35), style = line.style_solid, width = 1)
+    label.new(bar_index, asianHigh, "Asian High", style = label.style_label_down, color = color.new(goldColor, 50), textcolor = color.black, size = size.tiny)
+    label.new(bar_index, asianLow, "Asian Low", style = label.style_label_up, color = color.new(goldColor, 50), textcolor = color.black, size = size.tiny)
+
+raidLow = not inAsian and not na(asianLow) and low < asianLow and close > asianLow
+raidHigh = not inAsian and not na(asianHigh) and high > asianHigh and close < asianHigh
+
+var int raidLowBar = na
+var float raidLowPrice = na
+var int raidHighBar = na
+var float raidHighPrice = na
+
+if raidLow
+    raidLowBar := bar_index
+    raidLowPrice := low
+    if showSignals
+        label.new(bar_index, low, "Asian Low Raid", style = label.style_label_up, color = color.new(goldColor, 15), textcolor = color.black, size = size.tiny)
+
+if raidHigh
+    raidHighBar := bar_index
+    raidHighPrice := high
+    if showSignals
+        label.new(bar_index, high, "Asian High Raid", style = label.style_label_down, color = color.new(goldColor, 15), textcolor = color.black, size = size.tiny)
+
+raidLowFresh = not na(raidLowBar) and bar_index - raidLowBar <= rangeReturnBars
+raidHighFresh = not na(raidHighBar) and bar_index - raidHighBar <= rangeReturnBars
+returnInsideAfterLowRaid = raidLowFresh and close > asianLow
+returnInsideAfterHighRaid = raidHighFresh and close < asianHigh
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 09. ENTRY MODEL CONDITIONS
+// ══════════════════════════════════════════════════════════════════════════════
+// Model 1: Liquidity Sweep Reversal
+m1BuyBase = model1On and canBuy and bullReclaim and bullMss and bullZoneTouch and inDiscount
+m1SellBase = model1On and canSell and bearReclaim and bearMss and bearZoneTouch and inPremium
+m1Buy = strictMode ? (m1BuyBase and biasBuyOk) : (model1On and canBuy and bullReclaim and bullMss)
+m1Sell = strictMode ? (m1SellBase and biasSellOk) : (model1On and canSell and bearReclaim and bearMss)
+
+// Model 2: Continuation Pullback
+var int lastBullBosBar = na
+var int lastBearBosBar = na
+if bullBos and bullDisp
+    lastBullBosBar := bar_index
+if bearBos and bearDisp
+    lastBearBosBar := bar_index
+
+bullContinuationContext = not na(lastBullBosBar) and bar_index - lastBullBosBar <= zoneValidBars
+bearContinuationContext = not na(lastBearBosBar) and bar_index - lastBearBosBar <= zoneValidBars
+m2BuyBase = model2On and canBuy and bullContinuationContext and biasBuyOk and bullZoneTouch and inDiscount and close > open
+m2SellBase = model2On and canSell and bearContinuationContext and biasSellOk and bearZoneTouch and inPremium and close < open
+m2Buy = strictMode ? (m2BuyBase and not m1Buy) : (model2On and canBuy and bullContinuationContext and bullZoneTouch and close > open)
+m2Sell = strictMode ? (m2SellBase and not m1Sell) : (model2On and canSell and bearContinuationContext and bearZoneTouch and close < open)
+
+// Model 3: Range Raid Reversal
+m3BuyBase = model3On and canBuy and returnInsideAfterLowRaid and bullMss and bullZoneTouch
+m3SellBase = model3On and canSell and returnInsideAfterHighRaid and bearMss and bearZoneTouch
+m3Buy = strictMode ? (m3BuyBase and biasBuyOk) : (model3On and canBuy and returnInsideAfterLowRaid and bullMss)
+m3Sell = strictMode ? (m3SellBase and biasSellOk) : (model3On and canSell and returnInsideAfterHighRaid and bearMss)
+
+buySignal = m1Buy or m2Buy or m3Buy
+sellSignal = m1Sell or m2Sell or m3Sell
+
+buyModelName = m1Buy ? "M1 Sweep Reversal" : m2Buy ? "M2 Pullback" : m3Buy ? "M3 Range Raid" : ""
+sellModelName = m1Sell ? "M1 Sweep Reversal" : m2Sell ? "M2 Pullback" : m3Sell ? "M3 Range Raid" : ""
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 10. SL / TP PROJECTION + ENTRY OUTLINE BOXES
+// ══════════════════════════════════════════════════════════════════════════════
+f_drawTrade(_isBuy, _entry, _sl, _tp, _title) =>
+    if showRiskLines and not na(_entry) and not na(_sl) and not na(_tp)
+        line.new(bar_index, _entry, bar_index + 30, _entry, color = color.new(neutralColor, 15), width = 1)
+        line.new(bar_index, _sl, bar_index + 30, _sl, color = color.new(slColor, 0), width = 1)
+        line.new(bar_index, _tp, bar_index + 30, _tp, color = color.new(tpColor, 0), width = 1)
+        label.new(bar_index + 30, _entry, "Entry", style = label.style_label_left, color = color.new(neutralColor, 30), textcolor = color.white, size = size.tiny)
+        label.new(bar_index + 30, _sl, "SL", style = label.style_label_left, color = color.new(slColor, 10), textcolor = color.white, size = size.tiny)
+        label.new(bar_index + 30, _tp, "TP", style = label.style_label_left, color = color.new(tpColor, 10), textcolor = color.black, size = size.tiny)
+
+buyEntry = close
+buySl = not na(lastSellSweepLow) and (m1Buy or m3Buy) ? lastSellSweepLow - atr * 0.10 : low - atr * 0.30
+buyTpR = buyEntry + (buyEntry - buySl) * riskReward
+buyTpLiq = not na(lastSwingHigh) and lastSwingHigh > buyEntry ? lastSwingHigh : buyTpR
+buyTp = useLiquidityTp ? buyTpLiq : buyTpR
+
+sellEntry = close
+sellSl = not na(lastBuySweepHigh) and (m1Sell or m3Sell) ? lastBuySweepHigh + atr * 0.10 : high + atr * 0.30
+sellTpR = sellEntry - (sellSl - sellEntry) * riskReward
+sellTpLiq = not na(lastSwingLow) and lastSwingLow < sellEntry ? lastSwingLow : sellTpR
+sellTp = useLiquidityTp ? sellTpLiq : sellTpR
+
+if buySignal
+    f_drawTrade(true, buyEntry, buySl, buyTp, buyModelName)
+    f_drawEntryBox(true, buyModelName, bullZoneTop, bullZoneBot)
+
+if sellSignal
+    f_drawTrade(false, sellEntry, sellSl, sellTp, sellModelName)
+    f_drawEntryBox(false, sellModelName, bearZoneTop, bearZoneBot)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 11. SIGNAL VISUALS
+// ══════════════════════════════════════════════════════════════════════════════
+if showSignals and buySignal
+    label.new(bar_index, low, "BUY\n" + buyModelName, style = label.style_label_up, color = color.new(bullColor, 0), textcolor = color.white, size = size.small)
+
+if showSignals and sellSignal
+    label.new(bar_index, high, "SELL\n" + sellModelName, style = label.style_label_down, color = color.new(bearColor, 0), textcolor = color.white, size = size.small)
+
+plotshape(bullBos, title = "Bullish BOS", style = shape.triangleup, location = location.belowbar, color = color.new(bullColor, 20), size = size.tiny, text = "BOS")
+plotshape(bearBos, title = "Bearish BOS", style = shape.triangledown, location = location.abovebar, color = color.new(bearColor, 20), size = size.tiny, text = "BOS")
+plotshape(bullMss, title = "Bullish MSS", style = shape.circle, location = location.belowbar, color = color.new(blueColor, 0), size = size.tiny, text = "MSS")
+plotshape(bearMss, title = "Bearish MSS", style = shape.circle, location = location.abovebar, color = color.new(blueColor, 0), size = size.tiny, text = "MSS")
+
+// Premium / Discount equilibrium
+plot(eq, title = "Equilibrium 50%", color = color.new(neutralColor, 70), linewidth = 1)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 12. DASHBOARD
+// ══════════════════════════════════════════════════════════════════════════════
+var table dash = table.new(position.top_right, 2, 12, bgcolor = panelBg, border_width = 1)
+
+f_state(_v) => _v ? "OK" : "NO"
+f_col(_v) => _v ? color.new(bullColor, 0) : color.new(bearColor, 0)
+
+if showDashboard and barstate.islast
+    table.cell(dash, 0, 0, "SMC Entry Models", text_color = panelText, bgcolor = color.new(goldColor, 65))
+    table.cell(dash, 1, 0, preset, text_color = panelText, bgcolor = color.new(goldColor, 65))
+    table.cell(dash, 0, 1, "HTF Bias", text_color = panelText)
+    table.cell(dash, 1, 1, htfBull ? "Bullish" : htfBear ? "Bearish" : "Neutral", text_color = htfBull ? bullColor : htfBear ? bearColor : neutralColor)
+    table.cell(dash, 0, 2, "Price Location", text_color = panelText)
+    table.cell(dash, 1, 2, inDiscount ? "Discount" : inPremium ? "Premium" : "EQ", text_color = inDiscount ? bullColor : inPremium ? bearColor : neutralColor)
+    table.cell(dash, 0, 3, "Bull Zone Touch", text_color = panelText)
+    table.cell(dash, 1, 3, f_state(bullZoneTouch), text_color = f_col(bullZoneTouch))
+    table.cell(dash, 0, 4, "Bear Zone Touch", text_color = panelText)
+    table.cell(dash, 1, 4, f_state(bearZoneTouch), text_color = f_col(bearZoneTouch))
+    table.cell(dash, 0, 5, "Sell Sweep", text_color = panelText)
+    table.cell(dash, 1, 5, f_state(sellSweepFresh), text_color = f_col(sellSweepFresh))
+    table.cell(dash, 0, 6, "Buy Sweep", text_color = panelText)
+    table.cell(dash, 1, 6, f_state(buySweepFresh), text_color = f_col(buySweepFresh))
+    table.cell(dash, 0, 7, "Bull MSS", text_color = panelText)
+    table.cell(dash, 1, 7, f_state(bullMss), text_color = f_col(bullMss))
+    table.cell(dash, 0, 8, "Bear MSS", text_color = panelText)
+    table.cell(dash, 1, 8, f_state(bearMss), text_color = f_col(bearMss))
+    table.cell(dash, 0, 9, "M1 Sweep", text_color = panelText)
+    table.cell(dash, 1, 9, m1Buy ? "BUY" : m1Sell ? "SELL" : "Wait", text_color = m1Buy ? bullColor : m1Sell ? bearColor : neutralColor)
+    table.cell(dash, 0, 10, "M2 Pullback", text_color = panelText)
+    table.cell(dash, 1, 10, m2Buy ? "BUY" : m2Sell ? "SELL" : "Wait", text_color = m2Buy ? bullColor : m2Sell ? bearColor : neutralColor)
+    table.cell(dash, 0, 11, "M3 Range Raid", text_color = panelText)
+    table.cell(dash, 1, 11, m3Buy ? "BUY" : m3Sell ? "SELL" : "Wait", text_color = m3Buy ? bullColor : m3Sell ? bearColor : neutralColor)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 13. ALERTS
+// ══════════════════════════════════════════════════════════════════════════════
+alertcondition(m1Buy, title = "M1 BUY - Liquidity Sweep Reversal", message = "M1 BUY: liquidity sweep reversal study signal on {{ticker}} {{interval}}")
+alertcondition(m1Sell, title = "M1 SELL - Liquidity Sweep Reversal", message = "M1 SELL: liquidity sweep reversal study signal on {{ticker}} {{interval}}")
+alertcondition(m2Buy, title = "M2 BUY - Continuation Pullback", message = "M2 BUY: continuation pullback study signal on {{ticker}} {{interval}}")
+alertcondition(m2Sell, title = "M2 SELL - Continuation Pullback", message = "M2 SELL: continuation pullback study signal on {{ticker}} {{interval}}")
+alertcondition(m3Buy, title = "M3 BUY - Range Raid Reversal", message = "M3 BUY: range raid reversal study signal on {{ticker}} {{interval}}")
+alertcondition(m3Sell, title = "M3 SELL - Range Raid Reversal", message = "M3 SELL: range raid reversal study signal on {{ticker}} {{interval}}")
+alertcondition(buySignal, title = "Any BUY Model", message = "SMC BUY model study signal on {{ticker}} {{interval}}")
+alertcondition(sellSignal, title = "Any SELL Model", message = "SMC SELL model study signal on {{ticker}} {{interval}}")
+
+// ══════════════════════════════════════════════════════════════════════════════
+// END
+// ══════════════════════════════════════════════════════════════════════════════

@@ -1,0 +1,534 @@
+//@version=6
+// ══════════════════════════════════════════════════════════════════════════════
+// SMC VISUAL ENTRY MODEL MASTER [Ravi v0.2]
+// Patch: Clean Structure / Noise Control / Entry Box Layer / HTF Levels
+// Educational TradingView study indicator only.
+// ══════════════════════════════════════════════════════════════════════════════
+
+indicator(
+     title = "SMC Visual Entry Model Master [Ravi v0.2 Clean Structure]",
+     shorttitle = "SMC Entry v0.2",
+     overlay = true,
+     max_boxes_count = 300,
+     max_lines_count = 400,
+     max_labels_count = 400,
+     max_bars_back = 5000)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 01. SETTINGS
+// ══════════════════════════════════════════════════════════════════════════════
+GRP_MASTER = "01 Master Controls"
+GRP_STRUCT = "02 Structure / Liquidity"
+GRP_ZONE   = "03 POI / Zones"
+GRP_MODEL  = "04 Entry Models"
+GRP_RISK   = "05 SL / TP Visuals"
+GRP_VIS    = "06 Visuals / Dashboard"
+GRP_HTF    = "07 HTF Key Levels"
+GRP_ALERT  = "08 Alerts"
+
+preset = input.string("XAUUSD Sniper", "Preset", options = ["XAUUSD Sniper", "NAS100", "BTCUSD", "Forex", "Manual Custom"], group = GRP_MASTER)
+tradeSide = input.string("Both", "Allowed Study Direction", options = ["Both", "Buy Only", "Sell Only"], group = GRP_MASTER)
+displayMode = input.string("Clean", "Display Mode", options = ["Clean", "Normal", "Full Debug"], group = GRP_MASTER)
+strictMode = input.bool(true, "Strict Mode: Require Bias + Zone + MSS", group = GRP_MASTER)
+
+swingLenInput = input.int(7, "Major Swing Length", minval = 2, maxval = 40, group = GRP_STRUCT)
+internalLenInput = input.int(3, "Internal Swing Length", minval = 1, maxval = 15, group = GRP_STRUCT)
+reclaimBars = input.int(5, "Max Bars After Sweep for Reclaim", minval = 1, maxval = 25, group = GRP_STRUCT)
+signalCooldownBars = input.int(20, "Signal Cooldown Bars", minval = 0, maxval = 200, group = GRP_STRUCT)
+
+useHtfBias = input.bool(true, "Use HTF EMA Bias Filter", group = GRP_STRUCT)
+htfTf = input.timeframe("60", "HTF Bias Timeframe", group = GRP_STRUCT)
+htfEmaLen = input.int(50, "HTF EMA Length", minval = 10, maxval = 300, group = GRP_STRUCT)
+
+fibLookback = input.int(180, "Premium/Discount Range Lookback", minval = 50, maxval = 600, group = GRP_ZONE)
+fvgMinAtr = input.float(0.25, "Minimum FVG Size ATR Multiplier", minval = 0.0, maxval = 3.0, step = 0.05, group = GRP_ZONE)
+dispAtrMult = input.float(1.00, "Displacement Body ATR Multiplier", minval = 0.1, maxval = 5.0, step = 0.05, group = GRP_ZONE)
+zoneValidBars = input.int(100, "Zone Valid Bars", minval = 10, maxval = 400, group = GRP_ZONE)
+cleanOnlyLatestZones = input.bool(true, "Clean Mode: Only Latest Bull/Bear Zone", group = GRP_ZONE)
+
+model1On = input.bool(true, "Model 1: Liquidity Sweep Reversal", group = GRP_MODEL)
+model2On = input.bool(true, "Model 2: Continuation Pullback", group = GRP_MODEL)
+model3On = input.bool(true, "Model 3: Range Raid Reversal", group = GRP_MODEL)
+showSetupState = input.bool(true, "Show Setup / Armed State", group = GRP_MODEL)
+
+asianSession = input.session("0000-0600", "Asian Range Session", group = GRP_MODEL)
+rangeReturnBars = input.int(10, "Max Bars After Raid to Return Inside", minval = 1, maxval = 30, group = GRP_MODEL)
+
+riskReward = input.float(2.0, "Default R Multiple Projection", minval = 0.5, maxval = 10.0, step = 0.25, group = GRP_RISK)
+useLiquidityTp = input.bool(true, "Prefer Liquidity Target When Available", group = GRP_RISK)
+showRiskLines = input.bool(true, "Show SL / TP Projection", group = GRP_RISK)
+
+showSwings = input.bool(true, "Show Swing Liquidity", group = GRP_VIS)
+showZones = input.bool(true, "Show FVG Zones", group = GRP_VIS)
+showRange = input.bool(true, "Show Latest Asian Range", group = GRP_VIS)
+showSignals = input.bool(true, "Show Confirmed Entry Labels", group = GRP_VIS)
+showDashboard = input.bool(true, "Show Dashboard", group = GRP_VIS)
+showEntryBoxes = input.bool(true, "Show Entry Outline Boxes", group = GRP_VIS)
+entryBoxBars = input.int(24, "Entry Box Forward Bars", minval = 5, maxval = 120, group = GRP_VIS)
+entryBoxPadAtr = input.float(0.15, "Entry Box Padding ATR", minval = 0.0, maxval = 2.0, step = 0.05, group = GRP_VIS)
+entryBoxUseZone = input.bool(true, "Use Active FVG Zone for Entry Box", group = GRP_VIS)
+
+showHtfLevels = input.bool(true, "Show HTF Key Levels", group = GRP_HTF)
+showPdhPdl = input.bool(true, "Show Previous Day High / Low", group = GRP_HTF)
+showPwhPwl = input.bool(true, "Show Previous Week High / Low", group = GRP_HTF)
+showHtfEma = input.bool(false, "Show HTF EMA Bias Line", group = GRP_HTF)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 02. THEME
+// ══════════════════════════════════════════════════════════════════════════════
+bullColor = color.rgb(0, 200, 140)
+bearColor = color.rgb(240, 70, 85)
+neutralColor = color.rgb(160, 165, 175)
+goldColor = color.rgb(230, 185, 80)
+blueColor = color.rgb(80, 170, 255)
+slColor = color.rgb(255, 70, 90)
+tpColor = color.rgb(0, 220, 140)
+zoneBullColor = color.new(bullColor, 86)
+zoneBearColor = color.new(bearColor, 86)
+panelBg = color.new(color.black, 12)
+panelText = color.white
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 03. MODE + HELPERS
+// ══════════════════════════════════════════════════════════════════════════════
+isClean = displayMode == "Clean"
+isNormal = displayMode == "Normal"
+isDebug = displayMode == "Full Debug"
+canBuy = tradeSide == "Both" or tradeSide == "Buy Only"
+canSell = tradeSide == "Both" or tradeSide == "Sell Only"
+
+chartSec = timeframe.in_seconds(timeframe.period)
+isExecutionTf = chartSec <= 5 * 60
+isSetupTf = chartSec > 5 * 60 and chartSec <= 30 * 60
+isBiasTf = chartSec > 30 * 60 and chartSec <= 60 * 60
+isNarrativeTf = chartSec > 60 * 60
+chartRole = isExecutionTf ? "Execution" : isSetupTf ? "Setup" : isBiasTf ? "Bias" : "Narrative"
+
+atr = ta.atr(14)
+body = math.abs(close - open)
+bodyStrong = body > atr * dispAtrMult
+bullDisp = close > open and bodyStrong
+bearDisp = close < open and bodyStrong
+
+f_priceInRange(_price, _top, _bottom) =>
+    not na(_top) and not na(_bottom) and _price <= math.max(_top, _bottom) and _price >= math.min(_top, _bottom)
+
+f_mid(_a, _b) =>
+    (_a + _b) / 2.0
+
+f_entryBoxColor(_title, _isBuy) =>
+    _title == "M1 Sweep Reversal" ? (_isBuy ? bullColor : bearColor) :
+     _title == "M2 Pullback" ? blueColor :
+     _title == "M3 Range Raid" ? goldColor :
+     (_isBuy ? bullColor : bearColor)
+
+f_state(_v) => _v ? "OK" : "NO"
+f_col(_v) => _v ? color.new(bullColor, 0) : color.new(bearColor, 0)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 04. HTF BIAS + PREMIUM / DISCOUNT + KEY LEVELS
+// ══════════════════════════════════════════════════════════════════════════════
+htfClose = request.security(syminfo.tickerid, htfTf, close)
+htfEma = request.security(syminfo.tickerid, htfTf, ta.ema(close, htfEmaLen))
+htfBull = htfClose > htfEma
+htfBear = htfClose < htfEma
+biasBuyOk = not useHtfBias or htfBull
+biasSellOk = not useHtfBias or htfBear
+
+rangeHigh = ta.highest(high, fibLookback)
+rangeLow = ta.lowest(low, fibLookback)
+eq = f_mid(rangeHigh, rangeLow)
+inDiscount = close < eq
+inPremium = close > eq
+
+pdh = request.security(syminfo.tickerid, "D", high[1])
+pdl = request.security(syminfo.tickerid, "D", low[1])
+pwh = request.security(syminfo.tickerid, "W", high[1])
+pwl = request.security(syminfo.tickerid, "W", low[1])
+
+var line pdhLine = na
+var line pdlLine = na
+var line pwhLine = na
+var line pwlLine = na
+var label pdhLab = na
+var label pdlLab = na
+var label pwhLab = na
+var label pwlLab = na
+
+if showHtfLevels and barstate.islast
+    if showPdhPdl
+        if na(pdhLine)
+            pdhLine := line.new(bar_index - 1, pdh, bar_index + 120, pdh, color = color.new(goldColor, 25), width = 1)
+            pdlLine := line.new(bar_index - 1, pdl, bar_index + 120, pdl, color = color.new(goldColor, 25), width = 1)
+            pdhLab := label.new(bar_index + 120, pdh, "PDH", style = label.style_label_left, color = color.new(goldColor, 20), textcolor = color.black, size = size.tiny)
+            pdlLab := label.new(bar_index + 120, pdl, "PDL", style = label.style_label_left, color = color.new(goldColor, 20), textcolor = color.black, size = size.tiny)
+        else
+            line.set_xy1(pdhLine, bar_index - 1, pdh), line.set_xy2(pdhLine, bar_index + 120, pdh)
+            line.set_xy1(pdlLine, bar_index - 1, pdl), line.set_xy2(pdlLine, bar_index + 120, pdl)
+            label.set_xy(pdhLab, bar_index + 120, pdh), label.set_xy(pdlLab, bar_index + 120, pdl)
+    if showPwhPwl
+        if na(pwhLine)
+            pwhLine := line.new(bar_index - 1, pwh, bar_index + 160, pwh, color = color.new(blueColor, 25), width = 1)
+            pwlLine := line.new(bar_index - 1, pwl, bar_index + 160, pwl, color = color.new(blueColor, 25), width = 1)
+            pwhLab := label.new(bar_index + 160, pwh, "PWH", style = label.style_label_left, color = color.new(blueColor, 25), textcolor = color.white, size = size.tiny)
+            pwlLab := label.new(bar_index + 160, pwl, "PWL", style = label.style_label_left, color = color.new(blueColor, 25), textcolor = color.white, size = size.tiny)
+        else
+            line.set_xy1(pwhLine, bar_index - 1, pwh), line.set_xy2(pwhLine, bar_index + 160, pwh)
+            line.set_xy1(pwlLine, bar_index - 1, pwl), line.set_xy2(pwlLine, bar_index + 160, pwl)
+            label.set_xy(pwhLab, bar_index + 160, pwh), label.set_xy(pwlLab, bar_index + 160, pwl)
+
+plot(showHtfEma ? htfEma : na, title = "HTF EMA Bias Line", color = color.new(blueColor, 40), linewidth = 1)
+plot(eq, title = "Equilibrium 50%", color = color.new(neutralColor, 75), linewidth = 1)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 05. STRUCTURE ENGINE
+// ══════════════════════════════════════════════════════════════════════════════
+majorPivotHigh = ta.pivothigh(high, swingLenInput, swingLenInput)
+majorPivotLow = ta.pivotlow(low, swingLenInput, swingLenInput)
+internalPivotHigh = ta.pivothigh(high, internalLenInput, internalLenInput)
+internalPivotLow = ta.pivotlow(low, internalLenInput, internalLenInput)
+
+var float lastSwingHigh = na
+var float lastSwingLow = na
+var int lastSwingHighBar = na
+var int lastSwingLowBar = na
+
+if not na(majorPivotHigh)
+    lastSwingHigh := majorPivotHigh
+    lastSwingHighBar := bar_index - swingLenInput
+
+if not na(majorPivotLow)
+    lastSwingLow := majorPivotLow
+    lastSwingLowBar := bar_index - swingLenInput
+
+var float lastInternalHigh = na
+var float lastInternalLow = na
+if not na(internalPivotHigh)
+    lastInternalHigh := internalPivotHigh
+if not na(internalPivotLow)
+    lastInternalLow := internalPivotLow
+
+bullBos = not na(lastSwingHigh) and close > lastSwingHigh and close[1] <= lastSwingHigh and bullDisp
+bearBos = not na(lastSwingLow) and close < lastSwingLow and close[1] >= lastSwingLow and bearDisp
+bullMss = not na(lastInternalHigh) and close > lastInternalHigh and close[1] <= lastInternalHigh and bullDisp
+bearMss = not na(lastInternalLow) and close < lastInternalLow and close[1] >= lastInternalLow and bearDisp
+
+showMinorMarks = isDebug or (isNormal and not isNarrativeTf)
+showMainMarks = showSwings and (isDebug or isNormal or isExecutionTf or isSetupTf)
+
+if showMainMarks and not na(majorPivotHigh)
+    line.new(bar_index - swingLenInput, majorPivotHigh, bar_index + 30, majorPivotHigh, color = color.new(bearColor, isClean ? 70 : 55), style = line.style_dotted, width = 1)
+    if not isClean
+        label.new(bar_index - swingLenInput, majorPivotHigh, "BSL", style = label.style_label_down, textcolor = color.white, color = color.new(bearColor, 65), size = size.tiny)
+
+if showMainMarks and not na(majorPivotLow)
+    line.new(bar_index - swingLenInput, majorPivotLow, bar_index + 30, majorPivotLow, color = color.new(bullColor, isClean ? 70 : 55), style = line.style_dotted, width = 1)
+    if not isClean
+        label.new(bar_index - swingLenInput, majorPivotLow, "SSL", style = label.style_label_up, textcolor = color.white, color = color.new(bullColor, 65), size = size.tiny)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 06. FVG / ZONE ENGINE WITH CLEAN MODE LATEST-ZONE CONTROL
+// ══════════════════════════════════════════════════════════════════════════════
+bullFvg = low > high[2] and (low - high[2]) > atr * fvgMinAtr
+bearFvg = high < low[2] and (low[2] - high) > atr * fvgMinAtr
+
+var float bullZoneTop = na
+var float bullZoneBot = na
+var int bullZoneBar = na
+var float bearZoneTop = na
+var float bearZoneBot = na
+var int bearZoneBar = na
+var box latestBullBox = na
+var box latestBearBox = na
+
+if bullFvg and bullDisp
+    bullZoneTop := low
+    bullZoneBot := high[2]
+    bullZoneBar := bar_index
+    if showZones
+        if isClean and cleanOnlyLatestZones and not na(latestBullBox)
+            box.delete(latestBullBox)
+        latestBullBox := box.new(left = bar_index - 2, top = bullZoneTop, right = bar_index + zoneValidBars, bottom = bullZoneBot, border_color = color.new(bullColor, 35), bgcolor = zoneBullColor)
+
+if bearFvg and bearDisp
+    bearZoneTop := low[2]
+    bearZoneBot := high
+    bearZoneBar := bar_index
+    if showZones
+        if isClean and cleanOnlyLatestZones and not na(latestBearBox)
+            box.delete(latestBearBox)
+        latestBearBox := box.new(left = bar_index - 2, top = bearZoneTop, right = bar_index + zoneValidBars, bottom = bearZoneBot, border_color = color.new(bearColor, 35), bgcolor = zoneBearColor)
+
+bullZoneValid = not na(bullZoneBar) and bar_index - bullZoneBar <= zoneValidBars
+bearZoneValid = not na(bearZoneBar) and bar_index - bearZoneBar <= zoneValidBars
+bullZoneTouch = bullZoneValid and f_priceInRange(low, bullZoneTop, bullZoneBot)
+bearZoneTouch = bearZoneValid and f_priceInRange(high, bearZoneTop, bearZoneBot)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 07. LIQUIDITY SWEEP ENGINE
+// ══════════════════════════════════════════════════════════════════════════════
+sweepSellSide = not na(lastSwingLow) and low < lastSwingLow and close > lastSwingLow
+sweepBuySide = not na(lastSwingHigh) and high > lastSwingHigh and close < lastSwingHigh
+
+var int lastSellSweepBar = na
+var float lastSellSweepLow = na
+var int lastBuySweepBar = na
+var float lastBuySweepHigh = na
+
+if sweepSellSide
+    lastSellSweepBar := bar_index
+    lastSellSweepLow := low
+    if isDebug
+        label.new(bar_index, low, "SSL Sweep", style = label.style_label_up, color = color.new(bullColor, 25), textcolor = color.white, size = size.tiny)
+
+if sweepBuySide
+    lastBuySweepBar := bar_index
+    lastBuySweepHigh := high
+    if isDebug
+        label.new(bar_index, high, "BSL Sweep", style = label.style_label_down, color = color.new(bearColor, 25), textcolor = color.white, size = size.tiny)
+
+sellSweepFresh = not na(lastSellSweepBar) and bar_index - lastSellSweepBar <= reclaimBars
+buySweepFresh = not na(lastBuySweepBar) and bar_index - lastBuySweepBar <= reclaimBars
+bullReclaim = sellSweepFresh and close > lastSwingLow
+bearReclaim = buySweepFresh and close < lastSwingHigh
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 08. ASIAN RANGE / RAID ENGINE - LATEST RANGE ONLY
+// ══════════════════════════════════════════════════════════════════════════════
+inAsian = not na(time(timeframe.period, asianSession))
+asianStart = inAsian and not inAsian[1]
+asianEnd = not inAsian and inAsian[1]
+
+var float asianHigh = na
+var float asianLow = na
+var int asianStartBar = na
+var line asianHighLine = na
+var line asianLowLine = na
+var label asianHighLab = na
+var label asianLowLab = na
+
+if asianStart
+    asianHigh := high
+    asianLow := low
+    asianStartBar := bar_index
+
+if inAsian
+    asianHigh := na(asianHigh) ? high : math.max(asianHigh, high)
+    asianLow := na(asianLow) ? low : math.min(asianLow, low)
+
+if showRange and asianEnd
+    if not na(asianHighLine)
+        line.delete(asianHighLine)
+        line.delete(asianLowLine)
+    if not na(asianHighLab)
+        label.delete(asianHighLab)
+        label.delete(asianLowLab)
+    asianHighLine := line.new(asianStartBar, asianHigh, bar_index + 120, asianHigh, color = color.new(goldColor, 35), style = line.style_solid, width = 1)
+    asianLowLine := line.new(asianStartBar, asianLow, bar_index + 120, asianLow, color = color.new(goldColor, 35), style = line.style_solid, width = 1)
+    if not isNarrativeTf
+        asianHighLab := label.new(bar_index, asianHigh, "Asian High", style = label.style_label_down, color = color.new(goldColor, 45), textcolor = color.black, size = size.tiny)
+        asianLowLab := label.new(bar_index, asianLow, "Asian Low", style = label.style_label_up, color = color.new(goldColor, 45), textcolor = color.black, size = size.tiny)
+
+raidLow = not inAsian and not na(asianLow) and low < asianLow and close > asianLow
+raidHigh = not inAsian and not na(asianHigh) and high > asianHigh and close < asianHigh
+
+var int raidLowBar = na
+var float raidLowPrice = na
+var int raidHighBar = na
+var float raidHighPrice = na
+
+if raidLow
+    raidLowBar := bar_index
+    raidLowPrice := low
+    if isDebug
+        label.new(bar_index, low, "Asian Low Raid", style = label.style_label_up, color = color.new(goldColor, 15), textcolor = color.black, size = size.tiny)
+
+if raidHigh
+    raidHighBar := bar_index
+    raidHighPrice := high
+    if isDebug
+        label.new(bar_index, high, "Asian High Raid", style = label.style_label_down, color = color.new(goldColor, 15), textcolor = color.black, size = size.tiny)
+
+raidLowFresh = not na(raidLowBar) and bar_index - raidLowBar <= rangeReturnBars
+raidHighFresh = not na(raidHighBar) and bar_index - raidHighBar <= rangeReturnBars
+returnInsideAfterLowRaid = raidLowFresh and close > asianLow
+returnInsideAfterHighRaid = raidHighFresh and close < asianHigh
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 09. MODEL STATES: SETUP → ARMED → CONFIRMED
+// ══════════════════════════════════════════════════════════════════════════════
+var int lastSignalBar = na
+cooldownOk = na(lastSignalBar) or bar_index - lastSignalBar > signalCooldownBars
+
+m1BuySetup = model1On and canBuy and bullReclaim and inDiscount
+m1SellSetup = model1On and canSell and bearReclaim and inPremium
+m1BuyArmed = m1BuySetup and bullMss
+m1SellArmed = m1SellSetup and bearMss
+m1BuyConfirmed = strictMode ? (m1BuyArmed and biasBuyOk and bullZoneTouch and cooldownOk) : (m1BuyArmed and cooldownOk)
+m1SellConfirmed = strictMode ? (m1SellArmed and biasSellOk and bearZoneTouch and cooldownOk) : (m1SellArmed and cooldownOk)
+
+var int lastBullBosBar = na
+var int lastBearBosBar = na
+if bullBos
+    lastBullBosBar := bar_index
+if bearBos
+    lastBearBosBar := bar_index
+
+bullContinuationContext = not na(lastBullBosBar) and bar_index - lastBullBosBar <= zoneValidBars
+bearContinuationContext = not na(lastBearBosBar) and bar_index - lastBearBosBar <= zoneValidBars
+m2BuySetup = model2On and canBuy and bullContinuationContext and inDiscount
+m2SellSetup = model2On and canSell and bearContinuationContext and inPremium
+m2BuyArmed = m2BuySetup and bullZoneTouch and biasBuyOk
+m2SellArmed = m2SellSetup and bearZoneTouch and biasSellOk
+m2BuyConfirmed = m2BuyArmed and close > open and cooldownOk and not m1BuyConfirmed
+m2SellConfirmed = m2SellArmed and close < open and cooldownOk and not m1SellConfirmed
+
+m3BuySetup = model3On and canBuy and returnInsideAfterLowRaid
+m3SellSetup = model3On and canSell and returnInsideAfterHighRaid
+m3BuyArmed = m3BuySetup and bullMss
+m3SellArmed = m3SellSetup and bearMss
+m3BuyConfirmed = strictMode ? (m3BuyArmed and biasBuyOk and bullZoneTouch and cooldownOk) : (m3BuyArmed and cooldownOk)
+m3SellConfirmed = strictMode ? (m3SellArmed and biasSellOk and bearZoneTouch and cooldownOk) : (m3SellArmed and cooldownOk)
+
+buySignal = m1BuyConfirmed or m2BuyConfirmed or m3BuyConfirmed
+sellSignal = m1SellConfirmed or m2SellConfirmed or m3SellConfirmed
+
+buyModelName = m1BuyConfirmed ? "M1 Sweep Reversal" : m2BuyConfirmed ? "M2 Pullback" : m3BuyConfirmed ? "M3 Range Raid" : ""
+sellModelName = m1SellConfirmed ? "M1 Sweep Reversal" : m2SellConfirmed ? "M2 Pullback" : m3SellConfirmed ? "M3 Range Raid" : ""
+
+activeState = buySignal ? "CONFIRMED BUY" : sellSignal ? "CONFIRMED SELL" :
+     (m1BuyArmed or m1SellArmed or m2BuyArmed or m2SellArmed or m3BuyArmed or m3SellArmed) ? "ARMED" :
+     (m1BuySetup or m1SellSetup or m2BuySetup or m2SellSetup or m3BuySetup or m3SellSetup) ? "SETUP" : "WAIT"
+
+whyWaiting = buySignal or sellSignal ? "Entry model confirmed" :
+     not cooldownOk ? "Cooldown active" :
+     strictMode and not (biasBuyOk or biasSellOk) ? "HTF bias conflict" :
+     not (bullZoneTouch or bearZoneTouch) ? "Waiting for valid zone touch" :
+     not (bullMss or bearMss) ? "Waiting for MSS" :
+     not (sellSweepFresh or buySweepFresh or returnInsideAfterLowRaid or returnInsideAfterHighRaid or bullContinuationContext or bearContinuationContext) ? "Waiting for model setup" : "Filtering conditions"
+
+if buySignal or sellSignal
+    lastSignalBar := bar_index
+
+// Setup/armed marks without aggressive BUY/SELL clutter
+if showSetupState and not isClean
+    if m1BuyArmed or m2BuyArmed or m3BuyArmed
+        label.new(bar_index, low, "ARMED BUY", style = label.style_label_up, color = color.new(blueColor, 25), textcolor = color.white, size = size.tiny)
+    if m1SellArmed or m2SellArmed or m3SellArmed
+        label.new(bar_index, high, "ARMED SELL", style = label.style_label_down, color = color.new(blueColor, 25), textcolor = color.white, size = size.tiny)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 10. SL / TP PROJECTION + ENTRY OUTLINE BOXES
+// ══════════════════════════════════════════════════════════════════════════════
+f_drawEntryBox(_isBuy, _title, _zoneTop, _zoneBot) =>
+    if showEntryBoxes and _title != "" and (isExecutionTf or isSetupTf or isDebug)
+        bool hasZone = entryBoxUseZone and not na(_zoneTop) and not na(_zoneBot)
+        float rawTop = hasZone ? math.max(_zoneTop, _zoneBot) : high
+        float rawBot = hasZone ? math.min(_zoneTop, _zoneBot) : low
+        float pad = atr * entryBoxPadAtr
+        float boxTop = rawTop + pad
+        float boxBot = rawBot - pad
+        color bxColor = f_entryBoxColor(_title, _isBuy)
+        box.new(left = bar_index, top = boxTop, right = bar_index + entryBoxBars, bottom = boxBot, border_color = color.new(bxColor, 0), bgcolor = color.new(bxColor, 94), border_width = 2, border_style = line.style_solid)
+        label.new(x = bar_index, y = boxTop, text = _title + "\nENTRY ZONE", style = label.style_label_down, color = color.new(bxColor, 0), textcolor = color.white, size = size.tiny)
+
+f_drawTrade(_entry, _sl, _tp) =>
+    if showRiskLines and not na(_entry) and not na(_sl) and not na(_tp) and (isExecutionTf or isSetupTf or isDebug)
+        line.new(bar_index, _entry, bar_index + 30, _entry, color = color.new(neutralColor, 15), width = 1)
+        line.new(bar_index, _sl, bar_index + 30, _sl, color = color.new(slColor, 0), width = 1)
+        line.new(bar_index, _tp, bar_index + 30, _tp, color = color.new(tpColor, 0), width = 1)
+        label.new(bar_index + 30, _entry, "Entry", style = label.style_label_left, color = color.new(neutralColor, 30), textcolor = color.white, size = size.tiny)
+        label.new(bar_index + 30, _sl, "SL", style = label.style_label_left, color = color.new(slColor, 10), textcolor = color.white, size = size.tiny)
+        label.new(bar_index + 30, _tp, "TP", style = label.style_label_left, color = color.new(tpColor, 10), textcolor = color.black, size = size.tiny)
+
+buyEntry = close
+buySl = not na(lastSellSweepLow) and (m1BuyConfirmed or m3BuyConfirmed) ? lastSellSweepLow - atr * 0.10 : low - atr * 0.30
+buyTpR = buyEntry + (buyEntry - buySl) * riskReward
+buyTpLiq = not na(lastSwingHigh) and lastSwingHigh > buyEntry ? lastSwingHigh : buyTpR
+buyTp = useLiquidityTp ? buyTpLiq : buyTpR
+
+sellEntry = close
+sellSl = not na(lastBuySweepHigh) and (m1SellConfirmed or m3SellConfirmed) ? lastBuySweepHigh + atr * 0.10 : high + atr * 0.30
+sellTpR = sellEntry - (sellSl - sellEntry) * riskReward
+sellTpLiq = not na(lastSwingLow) and lastSwingLow < sellEntry ? lastSwingLow : sellTpR
+sellTp = useLiquidityTp ? sellTpLiq : sellTpR
+
+if buySignal
+    f_drawTrade(buyEntry, buySl, buyTp)
+    f_drawEntryBox(true, buyModelName, bullZoneTop, bullZoneBot)
+
+if sellSignal
+    f_drawTrade(sellEntry, sellSl, sellTp)
+    f_drawEntryBox(false, sellModelName, bearZoneTop, bearZoneBot)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 11. CLEAN SIGNAL VISUALS
+// ══════════════════════════════════════════════════════════════════════════════
+if showSignals and buySignal and (isExecutionTf or isSetupTf or isDebug)
+    label.new(bar_index, low, "BUY\n" + buyModelName, style = label.style_label_up, color = color.new(bullColor, 0), textcolor = color.white, size = size.small)
+
+if showSignals and sellSignal and (isExecutionTf or isSetupTf or isDebug)
+    label.new(bar_index, high, "SELL\n" + sellModelName, style = label.style_label_down, color = color.new(bearColor, 0), textcolor = color.white, size = size.small)
+
+plotshape(showMinorMarks and bullBos, title = "Bullish BOS", style = shape.triangleup, location = location.belowbar, color = color.new(bullColor, 20), size = size.tiny, text = "BOS")
+plotshape(showMinorMarks and bearBos, title = "Bearish BOS", style = shape.triangledown, location = location.abovebar, color = color.new(bearColor, 20), size = size.tiny, text = "BOS")
+plotshape(showMinorMarks and bullMss, title = "Bullish MSS", style = shape.circle, location = location.belowbar, color = color.new(blueColor, 0), size = size.tiny, text = "MSS")
+plotshape(showMinorMarks and bearMss, title = "Bearish MSS", style = shape.circle, location = location.abovebar, color = color.new(blueColor, 0), size = size.tiny, text = "MSS")
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 12. DASHBOARD v0.2
+// ══════════════════════════════════════════════════════════════════════════════
+var table dash = table.new(position.top_right, 2, 16, bgcolor = panelBg, border_width = 1)
+
+nearestBsl = not na(lastSwingHigh) ? str.tostring(lastSwingHigh, format.mintick) : "n/a"
+nearestSsl = not na(lastSwingLow) ? str.tostring(lastSwingLow, format.mintick) : "n/a"
+
+if showDashboard and barstate.islast
+    table.cell(dash, 0, 0, "SMC Entry v0.2", text_color = panelText, bgcolor = color.new(goldColor, 65))
+    table.cell(dash, 1, 0, preset, text_color = panelText, bgcolor = color.new(goldColor, 65))
+    table.cell(dash, 0, 1, "Chart Role", text_color = panelText)
+    table.cell(dash, 1, 1, chartRole, text_color = blueColor)
+    table.cell(dash, 0, 2, "HTF Bias", text_color = panelText)
+    table.cell(dash, 1, 2, htfBull ? "Bullish" : htfBear ? "Bearish" : "Neutral", text_color = htfBull ? bullColor : htfBear ? bearColor : neutralColor)
+    table.cell(dash, 0, 3, "Price Location", text_color = panelText)
+    table.cell(dash, 1, 3, inDiscount ? "Discount" : inPremium ? "Premium" : "EQ", text_color = inDiscount ? bullColor : inPremium ? bearColor : neutralColor)
+    table.cell(dash, 0, 4, "State", text_color = panelText)
+    table.cell(dash, 1, 4, activeState, text_color = buySignal ? bullColor : sellSignal ? bearColor : activeState == "ARMED" ? blueColor : activeState == "SETUP" ? goldColor : neutralColor)
+    table.cell(dash, 0, 5, "Why / Missing", text_color = panelText)
+    table.cell(dash, 1, 5, whyWaiting, text_color = neutralColor)
+    table.cell(dash, 0, 6, "Nearest BSL", text_color = panelText)
+    table.cell(dash, 1, 6, nearestBsl, text_color = bearColor)
+    table.cell(dash, 0, 7, "Nearest SSL", text_color = panelText)
+    table.cell(dash, 1, 7, nearestSsl, text_color = bullColor)
+    table.cell(dash, 0, 8, "Bull Zone", text_color = panelText)
+    table.cell(dash, 1, 8, bullZoneTouch ? "Touch" : bullZoneValid ? "Valid" : "None", text_color = bullZoneTouch ? bullColor : neutralColor)
+    table.cell(dash, 0, 9, "Bear Zone", text_color = panelText)
+    table.cell(dash, 1, 9, bearZoneTouch ? "Touch" : bearZoneValid ? "Valid" : "None", text_color = bearZoneTouch ? bearColor : neutralColor)
+    table.cell(dash, 0, 10, "Sweep", text_color = panelText)
+    table.cell(dash, 1, 10, sellSweepFresh ? "SSL Fresh" : buySweepFresh ? "BSL Fresh" : "None", text_color = sellSweepFresh ? bullColor : buySweepFresh ? bearColor : neutralColor)
+    table.cell(dash, 0, 11, "MSS", text_color = panelText)
+    table.cell(dash, 1, 11, bullMss ? "Bull MSS" : bearMss ? "Bear MSS" : "None", text_color = bullMss ? bullColor : bearMss ? bearColor : neutralColor)
+    table.cell(dash, 0, 12, "M1 Sweep", text_color = panelText)
+    table.cell(dash, 1, 12, m1BuyConfirmed ? "BUY" : m1SellConfirmed ? "SELL" : m1BuyArmed or m1SellArmed ? "Armed" : m1BuySetup or m1SellSetup ? "Setup" : "Wait", text_color = m1BuyConfirmed ? bullColor : m1SellConfirmed ? bearColor : neutralColor)
+    table.cell(dash, 0, 13, "M2 Pullback", text_color = panelText)
+    table.cell(dash, 1, 13, m2BuyConfirmed ? "BUY" : m2SellConfirmed ? "SELL" : m2BuyArmed or m2SellArmed ? "Armed" : m2BuySetup or m2SellSetup ? "Setup" : "Wait", text_color = m2BuyConfirmed ? bullColor : m2SellConfirmed ? bearColor : neutralColor)
+    table.cell(dash, 0, 14, "M3 Range Raid", text_color = panelText)
+    table.cell(dash, 1, 14, m3BuyConfirmed ? "BUY" : m3SellConfirmed ? "SELL" : m3BuyArmed or m3SellArmed ? "Armed" : m3BuySetup or m3SellSetup ? "Setup" : "Wait", text_color = m3BuyConfirmed ? bullColor : m3SellConfirmed ? bearColor : neutralColor)
+    table.cell(dash, 0, 15, "Cooldown", text_color = panelText)
+    table.cell(dash, 1, 15, cooldownOk ? "Ready" : "Active", text_color = cooldownOk ? bullColor : goldColor)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 13. ALERTS
+// ══════════════════════════════════════════════════════════════════════════════
+alertcondition(m1BuyConfirmed, title = "M1 BUY - Liquidity Sweep Reversal", message = "M1 BUY: liquidity sweep reversal study signal on {{ticker}} {{interval}}")
+alertcondition(m1SellConfirmed, title = "M1 SELL - Liquidity Sweep Reversal", message = "M1 SELL: liquidity sweep reversal study signal on {{ticker}} {{interval}}")
+alertcondition(m2BuyConfirmed, title = "M2 BUY - Continuation Pullback", message = "M2 BUY: continuation pullback study signal on {{ticker}} {{interval}}")
+alertcondition(m2SellConfirmed, title = "M2 SELL - Continuation Pullback", message = "M2 SELL: continuation pullback study signal on {{ticker}} {{interval}}")
+alertcondition(m3BuyConfirmed, title = "M3 BUY - Range Raid Reversal", message = "M3 BUY: range raid reversal study signal on {{ticker}} {{interval}}")
+alertcondition(m3SellConfirmed, title = "M3 SELL - Range Raid Reversal", message = "M3 SELL: range raid reversal study signal on {{ticker}} {{interval}}")
+alertcondition(buySignal, title = "Any BUY Model", message = "SMC BUY model study signal on {{ticker}} {{interval}}")
+alertcondition(sellSignal, title = "Any SELL Model", message = "SMC SELL model study signal on {{ticker}} {{interval}}")
+
+// ══════════════════════════════════════════════════════════════════════════════
+// END v0.2
+// ══════════════════════════════════════════════════════════════════════════════

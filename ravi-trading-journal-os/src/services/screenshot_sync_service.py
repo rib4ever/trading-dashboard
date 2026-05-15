@@ -16,7 +16,6 @@ TRADES_DATABASE_ID = os.environ.get("NOTION_TRADES_DATABASE_ID")
 SCREENSHOTS_DATABASE_ID = os.environ.get("NOTION_SCREENSHOTS_DATABASE_ID")
 GOOGLE_DRIVE_ROOT_FOLDER_ID = os.environ.get("GOOGLE_DRIVE_ROOT_FOLDER_ID")
 
-
 SLOT_CONFIG = [
     (1, "Screenshot Slot 1 Type", "Screenshot Slot 1 File"),
     (2, "Screenshot Slot 2 Type", "Screenshot Slot 2 File"),
@@ -24,7 +23,6 @@ SLOT_CONFIG = [
     (4, "Screenshot Slot 4 Type", "Screenshot Slot 4 File"),
     (5, "Screenshot Slot 5 Type", "Screenshot Slot 5 File"),
 ]
-
 
 STATUS_READY = "Ready to Sync"
 STATUS_SYNCED = "Synced to Drive"
@@ -80,11 +78,6 @@ def notion_select(value: str) -> dict[str, Any]:
     return {"select": {"name": value}}
 
 
-def notion_status(value: str) -> dict[str, Any]:
-    # Notion status options must exist in the database. Current MVP DB may still use default statuses.
-    return {"status": {"name": value}}
-
-
 def notion_date(value: str) -> dict[str, Any]:
     return {"date": {"start": value}}
 
@@ -107,7 +100,7 @@ def download_file(url: str) -> bytes:
 
 def update_trade_status(notion: NotionClient, page_id: str, status: str, notes: str, processed: bool, folder_url: str | None = None) -> None:
     props: dict[str, Any] = {
-        "Screenshot Sync Status": notion_status(status),
+        "Screenshot Sync Status": notion_select(status),
         "Screenshot Sync Notes": notion_rich_text(notes),
         "Last Screenshot Sync Time": notion_date(now_iso()),
         "Screenshots Processed": {"checkbox": processed},
@@ -123,7 +116,7 @@ def query_ready_trades(notion: NotionClient) -> list[dict[str, Any]]:
     payload = {
         "filter": {
             "property": "Screenshot Sync Status",
-            "status": {"equals": STATUS_READY},
+            "select": {"equals": STATUS_READY},
         }
     }
     return notion.query_database(TRADES_DATABASE_ID, payload)
@@ -181,7 +174,7 @@ def create_screenshot_record(
         "Google Drive Folder URL": {"url": target_folder.get("webViewLink")},
         "Final File Name": notion_rich_text(final_file_name),
         "Screenshot Source Key": notion_rich_text(source_key),
-        "Sync Status": notion_status("Synced"),
+        "Sync Status": notion_select("Synced"),
         "Processed Time": notion_date(now_iso()),
     }
     notion.create_page(SCREENSHOTS_DATABASE_ID, properties)

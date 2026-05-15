@@ -1,0 +1,30 @@
+{
+  "root": {
+    "name": "Trading Journal OS",
+    "folder_id": "GOOGLE_DRIVE_ROOT_FOLDER_ID"
+  },
+  "trades": {
+    "path": "01_Trades",
+    "folder_id": "GOOGLE_DRIVE_01_TRADES_FOLDER_ID"
+  },
+  "mt5_pending": {
+    "path": "02_Imports/MT5_CSV/pending",
+    "folder_id": "MT5_IMPORT_PENDING_FOLDER_ID"
+  },
+  "mt5_processed": {
+    "path": "02_Imports/MT5_CSV/processed",
+    "folder_id": "MT5_IMPORT_PROCESSED_FOLDER_ID"
+  },
+  "mt5_failed": {
+    "path": "02_Imports/MT5_CSV/failed",
+    "folder_id": "MT5_IMPORT_FAILED_FOLDER_ID"
+  },
+  "dashboard_exports": {
+    "path": "05_Dashboard_Exports",
+    "folder_id": "GOOGLE_DRIVE_DASHBOARD_EXPORTS_FOLDER_ID"
+  },
+  "backups": {
+    "path": "99_Backups",
+    "folder_id": "GOOGLE_DRIVE_BACKUPS_FOLDER_ID"
+  }
+}

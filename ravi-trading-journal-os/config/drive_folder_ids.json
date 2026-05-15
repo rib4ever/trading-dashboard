@@ -7,7 +7,7 @@
   "system": {
     "path": "00_System",
     "folder_id": "1i_inFb2Zmc3MqJBm8WMlyHapOe2garsY",
-    "url": "https://drive.google.com/drive/folders/1i_inFb2Zmc3MqJBm8WMlyHapOe2garsY"
+    "url": "https://drive.google.com/drive/folders/1i_inFb2ZmcMqJBm8WMlyHapOe2garsY"
   },
   "trades": {
     "path": "01_Trades",
@@ -18,6 +18,26 @@
     "path": "02_Imports",
     "folder_id": "1kuiW1dzAlf2Vj6JHqSq3rEkzCJws4ZK7",
     "url": "https://drive.google.com/drive/folders/1kuiW1dzAlf2Vj6JHqSq3rEkzCJws4ZK7"
+  },
+  "mt5_csv": {
+    "path": "02_Imports/MT5_CSV",
+    "folder_id": "12WnkKwlcqT6zdSnNe4rcnLbr2NLBb_RD",
+    "url": "https://drive.google.com/drive/folders/12WnkKwlcqT6zdSnNe4rcnLbr2NLBb_RD"
+  },
+  "mt5_pending": {
+    "path": "02_Imports/MT5_CSV/pending",
+    "folder_id": "1kZechhNq-7KAumieK5ZZok_8_RQ1i68F",
+    "url": "https://drive.google.com/drive/folders/1kZechhNq-7KAumieK5ZZok_8_RQ1i68F"
+  },
+  "mt5_processed": {
+    "path": "02_Imports/MT5_CSV/processed",
+    "folder_id": "1EcujFhJ117h3uRIKB3eh_cTZjNALqwO5",
+    "url": "https://drive.google.com/drive/folders/1EcujFhJ117h3uRIKB3eh_cTZjNALqwO5"
+  },
+  "mt5_failed": {
+    "path": "02_Imports/MT5_CSV/failed",
+    "folder_id": "11BZAWV1tz3RtngZ-fgHg8t-zgmTyGE-B",
+    "url": "https://drive.google.com/drive/folders/11BZAWV1tz3RtngZ-fgHg8t-zgmTyGE-B"
   },
   "reviews": {
     "path": "03_Reviews",

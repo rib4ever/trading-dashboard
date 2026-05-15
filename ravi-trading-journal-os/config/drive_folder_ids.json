@@ -4,28 +4,49 @@
     "folder_id": "1-to08pPKUFMvaIpzykzRd9HuKt1GzK-w",
     "url": "https://drive.google.com/drive/folders/1-to08pPKUFMvaIpzykzRd9HuKt1GzK-w"
   },
+  "system": {
+    "path": "00_System",
+    "folder_id": "1i_inFb2Zmc3MqJBm8WMlyHapOe2garsY",
+    "url": "https://drive.google.com/drive/folders/1i_inFb2Zmc3MqJBm8WMlyHapOe2garsY"
+  },
   "trades": {
     "path": "01_Trades",
-    "folder_id": "PENDING_MANUAL_FOLDER_ID"
+    "folder_id": "1i4yORnf6k2i5dKBV7Eah548KYFurZyOn",
+    "url": "https://drive.google.com/drive/folders/1i4yORnf6k2i5dKBV7Eah548KYFurZyOn"
   },
-  "mt5_pending": {
-    "path": "02_Imports/MT5_CSV/pending",
-    "folder_id": "PENDING_MANUAL_FOLDER_ID"
+  "imports": {
+    "path": "02_Imports",
+    "folder_id": "1kuiW1dzAlf2Vj6JHqSq3rEkzCJws4ZK7",
+    "url": "https://drive.google.com/drive/folders/1kuiW1dzAlf2Vj6JHqSq3rEkzCJws4ZK7"
   },
-  "mt5_processed": {
-    "path": "02_Imports/MT5_CSV/processed",
-    "folder_id": "PENDING_MANUAL_FOLDER_ID"
+  "reviews": {
+    "path": "03_Reviews",
+    "folder_id": "1T61-5bjy5Wt8NPQjyltwQnEZPpLnBti_",
+    "url": "https://drive.google.com/drive/folders/1T61-5bjy5Wt8NPQjyltwQnEZPpLnBti_"
   },
-  "mt5_failed": {
-    "path": "02_Imports/MT5_CSV/failed",
-    "folder_id": "PENDING_MANUAL_FOLDER_ID"
+  "backtesting": {
+    "path": "04_Backtesting",
+    "folder_id": "1yl0ezbFTukstoN3sAAooIV0YS_qADcX_",
+    "url": "https://drive.google.com/drive/folders/1yl0ezbFTukstoN3sAAooIV0YS_qADcX_"
   },
   "dashboard_exports": {
     "path": "05_Dashboard_Exports",
-    "folder_id": "PENDING_MANUAL_FOLDER_ID"
+    "folder_id": "1zGrhn-J5NmuF3tFUzSQsPCj_XvbSxWrO",
+    "url": "https://drive.google.com/drive/folders/1zGrhn-J5NmuF3tFUzSQsPCj_XvbSxWrO"
+  },
+  "reports": {
+    "path": "06_Reports",
+    "folder_id": "13bBRBTZxNRqwBq4ertxNVKGzsfBInRcw",
+    "url": "https://drive.google.com/drive/folders/13bBRBTZxNRqwBq4ertxNVKGzsfBInRcw"
+  },
+  "playbook_examples": {
+    "path": "07_Playbook_Examples",
+    "folder_id": "1PLsuulP-7W7-IlvSmfSu-mzo7B7NPh54",
+    "url": "https://drive.google.com/drive/folders/1PLsuulP-7W7-IlvSmfSu-mzo7B7NPh54"
   },
   "backups": {
     "path": "99_Backups",
-    "folder_id": "PENDING_MANUAL_FOLDER_ID"
+    "folder_id": "184SOIY5Gb0JYT85Imoz_Fr92_NwAotkk",
+    "url": "https://drive.google.com/drive/folders/184SOIY5Gb0JYT85Imoz_Fr92_NwAotkk"
   }
 }

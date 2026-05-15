@@ -1,0 +1,31 @@
+{
+  "root": {
+    "name": "Trading Journal OS",
+    "folder_id": "1-to08pPKUFMvaIpzykzRd9HuKt1GzK-w",
+    "url": "https://drive.google.com/drive/folders/1-to08pPKUFMvaIpzykzRd9HuKt1GzK-w"
+  },
+  "trades": {
+    "path": "01_Trades",
+    "folder_id": "PENDING_MANUAL_FOLDER_ID"
+  },
+  "mt5_pending": {
+    "path": "02_Imports/MT5_CSV/pending",
+    "folder_id": "PENDING_MANUAL_FOLDER_ID"
+  },
+  "mt5_processed": {
+    "path": "02_Imports/MT5_CSV/processed",
+    "folder_id": "PENDING_MANUAL_FOLDER_ID"
+  },
+  "mt5_failed": {
+    "path": "02_Imports/MT5_CSV/failed",
+    "folder_id": "PENDING_MANUAL_FOLDER_ID"
+  },
+  "dashboard_exports": {
+    "path": "05_Dashboard_Exports",
+    "folder_id": "PENDING_MANUAL_FOLDER_ID"
+  },
+  "backups": {
+    "path": "99_Backups",
+    "folder_id": "PENDING_MANUAL_FOLDER_ID"
+  }
+}

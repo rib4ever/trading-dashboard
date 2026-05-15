@@ -1,0 +1,11 @@
+{
+  "Before 4H": {"image_type": "BEFORE", "timeframe": "4H", "drive_subfolder": "01_context"},
+  "Before 1H": {"image_type": "BEFORE", "timeframe": "1H", "drive_subfolder": "01_context"},
+  "Before 15M": {"image_type": "BEFORE", "timeframe": "15M", "drive_subfolder": "01_context"},
+  "Entry 5M": {"image_type": "ENTRY", "timeframe": "5M", "drive_subfolder": "02_entry"},
+  "Entry 3M": {"image_type": "ENTRY", "timeframe": "3M", "drive_subfolder": "02_entry"},
+  "Exit 5M": {"image_type": "EXIT", "timeframe": "5M", "drive_subfolder": "03_exit"},
+  "Review": {"image_type": "REVIEW", "timeframe": "AUTO", "drive_subfolder": "04_review"},
+  "Mistake": {"image_type": "MISTAKE", "timeframe": "AUTO", "drive_subfolder": "05_mistakes"},
+  "Extra": {"image_type": "EXTRA", "timeframe": "AUTO", "drive_subfolder": "99_extra"}
+}

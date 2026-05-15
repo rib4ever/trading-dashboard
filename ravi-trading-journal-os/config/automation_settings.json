@@ -1,0 +1,6 @@
+{
+  "timezone": "Europe/Paris",
+  "max_screenshot_slots": 5,
+  "auto_detect_ready_to_sync": false,
+  "duplicate_prevention_enabled": true
+}

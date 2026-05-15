@@ -1,72 +1,113 @@
 {
+  "active_root_note": "Active root is the newest extracted Trading Journal OS folder created from the ZIP structure.",
   "root": {
     "name": "Trading Journal OS",
-    "folder_id": "1-to08pPKUFMvaIpzykzRd9HuKt1GzK-w",
-    "url": "https://drive.google.com/drive/folders/1-to08pPKUFMvaIpzykzRd9HuKt1GzK-w"
+    "folder_id": "1xTKxCN4EKnwMMKdidF6NET4V57Fh4Rfl",
+    "url": "https://drive.google.com/drive/folders/1xTKxCN4EKnwMMKdidF6NET4V57Fh4Rfl"
   },
   "system": {
     "path": "00_System",
-    "folder_id": "1i_inFb2Zmc3MqJBm8WMlyHapOe2garsY",
-    "url": "https://drive.google.com/drive/folders/1i_inFb2ZmcMqJBm8WMlyHapOe2garsY"
+    "folder_id": "1x-WwvNY7npIUCcql_NJ1C5awKUOmZ2hj",
+    "url": "https://drive.google.com/drive/folders/1x-WwvNY7npIUCcql_NJ1C5awKUOmZ2hj"
   },
   "trades": {
     "path": "01_Trades",
-    "folder_id": "1i4yORnf6k2i5dKBV7Eah548KYFurZyOn",
-    "url": "https://drive.google.com/drive/folders/1i4yORnf6k2i5dKBV7Eah548KYFurZyOn"
+    "folder_id": "12fs9-r1cF82ogcFLiFfDBIPhLMtu6uHE",
+    "url": "https://drive.google.com/drive/folders/12fs9-r1cF82ogcFLiFfDBIPhLMtu6uHE"
   },
   "imports": {
     "path": "02_Imports",
-    "folder_id": "1kuiW1dzAlf2Vj6JHqSq3rEkzCJws4ZK7",
-    "url": "https://drive.google.com/drive/folders/1kuiW1dzAlf2Vj6JHqSq3rEkzCJws4ZK7"
+    "folder_id": "1ZuMUIIoGanHtrAm1Omhp18_iLZNk_HLN",
+    "url": "https://drive.google.com/drive/folders/1ZuMUIIoGanHtrAm1Omhp18_iLZNk_HLN"
   },
   "mt5_csv": {
     "path": "02_Imports/MT5_CSV",
-    "folder_id": "12WnkKwlcqT6zdSnNe4rcnLbr2NLBb_RD",
-    "url": "https://drive.google.com/drive/folders/12WnkKwlcqT6zdSnNe4rcnLbr2NLBb_RD"
+    "folder_id": "1mzJlv0e-pkEXaZyDK3GAayukI4Vb2Taq",
+    "url": "https://drive.google.com/drive/folders/1mzJlv0e-pkEXaZyDK3GAayukI4Vb2Taq"
   },
   "mt5_pending": {
     "path": "02_Imports/MT5_CSV/pending",
-    "folder_id": "1kZechhNq-7KAumieK5ZZok_8_RQ1i68F",
-    "url": "https://drive.google.com/drive/folders/1kZechhNq-7KAumieK5ZZok_8_RQ1i68F"
+    "folder_id": "1z-g1GYa7tAL9Ck1f2ZgSpUPvJUtzSDsj",
+    "url": "https://drive.google.com/drive/folders/1z-g1GYa7tAL9Ck1f2ZgSpUPvJUtzSDsj"
   },
   "mt5_processed": {
     "path": "02_Imports/MT5_CSV/processed",
-    "folder_id": "1EcujFhJ117h3uRIKB3eh_cTZjNALqwO5",
-    "url": "https://drive.google.com/drive/folders/1EcujFhJ117h3uRIKB3eh_cTZjNALqwO5"
+    "folder_id": "1Lm2KuqeBib35PMSAs9inVFSObIGPXWaM",
+    "url": "https://drive.google.com/drive/folders/1Lm2KuqeBib35PMSAs9inVFSObIGPXWaM"
   },
   "mt5_failed": {
     "path": "02_Imports/MT5_CSV/failed",
-    "folder_id": "11BZAWV1tz3RtngZ-fgHg8t-zgmTyGE-B",
-    "url": "https://drive.google.com/drive/folders/11BZAWV1tz3RtngZ-fgHg8t-zgmTyGE-B"
+    "folder_id": "11hmTIvTf9AW9kLYzMvT7H8f9wud0bhVq",
+    "url": "https://drive.google.com/drive/folders/11hmTIvTf9AW9kLYzMvT7H8f9wud0bhVq"
+  },
+  "broker_exports": {
+    "path": "02_Imports/Broker_Exports",
+    "folder_id": "1zvzk3U3fRDykKTZMZCa12okMPLlB7NRc",
+    "url": "https://drive.google.com/drive/folders/1zvzk3U3fRDykKTZMZCa12okMPLlB7NRc"
+  },
+  "broker_pending": {
+    "path": "02_Imports/Broker_Exports/pending",
+    "folder_id": "1PPVKE9aGUOJMc-UWrkdONHx0bNmVNUEZ",
+    "url": "https://drive.google.com/drive/folders/1PPVKE9aGUOJMc-UWrkdONHx0bNmVNUEZ"
+  },
+  "broker_processed": {
+    "path": "02_Imports/Broker_Exports/processed",
+    "folder_id": "1qNMIIrSwbTCYb71rp6vwb66ZaVEry86p",
+    "url": "https://drive.google.com/drive/folders/1qNMIIrSwbTCYb71rp6vwb66ZaVEry86p"
+  },
+  "broker_failed": {
+    "path": "02_Imports/Broker_Exports/failed",
+    "folder_id": "1YGaH7X3EJBQo9aA6JqvQfov3lO7CzMM1",
+    "url": "https://drive.google.com/drive/folders/1YGaH7X3EJBQo9aA6JqvQfov3lO7CzMM1"
+  },
+  "manual_csv": {
+    "path": "02_Imports/Manual_CSV",
+    "folder_id": "1sfBbb6k8wgVDeCjgRsy31_Z5WGfMl84D",
+    "url": "https://drive.google.com/drive/folders/1sfBbb6k8wgVDeCjgRsy31_Z5WGfMl84D"
+  },
+  "manual_pending": {
+    "path": "02_Imports/Manual_CSV/pending",
+    "folder_id": "1VxLFdQCeI1MLnc5EoEtRmWproxrqv8th",
+    "url": "https://drive.google.com/drive/folders/1VxLFdQCeI1MLnc5EoEtRmWproxrqv8th"
+  },
+  "manual_processed": {
+    "path": "02_Imports/Manual_CSV/processed",
+    "folder_id": "1O6adsey55Fi7yYbSk0nQaT702AVEbBI7",
+    "url": "https://drive.google.com/drive/folders/1O6adsey55Fi7yYbSk0nQaT702AVEbBI7"
+  },
+  "manual_failed": {
+    "path": "02_Imports/Manual_CSV/failed",
+    "folder_id": "1LAq5ce8NoVnAddERH2DJtQS5UJxbvTrD",
+    "url": "https://drive.google.com/drive/folders/1LAq5ce8NoVnAddERH2DJtQS5UJxbvTrD"
   },
   "reviews": {
     "path": "03_Reviews",
-    "folder_id": "1T61-5bjy5Wt8NPQjyltwQnEZPpLnBti_",
-    "url": "https://drive.google.com/drive/folders/1T61-5bjy5Wt8NPQjyltwQnEZPpLnBti_"
+    "folder_id": "1D_0YrWe9BpNY9LW_GLl7dRkQIavVBBr8",
+    "url": "https://drive.google.com/drive/folders/1D_0YrWe9BpNY9LW_GLl7dRkQIavVBBr8"
   },
   "backtesting": {
     "path": "04_Backtesting",
-    "folder_id": "1yl0ezbFTukstoN3sAAooIV0YS_qADcX_",
-    "url": "https://drive.google.com/drive/folders/1yl0ezbFTukstoN3sAAooIV0YS_qADcX_"
+    "folder_id": "1ryr7Ba-hlgyPaTVjsqmLipTboZ801M_N",
+    "url": "https://drive.google.com/drive/folders/1ryr7Ba-hlgyPaTVjsqmLipTboZ801M_N"
   },
   "dashboard_exports": {
     "path": "05_Dashboard_Exports",
-    "folder_id": "1zGrhn-J5NmuF3tFUzSQsPCj_XvbSxWrO",
-    "url": "https://drive.google.com/drive/folders/1zGrhn-J5NmuF3tFUzSQsPCj_XvbSxWrO"
+    "folder_id": "1HP0N1MS3e1ucqRMGrE70A5VnOItR9Xtc",
+    "url": "https://drive.google.com/drive/folders/1HP0N1MS3e1ucqRMGrE70A5VnOItR9Xtc"
   },
   "reports": {
     "path": "06_Reports",
-    "folder_id": "13bBRBTZxNRqwBq4ertxNVKGzsfBInRcw",
-    "url": "https://drive.google.com/drive/folders/13bBRBTZxNRqwBq4ertxNVKGzsfBInRcw"
+    "folder_id": "1g1qjhqouB4XmFWH0ERPhUnNgtkBJJVBt",
+    "url": "https://drive.google.com/drive/folders/1g1qjhqouB4XmFWH0ERPhUnNgtkBJJVBt"
   },
   "playbook_examples": {
     "path": "07_Playbook_Examples",
-    "folder_id": "1PLsuulP-7W7-IlvSmfSu-mzo7B7NPh54",
-    "url": "https://drive.google.com/drive/folders/1PLsuulP-7W7-IlvSmfSu-mzo7B7NPh54"
+    "folder_id": "1IDWwmxW_p69BZqbJ0cNkW7e16BXkc6-i",
+    "url": "https://drive.google.com/drive/folders/1IDWwmxW_p69BZqbJ0cNkW7e16BXkc6-i"
   },
   "backups": {
     "path": "99_Backups",
-    "folder_id": "184SOIY5Gb0JYT85Imoz_Fr92_NwAotkk",
-    "url": "https://drive.google.com/drive/folders/184SOIY5Gb0JYT85Imoz_Fr92_NwAotkk"
+    "folder_id": "1p4Cc3FfahJ8gzs7GE7LMYQ0Jx-aOKVTJ",
+    "url": "https://drive.google.com/drive/folders/1p4Cc3FfahJ8gzs7GE7LMYQ0Jx-aOKVTJ"
   }
 }

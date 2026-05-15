@@ -1,0 +1,22 @@
+name: Ravi Trading Journal OS Weekly Backup
+
+on:
+  workflow_dispatch:
+
+jobs:
+  weekly-backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r ravi-trading-journal-os/requirements.txt
+
+      - name: Run backup placeholder
+        run: python ravi-trading-journal-os/scripts/run_backup.py

@@ -1,11 +1,8 @@
 from dotenv import load_dotenv
 
-
-def main():
-    load_dotenv()
-    print("Ravi Trading Journal OS - Screenshot Sync placeholder")
-    print("Next build step: connect Notion and Google Drive clients.")
+from src.services.screenshot_sync_service import run_screenshot_sync
 
 
 if __name__ == "__main__":
-    main()
+    load_dotenv()
+    run_screenshot_sync()

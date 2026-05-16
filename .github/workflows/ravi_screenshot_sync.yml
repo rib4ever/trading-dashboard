@@ -2,6 +2,8 @@ name: Ravi Screenshot Sync
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: '*/15 * * * *'
 
 jobs:
   screenshot-sync:
@@ -14,7 +16,7 @@ jobs:
       - run: pip install -r ravi-trading-journal-os/requirements.txt
       - run: |
           cd ravi-trading-journal-os
-          python scripts/run_screenshot_sync.py
+          PYTHONPATH=. python scripts/run_screenshot_sync.py
         env:
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
           NOTION_TRADES_DATABASE_ID: ${{ secrets.NOTION_TRADES_DATABASE_ID }}

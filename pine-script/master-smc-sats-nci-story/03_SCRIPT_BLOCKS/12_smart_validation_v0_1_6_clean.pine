@@ -1,0 +1,121 @@
+// ══════════════════════════════════════════════════════════════════════════════
+// 12 NCI SMART VALIDATION — v0.1.6 CLEAN
+// Standalone injection block. Do not run as a separate indicator.
+//
+// Purpose:
+// - Keep existing SMC/SATS visuals untouched.
+// - Do not add extra FVG/OB drawings or extra visual noise by default.
+// - Enhance v0.1.4 Three-OK alerts with smart validation scoring.
+// - Dashboard 3-OK remains the base trigger:
+//   HTF POI + Execution Zone + Key Touch.
+// - Smart validation adds: HTF bias, candle close, sweep, impulse/FVG presence,
+//   SATS TQI/ER quality, killzone, and existing SMC/SATS entry state.
+// ══════════════════════════════════════════════════════════════════════════════
+
+GRP_NCI_V16 = "15 NCI Smart Alerts v0.1.6"
+
+nciV16Enabled = input.bool(true, "Enable Smart 3-OK Alerts", group=GRP_NCI_V16)
+nciV16AlertMode = input.string("Smart Validated", "Alert Mode", options=["Three OK only", "Smart Validated", "Three OK or Smart"], group=GRP_NCI_V16)
+nciV16Side = input.string("Both", "Alert Side", options=["Both", "Buy only", "Sell only"], group=GRP_NCI_V16)
+nciV16MinScore = input.int(7, "Minimum Smart Score", minval=1, maxval=10, group=GRP_NCI_V16)
+nciV16RequireHtfBias = input.bool(true, "Smart: Require HTF Bias", group=GRP_NCI_V16)
+nciV16RequireBodyClose = input.bool(true, "Smart: Require Candle Close Confirmation", group=GRP_NCI_V16)
+nciV16RequireSweep = input.bool(false, "Smart: Require Liquidity Sweep", group=GRP_NCI_V16)
+nciV16RequireImpulse = input.bool(false, "Smart: Require Impulse / FVG", group=GRP_NCI_V16)
+nciV16RequireSatsQuality = input.bool(true, "Smart: Require SATS TQI + ER", group=GRP_NCI_V16)
+nciV16RequireKillzone = input.bool(false, "Smart: Require Killzone OK", group=GRP_NCI_V16)
+nciV16CooldownBars = input.int(10, "Cooldown Bars", minval=0, maxval=500, group=GRP_NCI_V16)
+nciV16AlertOnClose = input.bool(true, "Trigger After Candle Close", group=GRP_NCI_V16)
+nciV16UseDynamicAlert = input.bool(true, "Use alert() Dynamic Message", group=GRP_NCI_V16)
+nciV16ShowLabels = input.bool(false, "Show Smart BUY/SELL Labels", group=GRP_NCI_V16)
+nciV16ShowMiniPanel = input.bool(false, "Show Mini Smart Panel", group=GRP_NCI_V16)
+nciV16AtrLen = input.int(14, "ATR Length", minval=3, maxval=100, group=GRP_NCI_V16)
+nciV16SweepLen = input.int(20, "Sweep Lookback", minval=3, maxval=100, group=GRP_NCI_V16)
+nciV16ImpulseAtr = input.float(1.0, "Impulse ATR Multiple", minval=0.1, maxval=5.0, step=0.1, group=GRP_NCI_V16)
+nciV16BuyText = input.string("BUY 3 checks OK + smart validation", "Buy Alert Text", group=GRP_NCI_V16)
+nciV16SellText = input.string("SELL 3 checks OK + smart validation", "Sell Alert Text", group=GRP_NCI_V16)
+
+nciV16Atr = ta.atr(nciV16AtrLen)
+nciV16Range = math.max(high - low, syminfo.mintick)
+nciV16Body = math.abs(close - open)
+nciV16BodyRatio = nciV16Body / nciV16Range
+nciV16BullBodyClose = close > open and close >= high - nciV16Range * 0.25
+nciV16BearBodyClose = close < open and close <= low + nciV16Range * 0.25
+nciV16BullImpulse = close > open and nciV16BodyRatio >= 0.60 and nciV16Range >= nciV16Atr * nciV16ImpulseAtr
+nciV16BearImpulse = close < open and nciV16BodyRatio >= 0.60 and nciV16Range >= nciV16Atr * nciV16ImpulseAtr
+nciV16BullFvg = low > high[2] and nciV16BullImpulse
+nciV16BearFvg = high < low[2] and nciV16BearImpulse
+nciV16SellSideSweep = low < ta.lowest(low[1], nciV16SweepLen) and close > low
+nciV16BuySideSweep = high > ta.highest(high[1], nciV16SweepLen) and close < high
+
+// Existing SMC/SATS dashboard truth.
+nciV16ThreeBuy = htfBullPoiContext and executionBullZoneOk and bullKeyReaction
+nciV16ThreeSell = htfBearPoiContext and executionBearZoneOk and bearKeyReaction
+nciV16BuySideOn = nciV16Side == "Both" or nciV16Side == "Buy only"
+nciV16SellSideOn = nciV16Side == "Both" or nciV16Side == "Sell only"
+nciV16TimingOk = nciV16AlertOnClose ? barstate.isconfirmed : true
+
+// Validation components.
+nciV16SatsOk = tqi >= effectiveMinTqi and erValue >= effectiveMinEr
+nciV16BuyHtfOk = htfBullishBias
+nciV16SellHtfOk = htfBearishBias
+nciV16BuySweepOk = sweepOkBuy or nciV16SellSideSweep
+nciV16SellSweepOk = sweepOkSell or nciV16BuySideSweep
+nciV16BuyImpulseOk = nciV16BullImpulse or nciV16BullFvg
+nciV16SellImpulseOk = nciV16BearImpulse or nciV16BearFvg
+nciV16BuyEntryStateOk = bullSniperEntry or normalBullEntry or keyLevelBullEntry or bullOpportunityEntry
+nciV16SellEntryStateOk = bearSniperEntry or normalBearEntry or keyLevelBearEntry or bearOpportunityEntry
+
+nciV16BuyScore = (nciV16ThreeBuy ? 3 : 0) + (nciV16BuyHtfOk ? 1 : 0) + ((nciV16BullBodyClose or nciV16BullImpulse) ? 1 : 0) + (nciV16BuySweepOk ? 1 : 0) + (nciV16BuyImpulseOk ? 1 : 0) + (nciV16SatsOk ? 1 : 0) + (killzoneAllowed ? 1 : 0) + (nciV16BuyEntryStateOk ? 1 : 0)
+nciV16SellScore = (nciV16ThreeSell ? 3 : 0) + (nciV16SellHtfOk ? 1 : 0) + ((nciV16BearBodyClose or nciV16BearImpulse) ? 1 : 0) + (nciV16SellSweepOk ? 1 : 0) + (nciV16SellImpulseOk ? 1 : 0) + (nciV16SatsOk ? 1 : 0) + (killzoneAllowed ? 1 : 0) + (nciV16SellEntryStateOk ? 1 : 0)
+
+nciV16BuySmartOk = nciV16ThreeBuy and (not nciV16RequireHtfBias or nciV16BuyHtfOk) and (not nciV16RequireBodyClose or nciV16BullBodyClose or nciV16BullImpulse) and (not nciV16RequireSweep or nciV16BuySweepOk) and (not nciV16RequireImpulse or nciV16BuyImpulseOk) and (not nciV16RequireSatsQuality or nciV16SatsOk) and (not nciV16RequireKillzone or killzoneAllowed) and nciV16BuyScore >= nciV16MinScore
+nciV16SellSmartOk = nciV16ThreeSell and (not nciV16RequireHtfBias or nciV16SellHtfOk) and (not nciV16RequireBodyClose or nciV16BearBodyClose or nciV16BearImpulse) and (not nciV16RequireSweep or nciV16SellSweepOk) and (not nciV16RequireImpulse or nciV16SellImpulseOk) and (not nciV16RequireSatsQuality or nciV16SatsOk) and (not nciV16RequireKillzone or killzoneAllowed) and nciV16SellScore >= nciV16MinScore
+
+nciV16BuyModeOk = nciV16AlertMode == "Three OK only" ? nciV16ThreeBuy : nciV16AlertMode == "Smart Validated" ? nciV16BuySmartOk : nciV16ThreeBuy or nciV16BuySmartOk
+nciV16SellModeOk = nciV16AlertMode == "Three OK only" ? nciV16ThreeSell : nciV16AlertMode == "Smart Validated" ? nciV16SellSmartOk : nciV16ThreeSell or nciV16SellSmartOk
+
+var int nciV16LastBuyBar = na
+var int nciV16LastSellBar = na
+nciV16BuyCooldownOk = na(nciV16LastBuyBar) or bar_index - nciV16LastBuyBar > nciV16CooldownBars
+nciV16SellCooldownOk = na(nciV16LastSellBar) or bar_index - nciV16LastSellBar > nciV16CooldownBars
+
+nciV16BuySignal = nciV16Enabled and nciV16BuySideOn and nciV16TimingOk and nciV16BuyModeOk and nciV16BuyCooldownOk
+nciV16SellSignal = nciV16Enabled and nciV16SellSideOn and nciV16TimingOk and nciV16SellModeOk and nciV16SellCooldownOk
+
+nciV16Grade(int s) => s >= 9 ? "A+" : s >= 7 ? "A" : s >= 5 ? "B" : "WAIT"
+nciV16BuyMsg = "NCI v0.1.6 | " + syminfo.ticker + " " + timeframe.period + " | " + nciV16BuyText + " | Score " + str.tostring(nciV16BuyScore) + "/10 " + nciV16Grade(nciV16BuyScore) + " | Price " + str.tostring(close, format.mintick)
+nciV16SellMsg = "NCI v0.1.6 | " + syminfo.ticker + " " + timeframe.period + " | " + nciV16SellText + " | Score " + str.tostring(nciV16SellScore) + "/10 " + nciV16Grade(nciV16SellScore) + " | Price " + str.tostring(close, format.mintick)
+
+if nciV16BuySignal
+    nciV16LastBuyBar := bar_index
+    if nciV16UseDynamicAlert
+        alert(nciV16BuyMsg, alert.freq_once_per_bar_close)
+if nciV16SellSignal
+    nciV16LastSellBar := bar_index
+    if nciV16UseDynamicAlert
+        alert(nciV16SellMsg, alert.freq_once_per_bar_close)
+
+alertcondition(nciV16BuySignal, title="NCI v0.1.6 Smart BUY", message="NCI v0.1.6 Smart BUY: Three dashboard checks plus smart validation passed")
+alertcondition(nciV16SellSignal, title="NCI v0.1.6 Smart SELL", message="NCI v0.1.6 Smart SELL: Three dashboard checks plus smart validation passed")
+
+if nciV16ShowLabels and nciV16BuySignal
+    label.new(bar_index, low - nciV16Atr, "SMART BUY\n" + str.tostring(nciV16BuyScore) + "/10 " + nciV16Grade(nciV16BuyScore), style=label.style_label_up, color=color.new(bullColor, 0), textcolor=color.white, size=size.small)
+if nciV16ShowLabels and nciV16SellSignal
+    label.new(bar_index, high + nciV16Atr, "SMART SELL\n" + str.tostring(nciV16SellScore) + "/10 " + nciV16Grade(nciV16SellScore), style=label.style_label_down, color=color.new(bearColor, 0), textcolor=color.white, size=size.small)
+
+var table nciV16MiniPanel = table.new(position.bottom_right, 2, 4, border_width=1)
+if barstate.islast and nciV16ShowMiniPanel
+    nciV16Bg = color.new(themeBackgroundRef, themePanelTransparency)
+    table.cell(nciV16MiniPanel, 0, 0, "NCI Smart", text_color=themePanelText, bgcolor=color.new(themeBaseNeutral, 45), text_size=size.small)
+    table.cell(nciV16MiniPanel, 1, 0, "v0.1.6", text_color=themePanelText, bgcolor=color.new(themeBaseNeutral, 45), text_size=size.small)
+    table.cell(nciV16MiniPanel, 0, 1, "Buy", text_color=themePanelText, bgcolor=nciV16Bg, text_size=size.small)
+    table.cell(nciV16MiniPanel, 1, 1, str.tostring(nciV16BuyScore) + "/10 " + nciV16Grade(nciV16BuyScore), text_color=themePanelText, bgcolor=nciV16Bg, text_size=size.small)
+    table.cell(nciV16MiniPanel, 0, 2, "Sell", text_color=themePanelText, bgcolor=nciV16Bg, text_size=size.small)
+    table.cell(nciV16MiniPanel, 1, 2, str.tostring(nciV16SellScore) + "/10 " + nciV16Grade(nciV16SellScore), text_color=themePanelText, bgcolor=nciV16Bg, text_size=size.small)
+    table.cell(nciV16MiniPanel, 0, 3, "State", text_color=themePanelText, bgcolor=nciV16Bg, text_size=size.small)
+    table.cell(nciV16MiniPanel, 1, 3, nciV16BuySmartOk ? "BUY smart" : nciV16SellSmartOk ? "SELL smart" : nciV16ThreeBuy ? "BUY 3 OK" : nciV16ThreeSell ? "SELL 3 OK" : "WAIT", text_color=themePanelText, bgcolor=nciV16Bg, text_size=size.small)
+if barstate.islast and not nciV16ShowMiniPanel
+    table.clear(nciV16MiniPanel, 0, 0, 1, 3)
+
+// End 12 NCI SMART VALIDATION — v0.1.6 CLEAN

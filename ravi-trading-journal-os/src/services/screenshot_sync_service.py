@@ -209,19 +209,24 @@ def process_trade(page: dict[str, Any], notion: NotionClient, drive: GoogleDrive
     }
 
     processed = 0
-    skipped = 0
+    skipped_empty = 0
+    skipped_duplicates = 0
     notes: list[str] = []
     has_manual = False
     has_pending = False
     has_error = False
+    attempted_slots = 0
 
     for slot_number, type_prop, file_prop in SLOT_CONFIG:
         slot_type = get_text(page, type_prop)
         files = get_files(page, file_prop)
 
         if not slot_type and not files:
-            skipped += 1
+            skipped_empty += 1
             continue
+
+        attempted_slots += 1
+
         if slot_type and not files:
             has_pending = True
             notes.append(f"Slot {slot_number}: type selected but no file")
@@ -240,7 +245,7 @@ def process_trade(page: dict[str, Any], notion: NotionClient, drive: GoogleDrive
         source_key = generate_screenshot_source_key(trade_id, slot_number, slot_type, original_name)
 
         if screenshot_source_exists(notion, source_key):
-            skipped += 1
+            skipped_duplicates += 1
             notes.append(f"Slot {slot_number}: duplicate skipped")
             continue
 
@@ -270,13 +275,23 @@ def process_trade(page: dict[str, Any], notion: NotionClient, drive: GoogleDrive
         final_status = STATUS_MANUAL
     elif processed > 0:
         final_status = STATUS_SYNCED
+    elif skipped_duplicates > 0 and not has_pending:
+        final_status = STATUS_SYNCED
     elif has_pending:
         final_status = STATUS_PENDING
+    elif attempted_slots == 0:
+        final_status = STATUS_NOT_STARTED
     else:
         final_status = STATUS_NOT_STARTED
 
-    summary = f"Processed: {processed}. Skipped: {skipped}. Notes: {' | '.join(notes) if notes else 'No issues.'}"
-    update_trade_status(notion, page_id, final_status, summary, processed > 0, trade_folder.get("webViewLink"))
+    processed_flag = processed > 0 or skipped_duplicates > 0
+    summary = (
+        f"Processed: {processed}. "
+        f"Duplicate skipped: {skipped_duplicates}. "
+        f"Empty skipped: {skipped_empty}. "
+        f"Notes: {' | '.join(notes) if notes else 'No issues.'}"
+    )
+    update_trade_status(notion, page_id, final_status, summary, processed_flag, trade_folder.get("webViewLink"))
 
 
 def run_screenshot_sync() -> None:

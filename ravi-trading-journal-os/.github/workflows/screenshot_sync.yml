@@ -2,6 +2,8 @@ name: Ravi Trading Journal OS Screenshot Sync
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: '*/15 * * * *'
 
 jobs:
   screenshot-sync:

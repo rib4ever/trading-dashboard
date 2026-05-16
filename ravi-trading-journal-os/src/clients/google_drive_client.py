@@ -3,22 +3,48 @@ import json
 import os
 
 from google.oauth2 import service_account
+from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 
 
 class GoogleDriveClient:
-    """Minimal Google Drive API client for folders and uploads."""
+    """Google Drive API client for Ravi Trading Journal OS.
+
+    Preferred for personal Gmail Drive: OAuth refresh token.
+    Fallback for Workspace Shared Drives: service account JSON.
+    """
 
     def __init__(self):
-        raw_json = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON")
-        if not raw_json:
-            raise RuntimeError("Missing GOOGLE_SERVICE_ACCOUNT_JSON")
-
-        info = json.loads(raw_json)
-        scopes = ["https://www.googleapis.com/auth/drive"]
-        credentials = service_account.Credentials.from_service_account_info(info, scopes=scopes)
+        credentials = self._build_credentials()
         self.service = build("drive", "v3", credentials=credentials)
+
+    def _build_credentials(self):
+        scopes = ["https://www.googleapis.com/auth/drive"]
+
+        oauth_client_id = os.environ.get("GOOGLE_OAUTH_CLIENT_ID")
+        oauth_client_secret = os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET")
+        oauth_refresh_token = os.environ.get("GOOGLE_OAUTH_REFRESH_TOKEN")
+
+        if oauth_client_id and oauth_client_secret and oauth_refresh_token:
+            return Credentials(
+                token=None,
+                refresh_token=oauth_refresh_token,
+                token_uri="https://oauth2.googleapis.com/token",
+                client_id=oauth_client_id,
+                client_secret=oauth_client_secret,
+                scopes=scopes,
+            )
+
+        raw_json = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON")
+        if raw_json:
+            info = json.loads(raw_json)
+            return service_account.Credentials.from_service_account_info(info, scopes=scopes)
+
+        raise RuntimeError(
+            "Missing Google Drive credentials. Add OAuth secrets GOOGLE_OAUTH_CLIENT_ID, "
+            "GOOGLE_OAUTH_CLIENT_SECRET, GOOGLE_OAUTH_REFRESH_TOKEN, or fallback GOOGLE_SERVICE_ACCOUNT_JSON."
+        )
 
     def get_or_create_folder(self, name: str, parent_id: str) -> dict:
         safe_name = name.replace("'", "\\'")

@@ -1,0 +1,159 @@
+// ══════════════════════════════════════════════════════════════════════════════
+// 20 NCI STORY OVERLAY FOR FULL ICT — v0.2.0
+// This block is appended to the 100% restored ICT Validated SMC script.
+// It does not replace the ICT OB/FVG/OTE/Breaker/BPR/IFVG/IDM logic.
+// It reads the real ICT state and turns it into Ravi-style story language.
+// ══════════════════════════════════════════════════════════════════════════════
+
+nciOvlGroup = "NCI Story Overlay v0.2.0"
+nciOvlShowPanel = input.bool(true, "Show NCI Story Overlay Panel", group=nciOvlGroup)
+nciOvlPanelPos = input.string("Top Right", "Panel Position", options=["Top Right", "Top Left", "Bottom Right", "Bottom Left"], group=nciOvlGroup)
+nciOvlPanelMode = input.string("Simple", "Panel Mode", options=["Simple", "Detailed", "Debug"], group=nciOvlGroup)
+nciOvlUseAlerts = input.bool(true, "Enable NCI Story Alerts", group=nciOvlGroup)
+nciOvlAlertOnClose = input.bool(true, "Alert After Candle Close", group=nciOvlGroup)
+nciOvlRequireOTE = input.bool(false, "Require OTE for NCI Signal Alert", group=nciOvlGroup)
+nciOvlRequireBreakerOrBPR = input.bool(false, "Require Breaker/BPR/IFVG for NCI Signal Alert", group=nciOvlGroup)
+nciOvlShowLabels = input.bool(false, "Show NCI Story Signal Labels", group=nciOvlGroup)
+
+nciOvlPos(string p) => p == "Top Left" ? position.top_left : p == "Bottom Right" ? position.bottom_right : p == "Bottom Left" ? position.bottom_left : position.top_right
+nciOvlYes(bool x) => x ? "YES" : "NO"
+nciOvlDir(bool b) => b ? "bullish" : "bearish"
+nciOvlPrice(float x) => na(x) ? "n/a" : str.tostring(x, format.mintick)
+
+bool nciOvlBullOBActive = false
+bool nciOvlBearOBActive = false
+int nciOvlBullOBCount = 0
+int nciOvlBearOBCount = 0
+int nciOvlBestBullOBScore = 0
+int nciOvlBestBearOBScore = 0
+if array.size(orderBlocks) > 0
+    for i = 0 to array.size(orderBlocks) - 1
+        OrderBlock ob = array.get(orderBlocks, i)
+        if not ob.mitigated
+            if ob.isBullish
+                nciOvlBullOBActive := true
+                nciOvlBullOBCount += 1
+                nciOvlBestBullOBScore := math.max(nciOvlBestBullOBScore, ob.score)
+            else
+                nciOvlBearOBActive := true
+                nciOvlBearOBCount += 1
+                nciOvlBestBearOBScore := math.max(nciOvlBestBearOBScore, ob.score)
+
+bool nciOvlBullOTEInside = false
+bool nciOvlBearOTEInside = false
+bool nciOvlBullOTEActive = false
+bool nciOvlBearOTEActive = false
+int nciOvlOTECount = 0
+if array.size(oteZones) > 0
+    for i = 0 to array.size(oteZones) - 1
+        OTEZone ote = array.get(oteZones, i)
+        if not ote.invalidated
+            nciOvlOTECount += 1
+            if ote.isBullish
+                nciOvlBullOTEActive := true
+                nciOvlBullOTEInside := nciOvlBullOTEInside or (close <= ote.zoneTop and close >= ote.zoneBottom)
+            else
+                nciOvlBearOTEActive := true
+                nciOvlBearOTEInside := nciOvlBearOTEInside or (close >= ote.zoneBottom and close <= ote.zoneTop)
+
+bool nciOvlBullBreakerInside = false
+bool nciOvlBearBreakerInside = false
+int nciOvlBreakerCount = 0
+if array.size(breakerBlocks) > 0
+    for i = 0 to array.size(breakerBlocks) - 1
+        BreakerBlock br = array.get(breakerBlocks, i)
+        if not br.mitigated
+            nciOvlBreakerCount += 1
+            if br.isBullish
+                nciOvlBullBreakerInside := nciOvlBullBreakerInside or (close <= br.top and close >= br.bottom)
+            else
+                nciOvlBearBreakerInside := nciOvlBearBreakerInside or (close <= br.top and close >= br.bottom)
+
+bool nciOvlBullIFVGInside = false
+bool nciOvlBearIFVGInside = false
+int nciOvlIFVGCount = 0
+if array.size(ifvgList) > 0
+    for i = 0 to array.size(ifvgList) - 1
+        IFVG iv = array.get(ifvgList, i)
+        if not iv.mitigated
+            nciOvlIFVGCount += 1
+            if iv.isBullish
+                nciOvlBullIFVGInside := nciOvlBullIFVGInside or (close <= iv.top and close >= iv.bottom)
+            else
+                nciOvlBearIFVGInside := nciOvlBearIFVGInside or (close <= iv.top and close >= iv.bottom)
+
+bool nciOvlBPRInside = false
+int nciOvlBPRCount = 0
+if array.size(bprList) > 0
+    for i = 0 to array.size(bprList) - 1
+        BPR bpr = array.get(bprList, i)
+        if not bpr.mitigated
+            nciOvlBPRCount += 1
+            nciOvlBPRInside := nciOvlBPRInside or (close <= bpr.top and close >= bpr.bottom)
+
+bool nciOvlBullAdvancedPoi = nciOvlBullOTEInside or nciOvlBullBreakerInside or nciOvlBullIFVGInside or nciOvlBPRInside
+bool nciOvlBearAdvancedPoi = nciOvlBearOTEInside or nciOvlBearBreakerInside or nciOvlBearIFVGInside or nciOvlBPRInside
+bool nciOvlBullCorePoi = nciOvlBullOBActive or nciOvlBullOTEActive or nciOvlBullAdvancedPoi
+bool nciOvlBearCorePoi = nciOvlBearOBActive or nciOvlBearOTEActive or nciOvlBearAdvancedPoi
+
+string nciOvlMaster = useHTF ? ("HTF " + htfTimeframe + " is " + nciOvlDir(htfStructureBullish)) : ("Chart structure is " + nciOvlDir(swingBullish))
+string nciOvlLocal = swingBullish == htfStructureBullish ? "Local structure continues HTF" : "Local structure is pulling back against HTF"
+string nciOvlLocation = nciOvlBullOTEInside ? "Inside bullish OTE" : nciOvlBearOTEInside ? "Inside bearish OTE" : nciOvlBPRInside ? "Inside BPR decision zone" : nciOvlBullBreakerInside ? "Inside bullish breaker/IFVG" : nciOvlBearBreakerInside ? "Inside bearish breaker/IFVG" : nciOvlBullOBActive and nciOvlBearOBActive ? "Between active buy/sell POIs" : nciOvlBullOBActive ? "Bullish POI active" : nciOvlBearOBActive ? "Bearish POI active" : "No active ICT POI nearby"
+string nciOvlFinal = longSignal ? "VALIDATED BUY STORY" : shortSignal ? "VALIDATED SELL STORY" : nciOvlBullOTEInside and htfStructureBullish ? "WAIT: buy reaction inside OTE" : nciOvlBearOTEInside and not htfStructureBullish ? "WAIT: sell reaction inside OTE" : htfStructureBullish ? "BULLISH STORY BUILDING" : "BEARISH STORY BUILDING"
+string nciOvlExecution = longSignal ? "BUY signal confirmed by ICT" : shortSignal ? "SELL signal confirmed by ICT" : nciOvlBullAdvancedPoi ? "Watch bullish reaction" : nciOvlBearAdvancedPoi ? "Watch bearish reaction" : "Wait for ICT validation"
+string nciOvlConfidence = (longSignal or shortSignal) ? "Validated ICT signal" : (nciOvlBullAdvancedPoi or nciOvlBearAdvancedPoi) ? "Advanced POI present" : (nciOvlBullCorePoi or nciOvlBearCorePoi) ? "Core POI present" : "Building"
+
+bool nciOvlTimingOk = nciOvlAlertOnClose ? barstate.isconfirmed : true
+bool nciOvlLongAllowed = longSignal and (not nciOvlRequireOTE or nciOvlBullOTEInside) and (not nciOvlRequireBreakerOrBPR or nciOvlBullAdvancedPoi)
+bool nciOvlShortAllowed = shortSignal and (not nciOvlRequireOTE or nciOvlBearOTEInside) and (not nciOvlRequireBreakerOrBPR or nciOvlBearAdvancedPoi)
+bool nciOvlLongAlert = nciOvlUseAlerts and nciOvlTimingOk and nciOvlLongAllowed
+bool nciOvlShortAlert = nciOvlUseAlerts and nciOvlTimingOk and nciOvlShortAllowed
+
+alertcondition(nciOvlLongAlert, title="NCI ICT Overlay BUY Story", message="NCI v0.2.0: ICT validated BUY story. Check OTE/OB/FVG/Breaker/BPR context.")
+alertcondition(nciOvlShortAlert, title="NCI ICT Overlay SELL Story", message="NCI v0.2.0: ICT validated SELL story. Check OTE/OB/FVG/Breaker/BPR context.")
+alertcondition(nciOvlBullOTEInside and nciOvlTimingOk, title="NCI ICT Bullish OTE Touch", message="NCI v0.2.0: Price is inside bullish OTE decision zone.")
+alertcondition(nciOvlBearOTEInside and nciOvlTimingOk, title="NCI ICT Bearish OTE Touch", message="NCI v0.2.0: Price is inside bearish OTE decision zone.")
+
+if nciOvlShowLabels and nciOvlLongAlert
+    label.new(bar_index, low, "NCI BUY STORY\nICT validated", style=label.style_label_up, color=color.new(sigLongColor, 0), textcolor=color.white, size=size.small)
+if nciOvlShowLabels and nciOvlShortAlert
+    label.new(bar_index, high, "NCI SELL STORY\nICT validated", style=label.style_label_down, color=color.new(sigShortColor, 0), textcolor=color.white, size=size.small)
+
+var table nciOvlPanel = table.new(nciOvlPos(nciOvlPanelPos), 2, 12, border_width=1)
+nciOvlCell(int c, int r, string txt, color bg) => table.cell(nciOvlPanel, c, r, txt, text_color=color.white, bgcolor=bg, text_size=nciOvlPanelMode == "Simple" ? size.small : size.tiny)
+
+if barstate.islast and nciOvlShowPanel
+    color nciHead = color.new(color.rgb(36, 42, 54), 0)
+    color nciRow = color.new(color.rgb(36, 42, 54), 18)
+    color nciGood = color.new(color.green, 70)
+    color nciBad = color.new(color.red, 72)
+    table.clear(nciOvlPanel, 0, 0, 1, 11)
+    nciOvlCell(0, 0, "NCI + ICT", nciHead)
+    nciOvlCell(1, 0, "v0.2.0", nciHead)
+    nciOvlCell(0, 1, "Final", nciRow)
+    nciOvlCell(1, 1, nciOvlFinal, (longSignal ? nciGood : shortSignal ? nciBad : nciRow))
+    nciOvlCell(0, 2, "Master", nciRow)
+    nciOvlCell(1, 2, nciOvlMaster, nciRow)
+    nciOvlCell(0, 3, "Local", nciRow)
+    nciOvlCell(1, 3, nciOvlLocal, nciRow)
+    nciOvlCell(0, 4, "Location", nciRow)
+    nciOvlCell(1, 4, nciOvlLocation, nciRow)
+    nciOvlCell(0, 5, "Execution", nciRow)
+    nciOvlCell(1, 5, nciOvlExecution, nciRow)
+    nciOvlCell(0, 6, "Confidence", nciRow)
+    nciOvlCell(1, 6, nciOvlConfidence, nciRow)
+    nciOvlCell(0, 7, "OTE", nciRow)
+    nciOvlCell(1, 7, "B " + nciOvlYes(nciOvlBullOTEInside) + " / S " + nciOvlYes(nciOvlBearOTEInside), nciRow)
+    nciOvlCell(0, 8, "Advanced POI", nciRow)
+    nciOvlCell(1, 8, "BRK " + str.tostring(nciOvlBreakerCount) + " | IFVG " + str.tostring(nciOvlIFVGCount) + " | BPR " + str.tostring(nciOvlBPRCount), nciRow)
+    if nciOvlPanelMode != "Simple"
+        nciOvlCell(0, 9, "OB Scores", nciRow)
+        nciOvlCell(1, 9, "B " + str.tostring(nciOvlBestBullOBScore) + " / S " + str.tostring(nciOvlBestBearOBScore), nciRow)
+        nciOvlCell(0, 10, "ICT Signal", nciRow)
+        nciOvlCell(1, 10, lastSigDirection + " " + str.tostring(lastSigScore) + "/11", nciRow)
+        nciOvlCell(0, 11, "KZ", nciRow)
+        nciOvlCell(1, 11, currentlyInKZ ? getKZName() : "Off-session", nciRow)
+else if barstate.islast and not nciOvlShowPanel
+    table.clear(nciOvlPanel, 0, 0, 1, 11)
+
+// End NCI STORY OVERLAY FOR FULL ICT — v0.2.0

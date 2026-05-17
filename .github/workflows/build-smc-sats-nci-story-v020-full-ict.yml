@@ -1,0 +1,47 @@
+name: Build SMC SATS NCI Story v0.2.0 Full ICT Overlay
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'pine-script/master-smc-sats-nci-story/03_SCRIPT_BLOCKS/00_restore_ict_validated_smc_source.py'
+      - 'pine-script/master-smc-sats-nci-story/03_SCRIPT_BLOCKS/20_nci_story_overlay_for_ict_v0_2_0.pine'
+      - 'pine-script/master-smc-sats-nci-story/03_SCRIPT_BLOCKS/98_assemble_full_ict_overlay_v0_2_0.py'
+      - '.github/workflows/build-smc-sats-nci-story-v020-full-ict.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: smc-sats-nci-story-v020-full-ict-main
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Restore ICT source
+        run: python pine-script/master-smc-sats-nci-story/03_SCRIPT_BLOCKS/00_restore_ict_validated_smc_source.py
+
+      - name: Build v0.2.0 full ICT overlay candidate
+        run: python pine-script/master-smc-sats-nci-story/03_SCRIPT_BLOCKS/98_assemble_full_ict_overlay_v0_2_0.py
+
+      - name: Commit generated files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pine-script/master-smc-sats-nci-story/03_SCRIPT_BLOCKS/00_ict_validated_smc_source_full.pine
+          git add pine-script/master-smc-sats-nci-story/03_CANDIDATES/master-smc-sats-nci-story-v0.2.0-full-ict-overlay.pine
+          if git diff --cached --quiet; then
+            echo "No v0.2.0 candidate changes to commit."
+            exit 0
+          fi
+          git commit -m "Build SMC SATS NCI Story v0.2.0 full ICT overlay"
+          git pull --rebase --autostash origin main
+          git push origin HEAD:main

@@ -1,6 +1,4 @@
-import base64
 import json
-import mimetypes
 import os
 import time
 from typing import Any
@@ -10,8 +8,8 @@ import requests
 from src.clients.google_drive_client import GoogleDriveClient
 from src.clients.notion_client import NotionClient
 from src.utils.config_loader import load_text_config
+from src.utils.contact_sheet import build_contact_sheet, image_bytes_to_data_url
 from src.utils.date_utils import now_iso
-
 
 TRADES_DATABASE_ID = os.environ.get("NOTION_TRADES_DATABASE_ID")
 SCREENSHOTS_DATABASE_ID = os.environ.get("NOTION_SCREENSHOTS_DATABASE_ID")
@@ -44,8 +42,6 @@ def get_text(page: dict[str, Any], name: str) -> str | None:
         return prop["select"].get("name")
     if prop_type == "multi_select":
         return ", ".join(x.get("name", "") for x in prop.get("multi_select", [])) or None
-    if prop_type == "status" and prop.get("status"):
-        return prop["status"].get("name")
     if prop_type == "number":
         value = prop.get("number")
         return str(value) if value is not None else None
@@ -77,15 +73,19 @@ def notion_date(value: str) -> dict[str, Any]:
 def query_ready_trades(notion: NotionClient) -> list[dict[str, Any]]:
     if not TRADES_DATABASE_ID:
         raise RuntimeError("Missing NOTION_TRADES_DATABASE_ID")
-    payload = {"filter": {"property": "AI Review Status", "select": {"equals": AI_STATUS_READY}}}
-    return notion.query_database(TRADES_DATABASE_ID, payload)
+    return notion.query_database(
+        TRADES_DATABASE_ID,
+        {"filter": {"property": "AI Review Status", "select": {"equals": AI_STATUS_READY}}},
+    )
 
 
 def query_screenshot_records(notion: NotionClient, trade_id: str) -> list[dict[str, Any]]:
     if not SCREENSHOTS_DATABASE_ID:
         raise RuntimeError("Missing NOTION_SCREENSHOTS_DATABASE_ID")
-    payload = {"filter": {"property": "Trade ID", "rich_text": {"equals": trade_id}}}
-    return notion.query_database(SCREENSHOTS_DATABASE_ID, payload)
+    return notion.query_database(
+        SCREENSHOTS_DATABASE_ID,
+        {"filter": {"property": "Trade ID", "rich_text": {"equals": trade_id}}},
+    )
 
 
 def build_trade_context(page: dict[str, Any]) -> dict[str, str | None]:
@@ -98,43 +98,41 @@ def build_trade_context(page: dict[str, Any]) -> dict[str, str | None]:
     return {name: get_text(page, name) for name in fields}
 
 
-def build_screenshot_context(screenshot_pages: list[dict[str, Any]]) -> list[dict[str, str | None]]:
-    rows: list[dict[str, str | None]] = []
-    for page in screenshot_pages[:MAX_SCREENSHOTS]:
-        rows.append(
-            {
-                "Screenshot Name": get_text(page, "Screenshot Name"),
-                "Slot Number": get_text(page, "Slot Number"),
-                "Source Slot Type": get_text(page, "Source Slot Type"),
-                "Image Type": get_text(page, "Image Type"),
-                "Timeframe": get_text(page, "Timeframe"),
-                "Category": get_text(page, "Category"),
-                "Google Drive URL": get_text(page, "Google Drive URL"),
-                "Google Drive File ID": get_text(page, "Google Drive File ID"),
-                "Final File Name": get_text(page, "Final File Name"),
-            }
-        )
+def build_screenshot_context(pages: list[dict[str, Any]]) -> list[dict[str, str | None]]:
+    rows = []
+    for page in pages[:MAX_SCREENSHOTS]:
+        rows.append({
+            "Screenshot Name": get_text(page, "Screenshot Name"),
+            "Slot Number": get_text(page, "Slot Number"),
+            "Source Slot Type": get_text(page, "Source Slot Type"),
+            "Image Type": get_text(page, "Image Type"),
+            "Timeframe": get_text(page, "Timeframe"),
+            "Category": get_text(page, "Category"),
+            "Google Drive URL": get_text(page, "Google Drive URL"),
+            "Google Drive File ID": get_text(page, "Google Drive File ID"),
+            "Final File Name": get_text(page, "Final File Name"),
+        })
     return rows
 
 
-def download_drive_file_as_data_url(drive: GoogleDriveClient, file_id: str, filename: str | None = None) -> str:
-    request = drive.service.files().get_media(fileId=file_id, supportsAllDrives=True)
-    file_bytes = request.execute()
-    mime_type = mimetypes.guess_type(filename or "screenshot.png")[0] or "image/png"
-    encoded = base64.b64encode(file_bytes).decode("utf-8")
-    return f"data:{mime_type};base64,{encoded}"
+def download_drive_file_bytes(drive: GoogleDriveClient, file_id: str) -> bytes:
+    return drive.service.files().get_media(fileId=file_id, supportsAllDrives=True).execute()
 
 
-def collect_image_inputs(drive: GoogleDriveClient, screenshots: list[dict[str, str | None]]) -> list[dict[str, Any]]:
-    image_inputs: list[dict[str, Any]] = []
-    for screenshot in screenshots:
-        file_id = screenshot.get("Google Drive File ID")
+def build_review_contact_sheet_data_url(drive: GoogleDriveClient, trade_id: str, screenshots: list[dict[str, str | None]]) -> tuple[str, int]:
+    items = []
+    for s in screenshots[:MAX_SCREENSHOTS]:
+        file_id = s.get("Google Drive File ID")
         if not file_id:
             continue
-        data_url = download_drive_file_as_data_url(drive, file_id, screenshot.get("Final File Name"))
-        label = f"{screenshot.get('Source Slot Type') or 'Screenshot'} | {screenshot.get('Timeframe') or ''} | {screenshot.get('Final File Name') or ''}"
-        image_inputs.append({"label": label, "data_url": data_url})
-    return image_inputs
+        label = f"{s.get('Source Slot Type') or 'Screenshot'} | {s.get('Timeframe') or ''} | {s.get('Final File Name') or ''}"
+        items.append({"label": label, "bytes": download_drive_file_bytes(drive, file_id)})
+
+    if not items:
+        raise RuntimeError("No downloadable Google Drive screenshots found for AI review")
+
+    sheet_bytes, mime_type = build_contact_sheet(items, f"AI Review Packet — {trade_id}")
+    return image_bytes_to_data_url(sheet_bytes, mime_type), len(items)
 
 
 def _format_openai_error(response: requests.Response) -> str:
@@ -159,49 +157,43 @@ def _post_openai_with_retries(payload: dict[str, Any]) -> dict[str, Any]:
         )
         if response.ok:
             return response.json()
-
         last_error = _format_openai_error(response)
         if response.status_code == 429 and attempt < OPENAI_MAX_RETRIES:
-            retry_after = response.headers.get("retry-after")
-            wait_seconds = int(retry_after) if retry_after and retry_after.isdigit() else min(10 * attempt, 30)
+            wait_seconds = min(10 * attempt, 30)
             print(f"OpenAI 429 on attempt {attempt}/{OPENAI_MAX_RETRIES}. Retrying in {wait_seconds}s.")
             time.sleep(wait_seconds)
             continue
-
         raise RuntimeError(last_error)
-
     raise RuntimeError(last_error)
 
 
-def call_openai_review(prompt: str, trade_context: dict[str, Any], screenshots: list[dict[str, str | None]], image_inputs: list[dict[str, Any]]) -> dict[str, Any]:
+def call_openai_review(prompt: str, trade_context: dict[str, Any], screenshots: list[dict[str, str | None]], contact_sheet_url: str, image_count: int) -> dict[str, Any]:
     user_text = {
         "task": "Review this trade and return the required JSON only.",
+        "review_mode": "single compressed contact sheet",
         "trade_context": trade_context,
         "screenshot_records": screenshots,
-        "image_count": len(image_inputs),
+        "image_count_in_contact_sheet": image_count,
         "model": OPENAI_MODEL,
-        "max_screenshots": MAX_SCREENSHOTS,
     }
-
-    content: list[dict[str, Any]] = [
-        {"type": "input_text", "text": prompt},
-        {"type": "input_text", "text": json.dumps(user_text, ensure_ascii=False, indent=2)},
-    ]
-    for image in image_inputs:
-        content.append({"type": "input_text", "text": f"Screenshot: {image['label']}"})
-        content.append({"type": "input_image", "image_url": image["data_url"]})
 
     payload = {
         "model": OPENAI_MODEL,
-        "input": [{"role": "user", "content": content}],
+        "input": [{
+            "role": "user",
+            "content": [
+                {"type": "input_text", "text": prompt},
+                {"type": "input_text", "text": json.dumps(user_text, ensure_ascii=False, indent=2)},
+                {"type": "input_image", "image_url": contact_sheet_url},
+            ],
+        }],
         "temperature": 0.2,
     }
 
     data = _post_openai_with_retries(payload)
-
     output_text = data.get("output_text")
     if not output_text:
-        parts: list[str] = []
+        parts = []
         for item in data.get("output", []):
             for content_item in item.get("content", []):
                 if content_item.get("type") == "output_text":
@@ -224,10 +216,8 @@ def call_openai_review(prompt: str, trade_context: dict[str, Any], screenshots: 
 def update_trade_review(notion: NotionClient, page_id: str, review: dict[str, Any]) -> None:
     needs_more = bool(review.get("needs_more_screenshots"))
     confidence = float(review.get("confidence", 0.0) or 0.0)
-    final_status = AI_STATUS_MORE_SCREENSHOTS if needs_more else AI_STATUS_COMPLETE
-
     props = {
-        "AI Review Status": notion_select(final_status),
+        "AI Review Status": notion_select(AI_STATUS_MORE_SCREENSHOTS if needs_more else AI_STATUS_COMPLETE),
         "AI Review": notion_rich_text(str(review.get("summary", ""))),
         "AI Reality Check": notion_rich_text(str(review.get("reality_check", ""))),
         "AI Mistake Diagnosis": notion_rich_text(str(review.get("mistake_diagnosis", ""))),
@@ -239,12 +229,11 @@ def update_trade_review(notion: NotionClient, page_id: str, review: dict[str, An
 
 
 def update_trade_error(notion: NotionClient, page_id: str, message: str) -> None:
-    props = {
+    notion.update_page(page_id, {
         "AI Review Status": notion_select(AI_STATUS_ERROR),
         "AI Review": notion_rich_text(message),
         "AI Reviewed Time": notion_date(now_iso()),
-    }
-    notion.update_page(page_id, props)
+    })
 
 
 def process_trade(page: dict[str, Any], notion: NotionClient, drive: GoogleDriveClient, prompt: str) -> None:
@@ -263,20 +252,18 @@ def process_trade(page: dict[str, Any], notion: NotionClient, drive: GoogleDrive
     screenshot_pages = query_screenshot_records(notion, trade_id)
     screenshots = build_screenshot_context(screenshot_pages)
     if not screenshots:
-        review = {
+        update_trade_review(notion, page_id, {
             "summary": "AI review cannot be completed because no synced screenshot records were found.",
             "reality_check": "No screenshots are available to compare against the journal story.",
-            "mistake_diagnosis": "Missing visual evidence. Sync at least one HTF/context and one entry screenshot.",
+            "mistake_diagnosis": "Missing visual evidence.",
             "future_rules": "Upload and sync chart screenshots before requesting AI review.",
             "confidence": 0.1,
             "needs_more_screenshots": True,
-            "missing_evidence": ["Synced screenshot records"],
-        }
-        update_trade_review(notion, page_id, review)
+        })
         return
 
-    image_inputs = collect_image_inputs(drive, screenshots)
-    review = call_openai_review(prompt, trade_context, screenshots, image_inputs)
+    contact_sheet_url, image_count = build_review_contact_sheet_data_url(drive, trade_id, screenshots)
+    review = call_openai_review(prompt, trade_context, screenshots, contact_sheet_url, image_count)
     update_trade_review(notion, page_id, review)
 
 

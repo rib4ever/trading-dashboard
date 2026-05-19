@@ -1,0 +1,26 @@
+name: Ravi AI Trade Review
+
+on:
+  workflow_dispatch:
+
+jobs:
+  ai-review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r ravi-trading-journal-os/requirements.txt
+      - run: |
+          cd ravi-trading-journal-os
+          PYTHONPATH=. python scripts/run_ai_trade_review.py
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          NOTION_TRADES_DATABASE_ID: ${{ secrets.NOTION_TRADES_DATABASE_ID }}
+          NOTION_SCREENSHOTS_DATABASE_ID: ${{ secrets.NOTION_SCREENSHOTS_DATABASE_ID }}
+          GOOGLE_DRIVE_ROOT_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_ROOT_FOLDER_ID }}
+          GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
+          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
+          GOOGLE_OAUTH_REFRESH_TOKEN: ${{ secrets.GOOGLE_OAUTH_REFRESH_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}

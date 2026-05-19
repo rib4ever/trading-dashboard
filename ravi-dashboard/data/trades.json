@@ -1,6 +1,46 @@
 {
   "trades": [
     {
+      "id": "TRD-20260519-9CB0C1",
+      "notionPageId": "3653f3a6-e6d1-8071-a64c-f338332b8207",
+      "notionUrl": "https://www.notion.so/XAU-first-live-trade-on-1k-3653f3a6e6d18071a64cf338332b8207",
+      "name": "XAU first live trade on 1k ",
+      "date": "2026-05-19",
+      "entryDateTime": "2026-05-19",
+      "exitDateTime": "2026-05-19",
+      "pair": "XAUUSD",
+      "direction": "Sell",
+      "setup": "FVG Entry",
+      "session": "Off Session",
+      "result": "Win",
+      "net": 28.88,
+      "gross": 28.88,
+      "commission": 0.0,
+      "fees": 0.0,
+      "r": 1.3752,
+      "plannedR": 0.0,
+      "riskAmount": 21.0,
+      "riskPercent": 0.0,
+      "entryPrice": 4505.61,
+      "exitPrice": 4488.97,
+      "lotSize": 0.02,
+      "stopLoss": 4517.67,
+      "takeProfit": 0.0,
+      "rules": true,
+      "quality": "C",
+      "mistakes": [
+        "Closed Early"
+      ],
+      "ai": "AI Review Complete",
+      "aiConfidence": 0.85,
+      "aiReview": "Ravi took a short position on XAUUSD based on a higher timeframe downtrend and a Fair Value Gap (FVG) on the 5-minute chart, targeting buy-side liquidity. The trade was entered around 4505.61 and exited early at 4488.97 for a profit, with a stop loss at 4517.67. The trade followed the FVG entry model and aligned with the overall downtrend context visible on the 4H and 1H charts.",
+      "aiRealityCheck": "The journal story matches the screenshots well. The 4H and 1H charts confirm a clear downtrend with marked key levels (KL) and liquidity zones. The 5M chart shows a visible FVG where the entry was taken, and price reacting to this zone as described. The liquidity sweep on the buy side is evident, supporting the short entry rationale. The stop loss placement above the recent high is logical. However, the take profit is not marked on the charts, and the exit appears early based on the visible price action. Overall, the story and screenshots are consistent with minor missing evidence on the exit rationale.",
+      "aiMistakeDiagnosis": "The main mistake was closing the trade early, which limited the profit potential. This is a psychological/risk management issue rather than a technical one, as the technical setup and entry timing were appropriate. The trade followed the model and respected higher timeframe context and liquidity concepts well.",
+      "aiFutureRules": "1) Trust the trade plan and allow the trade to reach the planned take profit or key liquidity targets unless clear invalidation occurs. 2) Mark take profit levels on charts for clarity and discipline. 3) Continue confirming entries with higher timeframe context and liquidity sweeps. 4) Work on emotional control to avoid premature exits.",
+      "driveFolder": "https://drive.google.com/drive/folders/1DW4vPFPhcW6eefPPweCG-721IW0qwhFc",
+      "screenshotSyncStatus": "Synced to Drive"
+    },
+    {
       "id": "TRD-20260516-TEST01",
       "notionPageId": "3623f3a6-e6d1-8182-814e-e24cac2f49a9",
       "notionUrl": "https://www.notion.so/TEST-XAUUSD-Buy-Screenshot-Sync-3623f3a6e6d18182814ee24cac2f49a9",
@@ -39,5 +79,5 @@
       "screenshotSyncStatus": "Synced to Drive"
     }
   ],
-  "count": 1
+  "count": 2
 }

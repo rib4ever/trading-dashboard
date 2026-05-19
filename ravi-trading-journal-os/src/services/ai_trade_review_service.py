@@ -2,6 +2,7 @@ import base64
 import json
 import mimetypes
 import os
+import time
 from typing import Any
 
 import requests
@@ -22,7 +23,8 @@ AI_STATUS_COMPLETE = "AI Review Complete"
 AI_STATUS_MORE_SCREENSHOTS = "Needs More Screenshots"
 AI_STATUS_ERROR = "AI Review Error"
 
-MAX_SCREENSHOTS = int(os.environ.get("AI_REVIEW_MAX_SCREENSHOTS", "5"))
+MAX_SCREENSHOTS = int(os.environ.get("AI_REVIEW_MAX_SCREENSHOTS", "3"))
+OPENAI_MAX_RETRIES = int(os.environ.get("OPENAI_MAX_RETRIES", "3"))
 
 
 def _prop(page: dict[str, Any], name: str) -> dict[str, Any] | None:
@@ -75,53 +77,23 @@ def notion_date(value: str) -> dict[str, Any]:
 def query_ready_trades(notion: NotionClient) -> list[dict[str, Any]]:
     if not TRADES_DATABASE_ID:
         raise RuntimeError("Missing NOTION_TRADES_DATABASE_ID")
-    payload = {
-        "filter": {
-            "property": "AI Review Status",
-            "select": {"equals": AI_STATUS_READY},
-        }
-    }
+    payload = {"filter": {"property": "AI Review Status", "select": {"equals": AI_STATUS_READY}}}
     return notion.query_database(TRADES_DATABASE_ID, payload)
 
 
 def query_screenshot_records(notion: NotionClient, trade_id: str) -> list[dict[str, Any]]:
     if not SCREENSHOTS_DATABASE_ID:
         raise RuntimeError("Missing NOTION_SCREENSHOTS_DATABASE_ID")
-    payload = {
-        "filter": {
-            "property": "Trade ID",
-            "rich_text": {"equals": trade_id},
-        }
-    }
+    payload = {"filter": {"property": "Trade ID", "rich_text": {"equals": trade_id}}}
     return notion.query_database(SCREENSHOTS_DATABASE_ID, payload)
 
 
 def build_trade_context(page: dict[str, Any]) -> dict[str, str | None]:
     fields = [
-        "Trade Name",
-        "Trade ID",
-        "Date",
-        "Pair",
-        "Direction",
-        "Account",
-        "Session",
-        "Setup Model",
-        "Result",
-        "Trade Quality",
-        "Followed Rules",
-        "Mistake Type",
-        "Entry Price",
-        "Exit Price",
-        "Stop Loss",
-        "Take Profit",
-        "Risk %",
-        "Risk Amount",
-        "Planned R",
-        "Result R",
-        "Net P/L",
-        "Raw Journal Story",
-        "Notes",
-        "Google Drive Trade Folder",
+        "Trade Name", "Trade ID", "Date", "Pair", "Direction", "Account", "Session", "Setup Model",
+        "Result", "Trade Quality", "Followed Rules", "Mistake Type", "Entry Price", "Exit Price",
+        "Stop Loss", "Take Profit", "Risk %", "Risk Amount", "Planned R", "Result R", "Net P/L",
+        "Raw Journal Story", "Notes", "Google Drive Trade Folder",
     ]
     return {name: get_text(page, name) for name in fields}
 
@@ -165,15 +137,50 @@ def collect_image_inputs(drive: GoogleDriveClient, screenshots: list[dict[str, s
     return image_inputs
 
 
-def call_openai_review(prompt: str, trade_context: dict[str, Any], screenshots: list[dict[str, str | None]], image_inputs: list[dict[str, Any]]) -> dict[str, Any]:
+def _format_openai_error(response: requests.Response) -> str:
+    try:
+        body = response.json()
+    except Exception:
+        body = response.text
+    return f"OpenAI API error {response.status_code}: {json.dumps(body, ensure_ascii=False)[:1500]}"
+
+
+def _post_openai_with_retries(payload: dict[str, Any]) -> dict[str, Any]:
     if not OPENAI_API_KEY:
         raise RuntimeError("Missing OPENAI_API_KEY")
 
+    last_error = "Unknown OpenAI error"
+    for attempt in range(1, OPENAI_MAX_RETRIES + 1):
+        response = requests.post(
+            "https://api.openai.com/v1/responses",
+            headers={"Authorization": f"Bearer {OPENAI_API_KEY}", "Content-Type": "application/json"},
+            json=payload,
+            timeout=180,
+        )
+        if response.ok:
+            return response.json()
+
+        last_error = _format_openai_error(response)
+        if response.status_code == 429 and attempt < OPENAI_MAX_RETRIES:
+            retry_after = response.headers.get("retry-after")
+            wait_seconds = int(retry_after) if retry_after and retry_after.isdigit() else min(10 * attempt, 30)
+            print(f"OpenAI 429 on attempt {attempt}/{OPENAI_MAX_RETRIES}. Retrying in {wait_seconds}s.")
+            time.sleep(wait_seconds)
+            continue
+
+        raise RuntimeError(last_error)
+
+    raise RuntimeError(last_error)
+
+
+def call_openai_review(prompt: str, trade_context: dict[str, Any], screenshots: list[dict[str, str | None]], image_inputs: list[dict[str, Any]]) -> dict[str, Any]:
     user_text = {
         "task": "Review this trade and return the required JSON only.",
         "trade_context": trade_context,
         "screenshot_records": screenshots,
         "image_count": len(image_inputs),
+        "model": OPENAI_MODEL,
+        "max_screenshots": MAX_SCREENSHOTS,
     }
 
     content: list[dict[str, Any]] = [
@@ -186,23 +193,11 @@ def call_openai_review(prompt: str, trade_context: dict[str, Any], screenshots: 
 
     payload = {
         "model": OPENAI_MODEL,
-        "input": [
-            {
-                "role": "user",
-                "content": content,
-            }
-        ],
+        "input": [{"role": "user", "content": content}],
         "temperature": 0.2,
     }
 
-    response = requests.post(
-        "https://api.openai.com/v1/responses",
-        headers={"Authorization": f"Bearer {OPENAI_API_KEY}", "Content-Type": "application/json"},
-        json=payload,
-        timeout=180,
-    )
-    response.raise_for_status()
-    data = response.json()
+    data = _post_openai_with_retries(payload)
 
     output_text = data.get("output_text")
     if not output_text:

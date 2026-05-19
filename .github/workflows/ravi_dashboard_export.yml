@@ -15,7 +15,15 @@ jobs:
         with:
           python-version: '3.11'
       - run: pip install -r ravi-trading-journal-os/requirements.txt
-      - run: |
+      - name: Fill missing Trade IDs
+        run: |
+          cd ravi-trading-journal-os
+          PYTHONPATH=. python scripts/run_trade_maintenance.py
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          NOTION_TRADES_DATABASE_ID: ${{ secrets.NOTION_TRADES_DATABASE_ID }}
+      - name: Export dashboard data
+        run: |
           cd ravi-trading-journal-os
           PYTHONPATH=. python scripts/run_dashboard_export.py
         env:

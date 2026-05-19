@@ -12,6 +12,14 @@ REPO_ROOT = ROOT_DIR.parent
 DASHBOARD_DATA_DIR = REPO_ROOT / "ravi-dashboard" / "data"
 EXPORT_PATH = DASHBOARD_DATA_DIR / "trades.json"
 
+SLOT_CONFIG = [
+    (1, "Screenshot Slot 1 Type", "Screenshot Slot 1 File"),
+    (2, "Screenshot Slot 2 Type", "Screenshot Slot 2 File"),
+    (3, "Screenshot Slot 3 Type", "Screenshot Slot 3 File"),
+    (4, "Screenshot Slot 4 Type", "Screenshot Slot 4 File"),
+    (5, "Screenshot Slot 5 Type", "Screenshot Slot 5 File"),
+]
+
 
 def _prop(page: dict[str, Any], name: str) -> dict[str, Any] | None:
     return page.get("properties", {}).get(name)
@@ -38,6 +46,8 @@ def value(page: dict[str, Any], name: str) -> Any:
         return prop.get("url")
     if t == "date" and prop.get("date"):
         return prop["date"].get("start")
+    if t == "files":
+        return prop.get("files", [])
     return None
 
 
@@ -46,6 +56,57 @@ def num(page: dict[str, Any], name: str) -> float:
         return float(value(page, name) or 0)
     except Exception:
         return 0.0
+
+
+def file_url(file_obj: dict[str, Any]) -> str:
+    if not file_obj:
+        return ""
+    if file_obj.get("type") == "file":
+        return file_obj.get("file", {}).get("url", "")
+    if file_obj.get("type") == "external":
+        return file_obj.get("external", {}).get("url", "")
+    return ""
+
+
+def category_from_slot_type(slot_type: str) -> str:
+    text = (slot_type or "").lower()
+    if any(x in text for x in ["4h", "1h", "15m", "before", "context", "htf"]):
+        return "context"
+    if any(x in text for x in ["entry", "5m", "3m", "execution"]):
+        return "entry"
+    if any(x in text for x in ["exit", "management", "close"]):
+        return "exit"
+    if any(x in text for x in ["review", "mistake"]):
+        return "review"
+    return "extra"
+
+
+def fallback_screenshots_from_trade_page(page: dict[str, Any]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for slot_number, type_prop, file_prop in SLOT_CONFIG:
+        slot_type = value(page, type_prop) or ""
+        files = value(page, file_prop) or []
+        if not files:
+            continue
+        first_file = files[0]
+        url = file_url(first_file)
+        name = first_file.get("name") or f"Screenshot Slot {slot_number}"
+        if not url:
+            continue
+        rows.append({
+            "name": name,
+            "slot": slot_number,
+            "slotType": slot_type,
+            "imageType": slot_type,
+            "timeframe": slot_type,
+            "category": category_from_slot_type(slot_type),
+            "driveUrl": url,
+            "fileId": "",
+            "thumbnailUrl": url,
+            "fileName": name,
+            "source": "trade_page_slot",
+        })
+    return rows
 
 
 def query_screenshots_for_trade(notion: NotionClient, trade_id: str) -> list[dict[str, Any]]:
@@ -67,8 +128,9 @@ def query_screenshots_for_trade(notion: NotionClient, trade_id: str) -> list[dic
             "category": value(page, "Category") or "",
             "driveUrl": value(page, "Google Drive URL") or "",
             "fileId": file_id,
-            "thumbnailUrl": f"https://drive.google.com/thumbnail?id={file_id}&sz=w1200" if file_id else "",
+            "thumbnailUrl": f"https://drive.google.com/thumbnail?id={file_id}&sz=w1600" if file_id else "",
             "fileName": value(page, "Final File Name") or "",
+            "source": "trade_screenshots_db",
         })
     return sorted(rows, key=lambda x: x.get("slot") or 99)
 
@@ -143,6 +205,8 @@ def run_dashboard_export() -> None:
     for page in pages:
         trade_id = value(page, "Trade ID") or page.get("id")
         screenshots = query_screenshots_for_trade(notion, trade_id)
+        if not screenshots:
+            screenshots = fallback_screenshots_from_trade_page(page)
         trades.append(normalize_trade(page, screenshots))
     DASHBOARD_DATA_DIR.mkdir(parents=True, exist_ok=True)
     EXPORT_PATH.write_text(json.dumps({"trades": trades, "count": len(trades)}, ensure_ascii=False, indent=2), encoding="utf-8")

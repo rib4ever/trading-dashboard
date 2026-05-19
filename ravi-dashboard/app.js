@@ -4,182 +4,21 @@ const demoTrades = [
   { date: '2026-05-03', pair: 'BTCUSD', direction: 'Sell', setup: 'SMC Continuation', session: 'New York', result: 'Win', net: 210, r: 2.4, rules: true, ai: 'Complete', mistakes: [], dashboardReady: true },
   { date: '2026-05-04', pair: 'NAS100', direction: 'Buy', setup: 'NCI Market Story', session: 'London + NY Overlap', result: 'Incomplete', net: 0, r: 0, rules: true, ai: 'Not Requested', mistakes: [], dashboardReady: false }
 ];
-
 let charts = [];
 let allTradesCache = [];
 let calendarDate = new Date();
-
-async function loadTrades() {
-  try {
-    const res = await fetch('./data/trades.json', { cache: 'no-store' });
-    if (!res.ok) throw new Error('No exported trades yet');
-    const data = await res.json();
-    return Array.isArray(data.trades) && data.trades.length ? data.trades : demoTrades;
-  } catch {
-    return demoTrades;
-  }
-}
-
-function filterTrades(trades) {
-  const mode = document.getElementById('periodFilter').value;
-  if (mode === 'all') return trades;
-  const now = new Date();
-  const days = mode === 'week' ? 7 : 31;
-  const cutoff = new Date(now.getTime() - days * 86400000);
-  return trades.filter(t => new Date(t.date) >= cutoff);
-}
-
-function money(v) { return `${v >= 0 ? '$' : '-$'}${Math.abs(v).toFixed(2)}`; }
-function pct(v) { return `${v.toFixed(1)}%`; }
-function dateKey(d) { return d.toISOString().slice(0, 10); }
-function isCompletedTrade(t) { return t.dashboardReady === true && !['Incomplete', '', null, undefined].includes(t.result); }
-function displayResult(t) { return t.result || 'Incomplete'; }
-
-function metrics(trades) {
-  const completed = trades.filter(isCompletedTrade);
-  const wins = completed.filter(t => String(t.result).toLowerCase().includes('win'));
-  const totalNet = completed.reduce((s, t) => s + Number(t.net || 0), 0);
-  const avgR = completed.length ? completed.reduce((s, t) => s + Number(t.r || 0), 0) / completed.length : 0;
-  const ruleRate = completed.length ? completed.filter(t => t.rules === true).length / completed.length * 100 : 0;
-  const byPair = groupSum(completed, 'pair', 'net');
-  const bestPair = Object.entries(byPair).sort((a,b) => b[1]-a[1])[0]?.[0] || '-';
-  return { completed, wins, totalNet, avgR, ruleRate, bestPair, winRate: completed.length ? wins.length / completed.length * 100 : 0 };
-}
-
-function groupSum(trades, key, valueKey) {
-  return trades.reduce((acc, t) => {
-    const k = t[key] || 'Unknown';
-    const v = Number(t[valueKey] || 0);
-    acc[k] = (acc[k] || 0) + v;
-    return acc;
-  }, {});
-}
-
-function groupCount(trades, key) {
-  return trades.reduce((acc, t) => {
-    const raw = t[key] || [];
-    const vals = Array.isArray(raw) ? raw : [raw || 'None'];
-    vals.forEach(v => acc[v] = (acc[v] || 0) + 1);
-    return acc;
-  }, {});
-}
-
-function destroyCharts() { charts.forEach(c => c.destroy()); charts = []; }
-function chartColors(values) { return values.map(v => v >= 0 ? '#22c55e' : '#ef4444'); }
-
-function renderCharts(trades) {
-  destroyCharts();
-  const completed = trades.filter(isCompletedTrade);
-  const sorted = [...completed].sort((a,b) => new Date(a.date) - new Date(b.date));
-  let cumulative = 0;
-  const equity = sorted.map(t => cumulative += Number(t.net || 0));
-  charts.push(new Chart(document.getElementById('equityChart'), { type: 'line', data: { labels: sorted.map(t => t.date), datasets: [{ label: 'Equity', data: equity, borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,.18)', tension: .35, fill: true }] }, options: chartOptions() }));
-
-  const winLoss = { Win: completed.filter(t => String(t.result).includes('Win')).length, Loss: completed.filter(t => String(t.result).includes('Loss')).length, BE: completed.filter(t => String(t.result).includes('Break')).length };
-  charts.push(new Chart(document.getElementById('winLossChart'), { type: 'doughnut', data: { labels: Object.keys(winLoss), datasets: [{ data: Object.values(winLoss), backgroundColor: ['#22c55e', '#ef4444', '#94a3b8'] }] }, options: chartOptions() }));
-
-  renderBar('pairChart', groupSum(completed, 'pair', 'net'));
-  renderBar('setupChart', groupSum(completed, 'setup', 'net'));
-  renderBar('sessionChart', groupSum(completed, 'session', 'net'));
-  renderBar('mistakeChart', groupCount(completed, 'mistakes'));
-}
-
-function renderBar(id, obj) {
-  const labels = Object.keys(obj);
-  const values = Object.values(obj);
-  charts.push(new Chart(document.getElementById(id), { type: 'bar', data: { labels, datasets: [{ data: values, backgroundColor: chartColors(values), borderRadius: 8 }] }, options: chartOptions() }));
-}
-
-function chartOptions() {
-  return { responsive: true, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#8c99ad' }, grid: { color: 'rgba(255,255,255,.05)' } }, y: { ticks: { color: '#8c99ad' }, grid: { color: 'rgba(255,255,255,.05)' } } } };
-}
-
-function renderTable(trades) {
-  document.getElementById('tradeRows').innerHTML = trades.map(t => {
-    const net = Number(t.net || 0);
-    const status = t.dashboardReady ? '✅ Ready' : `⚠️ ${t.calculationStatus || 'Incomplete'}`;
-    const missing = t.missingRequiredFields && t.missingRequiredFields !== 'None' ? t.missingRequiredFields : '';
-    return `<tr title="${missing}"><td>${t.date || ''}</td><td>${t.pair || ''}</td><td>${t.direction || ''}</td><td>${t.setup || ''}</td><td>${t.session || ''}</td><td><span class="badge">${displayResult(t)}</span></td><td class="${net >= 0 ? 'profit' : 'loss'}">${money(net)}</td><td>${Number(t.r || 0).toFixed(2)}R</td><td>${t.rules ? '✅' : '⚠️'}</td><td>${status}</td></tr>`;
-  }).join('');
-}
-
-function monthName(date) { return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }); }
-
-function summarizeByDay(trades) {
-  return trades.reduce((acc, t) => {
-    if (!t.date) return acc;
-    const key = String(t.date).slice(0, 10);
-    if (!acc[key]) acc[key] = { count: 0, net: 0, wins: 0, losses: 0, trades: [] };
-    acc[key].count += 1;
-    if (isCompletedTrade(t)) acc[key].net += Number(t.net || 0);
-    if (String(t.result).includes('Win')) acc[key].wins += 1;
-    if (String(t.result).includes('Loss')) acc[key].losses += 1;
-    acc[key].trades.push(t);
-    return acc;
-  }, {});
-}
-
-function renderCalendar(trades) {
-  const grid = document.getElementById('calendarGrid');
-  const year = calendarDate.getFullYear();
-  const month = calendarDate.getMonth();
-  const first = new Date(year, month, 1);
-  const start = new Date(first);
-  const mondayOffset = (first.getDay() + 6) % 7;
-  start.setDate(first.getDate() - mondayOffset);
-  const byDay = summarizeByDay(trades);
-  const monthTrades = trades.filter(t => { const d = new Date(t.date); return d.getFullYear() === year && d.getMonth() === month; });
-  const monthPL = monthTrades.filter(isCompletedTrade).reduce((s, t) => s + Number(t.net || 0), 0);
-
-  document.getElementById('calendarTitle').textContent = monthName(calendarDate);
-  document.getElementById('calendarPL').textContent = money(monthPL);
-  document.getElementById('calendarPL').className = monthPL >= 0 ? 'profit' : 'loss';
-  document.getElementById('calendarTrades').textContent = monthTrades.length;
-
-  const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun', 'Summary'];
-  let html = weekdays.map(d => `<div class="calendar-weekday ${d === 'Summary' ? 'summary-head' : ''}">${d}</div>`).join('');
-  for (let week = 0; week < 6; week++) {
-    let weekCount = 0;
-    let weekPL = 0;
-    for (let day = 0; day < 7; day++) {
-      const current = new Date(start);
-      current.setDate(start.getDate() + week * 7 + day);
-      const key = dateKey(current);
-      const info = byDay[key] || { count: 0, net: 0 };
-      weekCount += info.count;
-      weekPL += info.net;
-      const cls = info.count ? (info.net > 0 ? 'day-win' : info.net < 0 ? 'day-loss' : 'day-flat') : '';
-      const outside = current.getMonth() !== month ? 'outside-month' : '';
-      html += `<div class="calendar-cell ${cls} ${outside}"><div class="day-num">${current.getDate()}</div>${info.count ? `<div class="day-metrics"><div class="day-trades">${info.count} trade${info.count > 1 ? 's' : ''}</div><div class="day-pl ${info.net >= 0 ? 'profit' : 'loss'}">${money(info.net)}</div></div>` : ''}</div>`;
-    }
-    html += `<div class="calendar-summary"><div>${weekCount} trade${weekCount === 1 ? '' : 's'}</div><div class="summary-pl ${weekPL >= 0 ? 'profit' : 'loss'}">${money(weekPL)}</div></div>`;
-  }
-  grid.innerHTML = html;
-}
-
-async function render() {
-  if (!allTradesCache.length) allTradesCache = await loadTrades();
-  const trades = filterTrades(allTradesCache);
-  const m = metrics(trades);
-  document.getElementById('netProfit').textContent = money(m.totalNet);
-  document.getElementById('winRate').textContent = pct(m.winRate);
-  document.getElementById('totalTrades').textContent = allTradesCache.length;
-  document.getElementById('averageR').textContent = `${m.avgR.toFixed(2)}R`;
-  document.getElementById('bestPair').textContent = m.bestPair;
-  document.getElementById('ruleRate').textContent = pct(m.ruleRate);
-  renderCharts(trades);
-  renderTable(trades);
-  renderCalendar(allTradesCache);
-}
-
-document.getElementById('themeSelect').addEventListener('change', e => document.body.dataset.theme = e.target.value);
-document.getElementById('periodFilter').addEventListener('change', render);
-document.getElementById('prevMonth').addEventListener('click', () => { calendarDate.setMonth(calendarDate.getMonth() - 1); renderCalendar(allTradesCache); });
-document.getElementById('nextMonth').addEventListener('click', () => { calendarDate.setMonth(calendarDate.getMonth() + 1); renderCalendar(allTradesCache); });
-document.querySelectorAll('.tab-btn').forEach(btn => btn.addEventListener('click', () => {
-  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-  document.querySelectorAll('.tab-section').forEach(s => s.classList.remove('active'));
-  btn.classList.add('active');
-  document.getElementById(`tab-${btn.dataset.tab}`).classList.add('active');
-}));
-render();
+function cssVar(name){return getComputedStyle(document.body).getPropertyValue(name).trim()||getComputedStyle(document.documentElement).getPropertyValue(name).trim();}
+function themeColors(){return{accent:cssVar('--accent')||cssVar('--blue')||'#3b82f6',accent2:cssVar('--accent-2')||'#38bdf8',accent3:cssVar('--accent-3')||'#8b5cf6',green:cssVar('--green')||'#22c55e',red:cssVar('--red')||'#ef4444',muted:cssVar('--muted')||'#8c99ad',grid:'rgba(148,163,184,.16)'};}
+async function loadTrades(){try{const res=await fetch('./data/trades.json',{cache:'no-store'});if(!res.ok)throw new Error('No exported trades yet');const data=await res.json();document.getElementById('dataStatus').textContent=`Loaded ${data.count||data.trades?.length||0} trades from dashboard export`;return Array.isArray(data.trades)&&data.trades.length?data.trades:demoTrades;}catch{document.getElementById('dataStatus').textContent='Using demo data — no export file found';return demoTrades;}}
+function filterTrades(trades){const mode=document.getElementById('periodFilter').value;if(mode==='all')return trades;const now=new Date();const days=mode==='week'?7:31;const cutoff=new Date(now.getTime()-days*86400000);return trades.filter(t=>new Date(t.date)>=cutoff);}
+function money(v){return`${v>=0?'$':'-$'}${Math.abs(v).toFixed(2)}`;}function pct(v){return`${v.toFixed(1)}%`;}function dateKey(d){return d.toISOString().slice(0,10);}function isCompletedTrade(t){return t.dashboardReady===true&&!['Incomplete','',null,undefined].includes(t.result);}function displayResult(t){return t.result||'Incomplete';}
+function metrics(trades){const completed=trades.filter(isCompletedTrade);const wins=completed.filter(t=>String(t.result).toLowerCase().includes('win'));const totalNet=completed.reduce((s,t)=>s+Number(t.net||0),0);const avgR=completed.length?completed.reduce((s,t)=>s+Number(t.r||0),0)/completed.length:0;const ruleRate=completed.length?completed.filter(t=>t.rules===true).length/completed.length*100:0;const byPair=groupSum(completed,'pair','net');const bestPair=Object.entries(byPair).sort((a,b)=>b[1]-a[1])[0]?.[0]||'-';return{completed,wins,totalNet,avgR,ruleRate,bestPair,winRate:completed.length?wins.length/completed.length*100:0};}
+function groupSum(trades,key,valueKey){return trades.reduce((acc,t)=>{const k=t[key]||'Unknown';const v=Number(t[valueKey]||0);acc[k]=(acc[k]||0)+v;return acc;},{});}function groupCount(trades,key){return trades.reduce((acc,t)=>{const raw=t[key]||[];const vals=Array.isArray(raw)?raw:[raw||'None'];vals.forEach(v=>acc[v]=(acc[v]||0)+1);return acc;},{});}function destroyCharts(){charts.forEach(c=>c.destroy());charts=[];}function chartColors(values){const c=themeColors();return values.map(v=>v>=0?c.green:c.red);}
+function renderCharts(trades){destroyCharts();const c=themeColors();const completed=trades.filter(isCompletedTrade);const sorted=[...completed].sort((a,b)=>new Date(a.date)-new Date(b.date));let cumulative=0;const equity=sorted.map(t=>cumulative+=Number(t.net||0));charts.push(new Chart(document.getElementById('equityChart'),{type:'line',data:{labels:sorted.map(t=>t.date),datasets:[{label:'Equity',data:equity,borderColor:c.accent,backgroundColor:hexToRgba(c.accent,.18),pointBackgroundColor:c.accent2,tension:.35,fill:true}]},options:chartOptions()}));const winLoss={Win:completed.filter(t=>String(t.result).includes('Win')).length,Loss:completed.filter(t=>String(t.result).includes('Loss')).length,BE:completed.filter(t=>String(t.result).includes('Break')).length};charts.push(new Chart(document.getElementById('winLossChart'),{type:'doughnut',data:{labels:Object.keys(winLoss),datasets:[{data:Object.values(winLoss),backgroundColor:[c.green,c.red,c.accent3],borderColor:c.accent,borderWidth:1}]},options:chartOptions()}));renderBar('pairChart',groupSum(completed,'pair','net'));renderBar('setupChart',groupSum(completed,'setup','net'));renderBar('sessionChart',groupSum(completed,'session','net'));renderBar('mistakeChart',groupCount(completed,'mistakes'));}
+function renderBar(id,obj){const labels=Object.keys(obj);const values=Object.values(obj);const c=themeColors();charts.push(new Chart(document.getElementById(id),{type:'bar',data:{labels,datasets:[{data:values,backgroundColor:values.length?chartColors(values):[c.accent],borderColor:c.accent2,borderWidth:1,borderRadius:8}]},options:chartOptions()}));}
+function chartOptions(){const c=themeColors();return{responsive:true,plugins:{legend:{display:false}},scales:{x:{ticks:{color:c.muted},grid:{color:c.grid}},y:{ticks:{color:c.muted},grid:{color:c.grid}}}};}
+function hexToRgba(hex,alpha){if(!hex||!hex.startsWith('#'))return`rgba(59,130,246,${alpha})`;let h=hex.replace('#','');if(h.length===3)h=h.split('').map(x=>x+x).join('');const n=parseInt(h,16);return`rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${alpha})`;}
+function renderTable(trades){document.getElementById('tradeRows').innerHTML=trades.map(t=>{const net=Number(t.net||0);const status=t.dashboardReady?'✅ Ready':`⚠️ ${t.calculationStatus||'Incomplete'}`;const missing=t.missingRequiredFields&&t.missingRequiredFields!=='None'?t.missingRequiredFields:'';return`<tr title="${missing}"><td>${t.date||''}</td><td>${t.pair||''}</td><td>${t.direction||''}</td><td>${t.setup||''}</td><td>${t.session||''}</td><td><span class="badge">${displayResult(t)}</span></td><td class="${net>=0?'profit':'loss'}">${money(net)}</td><td>${Number(t.r||0).toFixed(2)}R</td><td>${t.rules?'✅':'⚠️'}</td><td>${status}</td></tr>`;}).join('');}
+function monthName(date){return date.toLocaleDateString('en-US',{month:'long',year:'numeric'});}function summarizeByDay(trades){return trades.reduce((acc,t)=>{if(!t.date)return acc;const key=String(t.date).slice(0,10);if(!acc[key])acc[key]={count:0,net:0,wins:0,losses:0,trades:[]};acc[key].count+=1;if(isCompletedTrade(t))acc[key].net+=Number(t.net||0);if(String(t.result).includes('Win'))acc[key].wins+=1;if(String(t.result).includes('Loss'))acc[key].losses+=1;acc[key].trades.push(t);return acc;},{});}function renderCalendar(trades){const grid=document.getElementById('calendarGrid');const year=calendarDate.getFullYear();const month=calendarDate.getMonth();const first=new Date(year,month,1);const start=new Date(first);const mondayOffset=(first.getDay()+6)%7;start.setDate(first.getDate()-mondayOffset);const byDay=summarizeByDay(trades);const monthTrades=trades.filter(t=>{const d=new Date(t.date);return d.getFullYear()===year&&d.getMonth()===month;});const monthPL=monthTrades.filter(isCompletedTrade).reduce((s,t)=>s+Number(t.net||0),0);document.getElementById('calendarTitle').textContent=monthName(calendarDate);document.getElementById('calendarPL').textContent=money(monthPL);document.getElementById('calendarPL').className=monthPL>=0?'profit':'loss';document.getElementById('calendarTrades').textContent=monthTrades.length;const weekdays=['Mon','Tue','Wed','Thu','Fri','Sat','Sun','Summary'];let html=weekdays.map(d=>`<div class="calendar-weekday ${d==='Summary'?'summary-head':''}">${d}</div>`).join('');for(let week=0;week<6;week++){let weekCount=0;let weekPL=0;for(let day=0;day<7;day++){const current=new Date(start);current.setDate(start.getDate()+week*7+day);const key=dateKey(current);const info=byDay[key]||{count:0,net:0};weekCount+=info.count;weekPL+=info.net;const cls=info.count?(info.net>0?'day-win':info.net<0?'day-loss':'day-flat'):'';const outside=current.getMonth()!==month?'outside-month':'';html+=`<div class="calendar-cell ${cls} ${outside}"><div class="day-num">${current.getDate()}</div>${info.count?`<div class="day-metrics"><div class="day-trades">${info.count} trade${info.count>1?'s':''}</div><div class="day-pl ${info.net>=0?'profit':'loss'}">${money(info.net)}</div></div>`:''}</div>`;}html+=`<div class="calendar-summary"><div>${weekCount} trade${weekCount===1?'':'s'}</div><div class="summary-pl ${weekPL>=0?'profit':'loss'}">${money(weekPL)}</div></div>`;}grid.innerHTML=html;}
+async function render(){if(!allTradesCache.length)allTradesCache=await loadTrades();const trades=filterTrades(allTradesCache);const m=metrics(trades);document.getElementById('netProfit').textContent=money(m.totalNet);document.getElementById('winRate').textContent=pct(m.winRate);document.getElementById('totalTrades').textContent=allTradesCache.length;document.getElementById('averageR').textContent=`${m.avgR.toFixed(2)}R`;document.getElementById('bestPair').textContent=m.bestPair;document.getElementById('ruleRate').textContent=pct(m.ruleRate);renderCharts(trades);renderTable(trades);renderCalendar(allTradesCache);}
+document.getElementById('themeSelect').addEventListener('change',e=>{document.body.dataset.theme=e.target.value;localStorage.setItem('raviDashboardTheme',e.target.value);render();});document.getElementById('periodFilter').addEventListener('change',render);document.getElementById('prevMonth').addEventListener('click',()=>{calendarDate.setMonth(calendarDate.getMonth()-1);renderCalendar(allTradesCache);});document.getElementById('nextMonth').addEventListener('click',()=>{calendarDate.setMonth(calendarDate.getMonth()+1);renderCalendar(allTradesCache);});document.querySelectorAll('.tab-btn').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));document.querySelectorAll('.tab-section').forEach(s=>s.classList.remove('active'));btn.classList.add('active');document.getElementById(`tab-${btn.dataset.tab}`).classList.add('active');}));const savedTheme=localStorage.getItem('raviDashboardTheme')||'dark';document.body.dataset.theme=savedTheme;document.getElementById('themeSelect').value=savedTheme;render();

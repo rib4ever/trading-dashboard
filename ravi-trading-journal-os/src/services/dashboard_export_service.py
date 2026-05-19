@@ -49,6 +49,9 @@ def num(page: dict[str, Any], name: str) -> float:
 
 def normalize_trade(page: dict[str, Any]) -> dict[str, Any]:
     trade_id = value(page, "Trade ID") or page.get("id")
+    dashboard_ready = bool(value(page, "Dashboard Ready"))
+    missing_fields = value(page, "Missing Required Fields") or ""
+    calculation_status = value(page, "Calculation Status") or "Not Checked"
     return {
         "id": trade_id,
         "notionPageId": page.get("id"),
@@ -61,7 +64,7 @@ def normalize_trade(page: dict[str, Any]) -> dict[str, Any]:
         "direction": value(page, "Direction") or "Unknown",
         "setup": value(page, "Setup Model") or "Unknown",
         "session": value(page, "Session") or "Unknown",
-        "result": value(page, "Result") or "",
+        "result": value(page, "Result") or "Incomplete",
         "net": num(page, "Net P/L"),
         "gross": num(page, "Gross P/L"),
         "commission": num(page, "Commission"),
@@ -75,6 +78,12 @@ def normalize_trade(page: dict[str, Any]) -> dict[str, Any]:
         "lotSize": num(page, "Lot Size"),
         "stopLoss": num(page, "Stop Loss"),
         "takeProfit": num(page, "Take Profit"),
+        "priceMove": num(page, "Price Move"),
+        "durationMinutes": num(page, "Trade Duration Minutes"),
+        "dashboardReady": dashboard_ready,
+        "missingRequiredFields": missing_fields,
+        "calculationStatus": calculation_status,
+        "autoCalculationNotes": value(page, "Auto Calculation Notes") or "",
         "rules": bool(value(page, "Followed Rules")),
         "quality": value(page, "Trade Quality") or "",
         "mistakes": value(page, "Mistake Type") or [],

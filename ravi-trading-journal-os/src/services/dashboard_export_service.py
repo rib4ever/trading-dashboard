@@ -6,6 +6,7 @@ from typing import Any
 from src.clients.notion_client import NotionClient
 
 TRADES_DATABASE_ID = os.environ.get("NOTION_TRADES_DATABASE_ID")
+SCREENSHOTS_DATABASE_ID = os.environ.get("NOTION_SCREENSHOTS_DATABASE_ID")
 ROOT_DIR = Path(__file__).resolve().parents[2]
 REPO_ROOT = ROOT_DIR.parent
 DASHBOARD_DATA_DIR = REPO_ROOT / "ravi-dashboard" / "data"
@@ -47,11 +48,43 @@ def num(page: dict[str, Any], name: str) -> float:
         return 0.0
 
 
-def normalize_trade(page: dict[str, Any]) -> dict[str, Any]:
+def query_screenshots_for_trade(notion: NotionClient, trade_id: str) -> list[dict[str, Any]]:
+    if not SCREENSHOTS_DATABASE_ID or not trade_id:
+        return []
+    pages = notion.query_database(
+        SCREENSHOTS_DATABASE_ID,
+        {"filter": {"property": "Trade ID", "rich_text": {"equals": trade_id}}},
+    )
+    rows = []
+    for page in pages:
+        file_id = value(page, "Google Drive File ID") or ""
+        rows.append({
+            "name": value(page, "Screenshot Name") or value(page, "Final File Name") or "Screenshot",
+            "slot": num(page, "Slot Number"),
+            "slotType": value(page, "Source Slot Type") or "",
+            "imageType": value(page, "Image Type") or "",
+            "timeframe": value(page, "Timeframe") or "",
+            "category": value(page, "Category") or "",
+            "driveUrl": value(page, "Google Drive URL") or "",
+            "fileId": file_id,
+            "thumbnailUrl": f"https://drive.google.com/thumbnail?id={file_id}&sz=w1200" if file_id else "",
+            "fileName": value(page, "Final File Name") or "",
+        })
+    return sorted(rows, key=lambda x: x.get("slot") or 99)
+
+
+def normalize_trade(page: dict[str, Any], screenshots: list[dict[str, Any]]) -> dict[str, Any]:
     trade_id = value(page, "Trade ID") or page.get("id")
     dashboard_ready = bool(value(page, "Dashboard Ready"))
     missing_fields = value(page, "Missing Required Fields") or ""
     calculation_status = value(page, "Calculation Status") or "Not Checked"
+    ai_story = value(page, "AI Story Review") or ""
+    fallback_story = "\n\n".join([
+        value(page, "AI Review") or "",
+        value(page, "AI Reality Check") or "",
+        value(page, "AI Mistake Diagnosis") or "",
+        value(page, "AI Future Rules") or "",
+    ]).strip()
     return {
         "id": trade_id,
         "notionPageId": page.get("id"),
@@ -87,14 +120,17 @@ def normalize_trade(page: dict[str, Any]) -> dict[str, Any]:
         "rules": bool(value(page, "Followed Rules")),
         "quality": value(page, "Trade Quality") or "",
         "mistakes": value(page, "Mistake Type") or [],
+        "rawJournalStory": value(page, "Raw Journal Story") or "",
         "ai": value(page, "AI Review Status") or "Not Requested",
         "aiConfidence": num(page, "AI Review Confidence"),
         "aiReview": value(page, "AI Review") or "",
+        "aiStoryReview": ai_story or fallback_story,
         "aiRealityCheck": value(page, "AI Reality Check") or "",
         "aiMistakeDiagnosis": value(page, "AI Mistake Diagnosis") or "",
         "aiFutureRules": value(page, "AI Future Rules") or "",
         "driveFolder": value(page, "Google Drive Trade Folder") or "",
         "screenshotSyncStatus": value(page, "Screenshot Sync Status") or "",
+        "screenshots": screenshots,
     }
 
 
@@ -103,7 +139,11 @@ def run_dashboard_export() -> None:
         raise RuntimeError("Missing NOTION_TRADES_DATABASE_ID")
     notion = NotionClient()
     pages = notion.query_database_all(TRADES_DATABASE_ID, {"sorts": [{"property": "Date", "direction": "descending"}]})
-    trades = [normalize_trade(page) for page in pages]
+    trades = []
+    for page in pages:
+        trade_id = value(page, "Trade ID") or page.get("id")
+        screenshots = query_screenshots_for_trade(notion, trade_id)
+        trades.append(normalize_trade(page, screenshots))
     DASHBOARD_DATA_DIR.mkdir(parents=True, exist_ok=True)
     EXPORT_PATH.write_text(json.dumps({"trades": trades, "count": len(trades)}, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"Exported {len(trades)} trades to {EXPORT_PATH}")

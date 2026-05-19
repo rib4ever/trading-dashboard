@@ -10,3 +10,10 @@ def load_json_config(relative_path: str) -> dict:
         raise FileNotFoundError(f"Config file not found: {path}")
     with path.open("r", encoding="utf-8") as file:
         return json.load(file)
+
+
+def load_text_config(relative_path: str) -> str:
+    path = ROOT_DIR / relative_path
+    if not path.exists():
+        raise FileNotFoundError(f"Config file not found: {path}")
+    return path.read_text(encoding="utf-8")

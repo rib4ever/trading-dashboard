@@ -1,0 +1,43 @@
+{
+  "trades": [
+    {
+      "id": "TRD-20260516-TEST01",
+      "notionPageId": "3623f3a6-e6d1-8182-814e-e24cac2f49a9",
+      "notionUrl": "https://www.notion.so/TEST-XAUUSD-Buy-Screenshot-Sync-3623f3a6e6d18182814ee24cac2f49a9",
+      "name": "TEST XAUUSD Buy Screenshot Sync",
+      "date": "2026-05-16",
+      "entryDateTime": null,
+      "exitDateTime": null,
+      "pair": "XAUUSD",
+      "direction": "Buy",
+      "setup": "Unknown",
+      "session": "Unknown",
+      "result": "",
+      "net": 0.0,
+      "gross": 0.0,
+      "commission": 0.0,
+      "fees": 0.0,
+      "r": 0.0,
+      "plannedR": 0.0,
+      "riskAmount": 0.0,
+      "riskPercent": 0.0,
+      "entryPrice": 0.0,
+      "exitPrice": 0.0,
+      "lotSize": 0.0,
+      "stopLoss": 0.0,
+      "takeProfit": 0.0,
+      "rules": false,
+      "quality": "",
+      "mistakes": [],
+      "ai": "Needs More Screenshots",
+      "aiConfidence": 0.0,
+      "aiReview": "The trade was a buy on XAUUSD based on a perceived liquidity sweep and price returning to a fair value gap (FVG) on the 5-minute chart. The trader entered early and closed after price rejection.",
+      "aiRealityCheck": "The single provided screenshot is a mobile trading app showing open BTCUSD sell positions and does not show any XAUUSD chart or price action. There is no visible chart, timeframe context, or evidence of liquidity sweep, FVG, or entry timing. Therefore, the journal story cannot be confirmed or contradicted from the screenshot.",
+      "aiMistakeDiagnosis": "The main issue is lack of relevant screenshot evidence to verify the trade story. Without chart visuals, it is impossible to assess trade direction, setup validity, or timing. This is a data quality and documentation problem.",
+      "aiFutureRules": "Always upload clear chart screenshots showing the trade setup, entry, stop loss, take profit, and higher timeframe context. Ensure screenshots correspond to the traded pair and timeframe mentioned in the journal.",
+      "driveFolder": "https://drive.google.com/drive/folders/18Hrg2728ghdzdBQOA2t17AvSPFXmW_zG",
+      "screenshotSyncStatus": "Synced to Drive"
+    }
+  ],
+  "count": 1
+}

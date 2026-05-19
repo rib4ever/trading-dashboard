@@ -1,0 +1,20 @@
+name: Ravi Trade Maintenance
+
+on:
+  workflow_dispatch:
+
+jobs:
+  trade-maintenance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r ravi-trading-journal-os/requirements.txt
+      - run: |
+          cd ravi-trading-journal-os
+          PYTHONPATH=. python scripts/run_trade_maintenance.py
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          NOTION_TRADES_DATABASE_ID: ${{ secrets.NOTION_TRADES_DATABASE_ID }}

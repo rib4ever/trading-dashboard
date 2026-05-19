@@ -1,43 +1,96 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
-    <meta http-equiv="Pragma" content="no-cache" />
-    <meta http-equiv="Expires" content="0" />
-    <title>Ravi Trading Dashboard</title>
-    <link rel="stylesheet" href="./styles.css?v=20260520-02" />
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  </head>
-  <body>
-    <div class="app-shell">
-      <header class="topbar">
-        <div><p class="eyebrow">Trading Journal OS</p><h1>Ravi Trading Dashboard</h1><p id="dataStatus" class="eyebrow">Loading dashboard data...</p></div>
-        <div class="top-actions">
-          <select id="themeSelect" class="select">
-            <option value="dark">Dark Professional</option>
-            <option value="violet">Violet Night</option>
-            <option value="purpleRose">Purple Rose</option>
-            <option value="pinkNeon">Pink Neon</option>
-            <option value="marine">Marine Blue</option>
-            <option value="sky">Sky Blue</option>
-            <option value="ocean">Ocean Depth</option>
-            <option value="earth">Earthy Brown</option>
-            <option value="forest">Forest Moss</option>
-            <option value="glass">Glass Terminal</option>
-            <option value="notion">Clean Notion</option>
-          </select>
-          <select id="periodFilter" class="select"><option value="all">All Time</option><option value="month">This Month</option><option value="week">This Week</option></select>
-        </div>
-      </header>
-      <nav class="dashboard-tabs"><button class="tab-btn active" data-tab="system">System Map</button><button class="tab-btn" data-tab="analytics">Analytics</button><button class="tab-btn" data-tab="calendar">Calendar</button><button class="tab-btn" data-tab="trades">Trade Log</button></nav>
-      <section class="kpi-grid"><article class="kpi-card primary"><span>Total Net P/L</span><strong id="netProfit">$0.00</strong><em>Profit focus</em></article><article class="kpi-card"><span>Win Rate</span><strong id="winRate">0%</strong><em>Win-rate focus</em></article><article class="kpi-card"><span>Total Trades</span><strong id="totalTrades">0</strong><em>All trades loaded</em></article><article class="kpi-card"><span>Average R</span><strong id="averageR">0.00R</strong><em>Ready trades only</em></article><article class="kpi-card"><span>Best Pair</span><strong id="bestPair">-</strong><em>Highest net P/L</em></article><article class="kpi-card"><span>Rule Follow Rate</span><strong id="ruleRate">0%</strong><em>Discipline score</em></article></section>
-      <section id="tab-system" class="tab-section active"><section class="system-hero"><div><p class="eyebrow">Front Page / Core Workflow</p><h2>Trading Journal OS Network Map</h2><p class="hero-text">Notion is the input layer, Google Drive is the evidence archive, GitHub Actions is the automation engine, OpenAI is the trade supervisor, and this dashboard is the visual analytics layer.</p></div><div class="status-card"><span>Live Dashboard</span><strong>GitHub Pages</strong><em>Same link refreshes after export/deploy</em></div></section><section class="flow-grid"><article class="flow-card"><span>1</span><h3>Notion Trade Entry</h3><p>Use Daily Entry - Minimal and Execution & KPI Input. Add journal story, trade details, screenshots, and KPI data.</p></article><article class="flow-card"><span>2</span><h3>Trade ID Maintenance</h3><p>Blank Trade IDs are filled by automation before screenshot sync and dashboard export.</p></article><article class="flow-card"><span>3</span><h3>Screenshot Sync</h3><p>Notion screenshot slots are uploaded to Google Drive, indexed in Trade Screenshots, and marked as synced.</p></article><article class="flow-card"><span>4</span><h3>AI Trade Supervisor</h3><p>Raw Journal Story and synced screenshots are reviewed by AI using one compressed contact sheet.</p></article><article class="flow-card"><span>5</span><h3>Dashboard Export</h3><p>Notion trades are normalized into ravi-dashboard/data/trades.json for charts, cards, calendar, and trade log.</p></article><article class="flow-card"><span>6</span><h3>Visual Dashboard</h3><p>GitHub Pages displays profit, win rate, equity, pair/setup/session performance, mistakes, calendar P/L, and trade log.</p></article></section><section class="ops-grid"><article class="panel"><div class="panel-header"><h2>Manual Inputs</h2><span>You fill these</span></div><ul class="clean-list"><li>Date, Pair, Direction, Session, Setup</li><li>Raw Journal Story</li><li>Screenshot slot type + file</li><li>Entry/Exit, Lot Size, SL/TP, Risk, P/L</li><li>Result, Trade Quality, Followed Rules, Mistake Type</li></ul></article><article class="panel"><div class="panel-header"><h2>Automation Outputs</h2><span>System fills these</span></div><ul class="clean-list"><li>Trade ID</li><li>Google Drive Trade Folder</li><li>Screenshot Sync Notes / Time / Status</li><li>AI Review, Reality Check, Mistake Diagnosis, Future Rules</li><li>Dashboard JSON and live analytics</li></ul></article><article class="panel"><div class="panel-header"><h2>Run Order</h2><span>When refreshing</span></div><ul class="clean-list"><li>Use Ravi Full Pipeline as the main one-button workflow</li><li>It runs screenshot sync, AI review, dashboard export and deploy</li><li>Standalone workflows stay available for debugging</li></ul></article></section></section>
-      <section id="tab-analytics" class="tab-section"><main class="dashboard-grid"><section class="panel wide"><div class="panel-header"><h2>Equity Curve</h2><span>Net P/L over time</span></div><canvas id="equityChart"></canvas></section><section class="panel"><div class="panel-header"><h2>Win / Loss</h2><span>Result split</span></div><canvas id="winLossChart"></canvas></section><section class="panel"><div class="panel-header"><h2>Pair Performance</h2><span>Net P/L by pair</span></div><canvas id="pairChart"></canvas></section><section class="panel"><div class="panel-header"><h2>Setup Performance</h2><span>Net P/L by setup</span></div><canvas id="setupChart"></canvas></section><section class="panel"><div class="panel-header"><h2>Session Performance</h2><span>Net P/L by session</span></div><canvas id="sessionChart"></canvas></section><section class="panel"><div class="panel-header"><h2>Mistake Tracker</h2><span>Repeated issues</span></div><canvas id="mistakeChart"></canvas></section></main></section>
-      <section id="tab-calendar" class="tab-section"><section class="calendar-panel"><div class="calendar-header"><button id="prevMonth" class="icon-btn">‹</button><h2 id="calendarTitle">Calendar</h2><button id="nextMonth" class="icon-btn">›</button><div class="calendar-totals"><span>P/L: <strong id="calendarPL">$0.00</strong></span><span>Trades: <strong id="calendarTrades">0</strong></span></div></div><div class="calendar-grid" id="calendarGrid"></div></section></section>
-      <section id="tab-trades" class="tab-section"><section class="table-panel"><div class="panel-header"><h2>Trade Log</h2><span>All exported trades</span></div><div class="table-wrap"><table><thead><tr><th>Date</th><th>Pair</th><th>Dir</th><th>Setup</th><th>Session</th><th>Result</th><th>Net P/L</th><th>R</th><th>Rules</th><th>Status</th></tr></thead><tbody id="tradeRows"></tbody></table></div></section></section>
-    </div>
-    <script src="./app.js?v=20260520-02"></script>
-  </body>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+  <title>Ravi Trading Dashboard</title>
+  <link rel="stylesheet" href="./styles.css?v=20260520-02" />
+  <link rel="stylesheet" href="./themes.css?v=20260520-02" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Trading Journal OS</p>
+        <h1>Ravi Trading Dashboard</h1>
+        <p id="dataStatus" class="eyebrow">Loading dashboard data...</p>
+      </div>
+      <div class="top-actions">
+        <select id="themeSelect" class="select">
+          <option value="dark">Dark Professional</option>
+          <option value="violet">Violet Night</option>
+          <option value="purpleRose">Purple Rose</option>
+          <option value="pinkNeon">Pink Neon</option>
+          <option value="marine">Marine Blue</option>
+          <option value="sky">Sky Blue</option>
+          <option value="ocean">Ocean Depth</option>
+          <option value="earth">Earthy Brown</option>
+          <option value="forest">Forest Moss</option>
+          <option value="glass">Glass Terminal</option>
+          <option value="notion">Clean Notion</option>
+        </select>
+        <select id="periodFilter" class="select">
+          <option value="all">All Time</option>
+          <option value="month">This Month</option>
+          <option value="week">This Week</option>
+        </select>
+      </div>
+    </header>
+
+    <nav class="dashboard-tabs">
+      <button class="tab-btn active" data-tab="system">System Map</button>
+      <button class="tab-btn" data-tab="analytics">Analytics</button>
+      <button class="tab-btn" data-tab="calendar">Calendar</button>
+      <button class="tab-btn" data-tab="trades">Trade Log</button>
+    </nav>
+
+    <section class="kpi-grid">
+      <article class="kpi-card primary"><span>Total Net P/L</span><strong id="netProfit">$0.00</strong><em>Profit focus</em></article>
+      <article class="kpi-card"><span>Win Rate</span><strong id="winRate">0%</strong><em>Win-rate focus</em></article>
+      <article class="kpi-card"><span>Total Trades</span><strong id="totalTrades">0</strong><em>All trades loaded</em></article>
+      <article class="kpi-card"><span>Average R</span><strong id="averageR">0.00R</strong><em>Ready trades only</em></article>
+      <article class="kpi-card"><span>Best Pair</span><strong id="bestPair">-</strong><em>Highest net P/L</em></article>
+      <article class="kpi-card"><span>Rule Follow Rate</span><strong id="ruleRate">0%</strong><em>Discipline score</em></article>
+    </section>
+
+    <section id="tab-system" class="tab-section active">
+      <section class="system-hero">
+        <div><p class="eyebrow">Front Page / Core Workflow</p><h2>Trading Journal OS Network Map</h2><p class="hero-text">Notion is the input layer, Google Drive stores evidence, GitHub Actions runs automation, OpenAI supervises trades, and this dashboard visualizes performance.</p></div>
+        <div class="status-card"><span>Live Dashboard</span><strong>GitHub Pages</strong><em>Same link refreshes after export/deploy</em></div>
+      </section>
+      <section class="flow-grid">
+        <article class="flow-card"><span>1</span><h3>Notion Trade Entry</h3><p>Fill manual trade details, journal story, execution data, and screenshot slots.</p></article>
+        <article class="flow-card"><span>2</span><h3>Trade Maintenance</h3><p>Automation fills Trade ID, calculations, readiness, and missing-field notes.</p></article>
+        <article class="flow-card"><span>3</span><h3>Screenshot Sync</h3><p>Notion screenshots are uploaded to Google Drive and indexed.</p></article>
+        <article class="flow-card"><span>4</span><h3>AI Supervisor</h3><p>AI compares your journal story with screenshots and writes review fields.</p></article>
+        <article class="flow-card"><span>5</span><h3>Dashboard Export</h3><p>Notion trades become JSON data for the visual dashboard.</p></article>
+        <article class="flow-card"><span>6</span><h3>Visual Dashboard</h3><p>Cards, charts, calendar, and trade log update on the same live link.</p></article>
+      </section>
+    </section>
+
+    <section id="tab-analytics" class="tab-section">
+      <main class="dashboard-grid">
+        <section class="panel wide"><div class="panel-header"><h2>Equity Curve</h2><span>Net P/L over time</span></div><canvas id="equityChart"></canvas></section>
+        <section class="panel"><div class="panel-header"><h2>Win / Loss</h2><span>Result split</span></div><canvas id="winLossChart"></canvas></section>
+        <section class="panel"><div class="panel-header"><h2>Pair Performance</h2><span>Net P/L by pair</span></div><canvas id="pairChart"></canvas></section>
+        <section class="panel"><div class="panel-header"><h2>Setup Performance</h2><span>Net P/L by setup</span></div><canvas id="setupChart"></canvas></section>
+        <section class="panel"><div class="panel-header"><h2>Session Performance</h2><span>Net P/L by session</span></div><canvas id="sessionChart"></canvas></section>
+        <section class="panel"><div class="panel-header"><h2>Mistake Tracker</h2><span>Repeated issues</span></div><canvas id="mistakeChart"></canvas></section>
+      </main>
+    </section>
+
+    <section id="tab-calendar" class="tab-section">
+      <section class="calendar-panel"><div class="calendar-header"><button id="prevMonth" class="icon-btn">‹</button><h2 id="calendarTitle">Calendar</h2><button id="nextMonth" class="icon-btn">›</button><div class="calendar-totals"><span>P/L: <strong id="calendarPL">$0.00</strong></span><span>Trades: <strong id="calendarTrades">0</strong></span></div></div><div class="calendar-grid" id="calendarGrid"></div></section>
+    </section>
+
+    <section id="tab-trades" class="tab-section">
+      <section class="table-panel"><div class="panel-header"><h2>Trade Log</h2><span>All exported trades</span></div><div class="table-wrap"><table><thead><tr><th>Date</th><th>Pair</th><th>Dir</th><th>Setup</th><th>Session</th><th>Result</th><th>Net P/L</th><th>R</th><th>Rules</th><th>Status</th></tr></thead><tbody id="tradeRows"></tbody></table></div></section>
+    </section>
+  </div>
+  <script src="./app.js?v=20260520-02"></script>
+</body>
 </html>

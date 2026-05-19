@@ -1,9 +1,8 @@
 const demoTrades = [
-  { date: '2026-05-01', pair: 'XAUUSD', direction: 'Buy', setup: 'SMC Sweep Reversal', session: 'New York', result: 'Win', net: 120, r: 1.8, rules: true, ai: 'Complete', mistakes: [] },
-  { date: '2026-05-02', pair: 'XAUUSD', direction: 'Sell', setup: 'FVG Entry', session: 'London', result: 'Loss', net: -70, r: -1, rules: false, ai: 'Complete', mistakes: ['Early Entry'] },
-  { date: '2026-05-03', pair: 'BTCUSD', direction: 'Sell', setup: 'SMC Continuation', session: 'New York', result: 'Win', net: 210, r: 2.4, rules: true, ai: 'Complete', mistakes: [] },
-  { date: '2026-05-04', pair: 'NAS100', direction: 'Buy', setup: 'NCI Market Story', session: 'London + NY Overlap', result: 'Break Even', net: 0, r: 0, rules: true, ai: 'Not Requested', mistakes: [] },
-  { date: '2026-05-05', pair: 'XAUUSD', direction: 'Buy', setup: 'OB Entry', session: 'London', result: 'Loss', net: -95, r: -1.2, rules: false, ai: 'Needs More Screenshots', mistakes: ['No Confirmation', 'Bad SL'] }
+  { date: '2026-05-01', pair: 'XAUUSD', direction: 'Buy', setup: 'SMC Sweep Reversal', session: 'New York', result: 'Win', net: 120, r: 1.8, rules: true, ai: 'Complete', mistakes: [], dashboardReady: true },
+  { date: '2026-05-02', pair: 'XAUUSD', direction: 'Sell', setup: 'FVG Entry', session: 'London', result: 'Loss', net: -70, r: -1, rules: false, ai: 'Complete', mistakes: ['Early Entry'], dashboardReady: true },
+  { date: '2026-05-03', pair: 'BTCUSD', direction: 'Sell', setup: 'SMC Continuation', session: 'New York', result: 'Win', net: 210, r: 2.4, rules: true, ai: 'Complete', mistakes: [], dashboardReady: true },
+  { date: '2026-05-04', pair: 'NAS100', direction: 'Buy', setup: 'NCI Market Story', session: 'London + NY Overlap', result: 'Incomplete', net: 0, r: 0, rules: true, ai: 'Not Requested', mistakes: [], dashboardReady: false }
 ];
 
 let charts = [];
@@ -33,13 +32,15 @@ function filterTrades(trades) {
 function money(v) { return `${v >= 0 ? '$' : '-$'}${Math.abs(v).toFixed(2)}`; }
 function pct(v) { return `${v.toFixed(1)}%`; }
 function dateKey(d) { return d.toISOString().slice(0, 10); }
+function isCompletedTrade(t) { return t.dashboardReady === true && !['Incomplete', '', null, undefined].includes(t.result); }
+function displayResult(t) { return t.result || 'Incomplete'; }
 
 function metrics(trades) {
-  const completed = trades.filter(t => t.result);
+  const completed = trades.filter(isCompletedTrade);
   const wins = completed.filter(t => String(t.result).toLowerCase().includes('win'));
-  const totalNet = completed.reduce((s, t) => s + Number(t.net || t['Net P/L'] || 0), 0);
-  const avgR = completed.length ? completed.reduce((s, t) => s + Number(t.r || t['Result R'] || 0), 0) / completed.length : 0;
-  const ruleRate = completed.length ? completed.filter(t => t.rules === true || t['Followed Rules'] === true).length / completed.length * 100 : 0;
+  const totalNet = completed.reduce((s, t) => s + Number(t.net || 0), 0);
+  const avgR = completed.length ? completed.reduce((s, t) => s + Number(t.r || 0), 0) / completed.length : 0;
+  const ruleRate = completed.length ? completed.filter(t => t.rules === true).length / completed.length * 100 : 0;
   const byPair = groupSum(completed, 'pair', 'net');
   const bestPair = Object.entries(byPair).sort((a,b) => b[1]-a[1])[0]?.[0] || '-';
   return { completed, wins, totalNet, avgR, ruleRate, bestPair, winRate: completed.length ? wins.length / completed.length * 100 : 0 };
@@ -47,8 +48,8 @@ function metrics(trades) {
 
 function groupSum(trades, key, valueKey) {
   return trades.reduce((acc, t) => {
-    const k = t[key] || t[key[0].toUpperCase() + key.slice(1)] || 'Unknown';
-    const v = Number(t[valueKey] || t['Net P/L'] || 0);
+    const k = t[key] || 'Unknown';
+    const v = Number(t[valueKey] || 0);
     acc[k] = (acc[k] || 0) + v;
     return acc;
   }, {});
@@ -68,18 +69,19 @@ function chartColors(values) { return values.map(v => v >= 0 ? '#22c55e' : '#ef4
 
 function renderCharts(trades) {
   destroyCharts();
-  const sorted = [...trades].sort((a,b) => new Date(a.date) - new Date(b.date));
+  const completed = trades.filter(isCompletedTrade);
+  const sorted = [...completed].sort((a,b) => new Date(a.date) - new Date(b.date));
   let cumulative = 0;
   const equity = sorted.map(t => cumulative += Number(t.net || 0));
   charts.push(new Chart(document.getElementById('equityChart'), { type: 'line', data: { labels: sorted.map(t => t.date), datasets: [{ label: 'Equity', data: equity, borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,.18)', tension: .35, fill: true }] }, options: chartOptions() }));
 
-  const winLoss = { Win: trades.filter(t => String(t.result).includes('Win')).length, Loss: trades.filter(t => String(t.result).includes('Loss')).length, BE: trades.filter(t => String(t.result).includes('Break')).length };
+  const winLoss = { Win: completed.filter(t => String(t.result).includes('Win')).length, Loss: completed.filter(t => String(t.result).includes('Loss')).length, BE: completed.filter(t => String(t.result).includes('Break')).length };
   charts.push(new Chart(document.getElementById('winLossChart'), { type: 'doughnut', data: { labels: Object.keys(winLoss), datasets: [{ data: Object.values(winLoss), backgroundColor: ['#22c55e', '#ef4444', '#94a3b8'] }] }, options: chartOptions() }));
 
-  renderBar('pairChart', groupSum(trades, 'pair', 'net'));
-  renderBar('setupChart', groupSum(trades, 'setup', 'net'));
-  renderBar('sessionChart', groupSum(trades, 'session', 'net'));
-  renderBar('mistakeChart', groupCount(trades, 'mistakes'));
+  renderBar('pairChart', groupSum(completed, 'pair', 'net'));
+  renderBar('setupChart', groupSum(completed, 'setup', 'net'));
+  renderBar('sessionChart', groupSum(completed, 'session', 'net'));
+  renderBar('mistakeChart', groupCount(completed, 'mistakes'));
 }
 
 function renderBar(id, obj) {
@@ -95,13 +97,13 @@ function chartOptions() {
 function renderTable(trades) {
   document.getElementById('tradeRows').innerHTML = trades.map(t => {
     const net = Number(t.net || 0);
-    return `<tr><td>${t.date || ''}</td><td>${t.pair || ''}</td><td>${t.direction || ''}</td><td>${t.setup || ''}</td><td>${t.session || ''}</td><td><span class="badge">${t.result || ''}</span></td><td class="${net >= 0 ? 'profit' : 'loss'}">${money(net)}</td><td>${Number(t.r || 0).toFixed(2)}R</td><td>${t.rules ? '✅' : '⚠️'}</td><td>${t.ai || '-'}</td></tr>`;
+    const status = t.dashboardReady ? '✅ Ready' : `⚠️ ${t.calculationStatus || 'Incomplete'}`;
+    const missing = t.missingRequiredFields && t.missingRequiredFields !== 'None' ? t.missingRequiredFields : '';
+    return `<tr title="${missing}"><td>${t.date || ''}</td><td>${t.pair || ''}</td><td>${t.direction || ''}</td><td>${t.setup || ''}</td><td>${t.session || ''}</td><td><span class="badge">${displayResult(t)}</span></td><td class="${net >= 0 ? 'profit' : 'loss'}">${money(net)}</td><td>${Number(t.r || 0).toFixed(2)}R</td><td>${t.rules ? '✅' : '⚠️'}</td><td>${status}</td></tr>`;
   }).join('');
 }
 
-function monthName(date) {
-  return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-}
+function monthName(date) { return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }); }
 
 function summarizeByDay(trades) {
   return trades.reduce((acc, t) => {
@@ -109,7 +111,7 @@ function summarizeByDay(trades) {
     const key = String(t.date).slice(0, 10);
     if (!acc[key]) acc[key] = { count: 0, net: 0, wins: 0, losses: 0, trades: [] };
     acc[key].count += 1;
-    acc[key].net += Number(t.net || 0);
+    if (isCompletedTrade(t)) acc[key].net += Number(t.net || 0);
     if (String(t.result).includes('Win')) acc[key].wins += 1;
     if (String(t.result).includes('Loss')) acc[key].losses += 1;
     acc[key].trades.push(t);
@@ -126,11 +128,8 @@ function renderCalendar(trades) {
   const mondayOffset = (first.getDay() + 6) % 7;
   start.setDate(first.getDate() - mondayOffset);
   const byDay = summarizeByDay(trades);
-  const monthTrades = trades.filter(t => {
-    const d = new Date(t.date);
-    return d.getFullYear() === year && d.getMonth() === month;
-  });
-  const monthPL = monthTrades.reduce((s, t) => s + Number(t.net || 0), 0);
+  const monthTrades = trades.filter(t => { const d = new Date(t.date); return d.getFullYear() === year && d.getMonth() === month; });
+  const monthPL = monthTrades.filter(isCompletedTrade).reduce((s, t) => s + Number(t.net || 0), 0);
 
   document.getElementById('calendarTitle').textContent = monthName(calendarDate);
   document.getElementById('calendarPL').textContent = money(monthPL);
@@ -139,7 +138,6 @@ function renderCalendar(trades) {
 
   const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun', 'Summary'];
   let html = weekdays.map(d => `<div class="calendar-weekday ${d === 'Summary' ? 'summary-head' : ''}">${d}</div>`).join('');
-
   for (let week = 0; week < 6; week++) {
     let weekCount = 0;
     let weekPL = 0;
@@ -165,7 +163,7 @@ async function render() {
   const m = metrics(trades);
   document.getElementById('netProfit').textContent = money(m.totalNet);
   document.getElementById('winRate').textContent = pct(m.winRate);
-  document.getElementById('totalTrades').textContent = m.completed.length;
+  document.getElementById('totalTrades').textContent = allTradesCache.length;
   document.getElementById('averageR').textContent = `${m.avgR.toFixed(2)}R`;
   document.getElementById('bestPair').textContent = m.bestPair;
   document.getElementById('ruleRate').textContent = pct(m.ruleRate);
@@ -184,5 +182,4 @@ document.querySelectorAll('.tab-btn').forEach(btn => btn.addEventListener('click
   btn.classList.add('active');
   document.getElementById(`tab-${btn.dataset.tab}`).classList.add('active');
 }));
-
 render();

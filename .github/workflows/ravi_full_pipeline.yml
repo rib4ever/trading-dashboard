@@ -1,0 +1,110 @@
+name: Ravi Full Pipeline
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: ravi-full-pipeline
+  cancel-in-progress: false
+
+jobs:
+  full-pipeline:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python requirements
+        run: pip install -r ravi-trading-journal-os/requirements.txt
+
+      - name: 01 - Trade maintenance and auto calculations
+        run: |
+          cd ravi-trading-journal-os
+          PYTHONPATH=. python scripts/run_trade_maintenance.py
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          NOTION_TRADES_DATABASE_ID: ${{ secrets.NOTION_TRADES_DATABASE_ID }}
+
+      - name: 02 - Screenshot sync to Google Drive
+        run: |
+          cd ravi-trading-journal-os
+          PYTHONPATH=. python scripts/run_screenshot_sync.py
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          NOTION_TRADES_DATABASE_ID: ${{ secrets.NOTION_TRADES_DATABASE_ID }}
+          NOTION_SCREENSHOTS_DATABASE_ID: ${{ secrets.NOTION_SCREENSHOTS_DATABASE_ID }}
+          GOOGLE_DRIVE_ROOT_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_ROOT_FOLDER_ID }}
+          GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
+          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
+          GOOGLE_OAUTH_REFRESH_TOKEN: ${{ secrets.GOOGLE_OAUTH_REFRESH_TOKEN }}
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+
+      - name: Wait before AI review
+        run: sleep 20
+
+      - name: 03 - AI trade review
+        run: |
+          cd ravi-trading-journal-os
+          PYTHONPATH=. python scripts/run_ai_trade_review.py
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          NOTION_TRADES_DATABASE_ID: ${{ secrets.NOTION_TRADES_DATABASE_ID }}
+          NOTION_SCREENSHOTS_DATABASE_ID: ${{ secrets.NOTION_SCREENSHOTS_DATABASE_ID }}
+          GOOGLE_DRIVE_ROOT_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_ROOT_FOLDER_ID }}
+          GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
+          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
+          GOOGLE_OAUTH_REFRESH_TOKEN: ${{ secrets.GOOGLE_OAUTH_REFRESH_TOKEN }}
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+
+      - name: Wait before dashboard export
+        run: sleep 20
+
+      - name: 04 - Final maintenance after AI review
+        run: |
+          cd ravi-trading-journal-os
+          PYTHONPATH=. python scripts/run_trade_maintenance.py
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          NOTION_TRADES_DATABASE_ID: ${{ secrets.NOTION_TRADES_DATABASE_ID }}
+
+      - name: 05 - Export dashboard data
+        run: |
+          cd ravi-trading-journal-os
+          PYTHONPATH=. python scripts/run_dashboard_export.py
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          NOTION_TRADES_DATABASE_ID: ${{ secrets.NOTION_TRADES_DATABASE_ID }}
+
+      - name: Commit dashboard data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add ravi-dashboard/data/trades.json
+          git diff --cached --quiet || git commit -m "Run Ravi full pipeline and refresh dashboard data"
+          git push
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload dashboard artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ravi-dashboard
+
+      - name: 06 - Deploy dashboard to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

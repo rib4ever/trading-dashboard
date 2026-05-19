@@ -28,6 +28,12 @@
         </div>
       </header>
 
+      <nav class="dashboard-tabs">
+        <button class="tab-btn active" data-tab="analytics">Analytics</button>
+        <button class="tab-btn" data-tab="calendar">Calendar</button>
+        <button class="tab-btn" data-tab="trades">Trade Log</button>
+      </nav>
+
       <section class="kpi-grid">
         <article class="kpi-card primary"><span>Total Net P/L</span><strong id="netProfit">$0.00</strong><em>Profit focus</em></article>
         <article class="kpi-card"><span>Win Rate</span><strong id="winRate">0%</strong><em>Win-rate focus</em></article>
@@ -37,45 +43,64 @@
         <article class="kpi-card"><span>Rule Follow Rate</span><strong id="ruleRate">0%</strong><em>Discipline score</em></article>
       </section>
 
-      <main class="dashboard-grid">
-        <section class="panel wide">
-          <div class="panel-header"><h2>Equity Curve</h2><span>Net P/L over time</span></div>
-          <canvas id="equityChart"></canvas>
-        </section>
-        <section class="panel">
-          <div class="panel-header"><h2>Win / Loss</h2><span>Result split</span></div>
-          <canvas id="winLossChart"></canvas>
-        </section>
-        <section class="panel">
-          <div class="panel-header"><h2>Pair Performance</h2><span>Net P/L by pair</span></div>
-          <canvas id="pairChart"></canvas>
-        </section>
-        <section class="panel">
-          <div class="panel-header"><h2>Setup Performance</h2><span>Net P/L by setup</span></div>
-          <canvas id="setupChart"></canvas>
-        </section>
-        <section class="panel">
-          <div class="panel-header"><h2>Session Performance</h2><span>Net P/L by session</span></div>
-          <canvas id="sessionChart"></canvas>
-        </section>
-        <section class="panel">
-          <div class="panel-header"><h2>Mistake Tracker</h2><span>Repeated issues</span></div>
-          <canvas id="mistakeChart"></canvas>
-        </section>
-      </main>
+      <section id="tab-analytics" class="tab-section active">
+        <main class="dashboard-grid">
+          <section class="panel wide">
+            <div class="panel-header"><h2>Equity Curve</h2><span>Net P/L over time</span></div>
+            <canvas id="equityChart"></canvas>
+          </section>
+          <section class="panel">
+            <div class="panel-header"><h2>Win / Loss</h2><span>Result split</span></div>
+            <canvas id="winLossChart"></canvas>
+          </section>
+          <section class="panel">
+            <div class="panel-header"><h2>Pair Performance</h2><span>Net P/L by pair</span></div>
+            <canvas id="pairChart"></canvas>
+          </section>
+          <section class="panel">
+            <div class="panel-header"><h2>Setup Performance</h2><span>Net P/L by setup</span></div>
+            <canvas id="setupChart"></canvas>
+          </section>
+          <section class="panel">
+            <div class="panel-header"><h2>Session Performance</h2><span>Net P/L by session</span></div>
+            <canvas id="sessionChart"></canvas>
+          </section>
+          <section class="panel">
+            <div class="panel-header"><h2>Mistake Tracker</h2><span>Repeated issues</span></div>
+            <canvas id="mistakeChart"></canvas>
+          </section>
+        </main>
+      </section>
 
-      <section class="table-panel">
-        <div class="panel-header"><h2>Trade Log</h2><span>Dashboard-ready trades</span></div>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Date</th><th>Pair</th><th>Dir</th><th>Setup</th><th>Session</th><th>Result</th><th>Net P/L</th><th>R</th><th>Rules</th><th>AI</th>
-              </tr>
-            </thead>
-            <tbody id="tradeRows"></tbody>
-          </table>
-        </div>
+      <section id="tab-calendar" class="tab-section">
+        <section class="calendar-panel">
+          <div class="calendar-header">
+            <button id="prevMonth" class="icon-btn">‹</button>
+            <h2 id="calendarTitle">Calendar</h2>
+            <button id="nextMonth" class="icon-btn">›</button>
+            <div class="calendar-totals">
+              <span>P/L: <strong id="calendarPL">$0.00</strong></span>
+              <span>Trades: <strong id="calendarTrades">0</strong></span>
+            </div>
+          </div>
+          <div class="calendar-grid" id="calendarGrid"></div>
+        </section>
+      </section>
+
+      <section id="tab-trades" class="tab-section">
+        <section class="table-panel">
+          <div class="panel-header"><h2>Trade Log</h2><span>Dashboard-ready trades</span></div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th><th>Pair</th><th>Dir</th><th>Setup</th><th>Session</th><th>Result</th><th>Net P/L</th><th>R</th><th>Rules</th><th>AI</th>
+                </tr>
+              </thead>
+              <tbody id="tradeRows"></tbody>
+            </table>
+          </div>
+        </section>
       </section>
     </div>
     <script src="./app.js"></script>

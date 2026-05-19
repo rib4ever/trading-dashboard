@@ -1,11 +1,21 @@
 import hashlib
+import json
 import os
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from src.clients.notion_client import NotionClient
 
 TRADES_DATABASE_ID = os.environ.get("NOTION_TRADES_DATABASE_ID")
+ROOT_DIR = Path(__file__).resolve().parents[2]
+SYMBOL_SETTINGS_PATH = ROOT_DIR / "config" / "symbol_profit_settings.json"
+
+
+def load_symbol_settings() -> dict[str, Any]:
+    if not SYMBOL_SETTINGS_PATH.exists():
+        return {"symbols": {}}
+    return json.loads(SYMBOL_SETTINGS_PATH.read_text(encoding="utf-8"))
 
 
 def _prop(page: dict[str, Any], name: str) -> dict[str, Any] | None:
@@ -37,7 +47,7 @@ def get_number(page: dict[str, Any], name: str) -> float | None:
 
 
 def rich_text(value: str) -> dict[str, Any]:
-    return {"rich_text": [{"text": {"content": value}}]}
+    return {"rich_text": [{"text": {"content": value[:1900]}}]}
 
 
 def number(value: float) -> dict[str, Any]:
@@ -46,6 +56,10 @@ def number(value: float) -> dict[str, Any]:
 
 def select(value: str) -> dict[str, Any]:
     return {"select": {"name": value}}
+
+
+def checkbox(value: bool) -> dict[str, Any]:
+    return {"checkbox": value}
 
 
 def date_token(page: dict[str, Any]) -> str:
@@ -68,44 +82,155 @@ def generate_trade_id(page: dict[str, Any]) -> str:
     return f"TRD-{date_part}-{suffix}"
 
 
-def build_maintenance_updates(page: dict[str, Any]) -> dict[str, Any]:
+def parse_datetime(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except Exception:
+        return None
+
+
+def estimate_gross_pl(page: dict[str, Any], symbol_settings: dict[str, Any]) -> tuple[float | None, str | None]:
+    pair = get_text(page, "Pair")
+    direction = get_text(page, "Direction")
+    entry = get_number(page, "Entry Price")
+    exit_price = get_number(page, "Exit Price")
+    lot = get_number(page, "Lot Size")
+
+    if not all([pair, direction]) or entry is None or exit_price is None or lot is None:
+        return None, None
+
+    symbol = symbol_settings.get("symbols", {}).get(pair)
+    if not symbol:
+        return None, f"Gross P/L not estimated: missing symbol settings for {pair}."
+
+    contract_size = float(symbol.get("contract_size", 1))
+    direction_multiplier = 1 if direction == "Buy" else -1
+    gross = (exit_price - entry) * lot * contract_size * direction_multiplier
+    note = f"Gross P/L estimated from Entry/Exit/Lot using {pair} contract_size={contract_size}. Broker/MT5 value should be final truth."
+    return gross, note
+
+
+def get_missing_fields(page: dict[str, Any]) -> list[str]:
+    required = ["Trade ID", "Date", "Pair", "Direction"]
+    missing = [field for field in required if not get_text(page, field)]
+
+    # KPI useful fields: not blocking dashboard visibility, but needed for proper KPI cards/charts.
+    kpi_required = ["Result", "Net P/L", "Result R"]
+    for field in kpi_required:
+        value = get_text(page, field) if field == "Result" else get_number(page, field)
+        if value is None or value == "":
+            missing.append(field)
+    return missing
+
+
+def build_maintenance_updates(page: dict[str, Any], symbol_settings: dict[str, Any]) -> dict[str, Any]:
     updates: dict[str, Any] = {}
+    notes: list[str] = []
 
     if not get_text(page, "Trade ID"):
-        updates["Trade ID"] = rich_text(generate_trade_id(page))
+        trade_id = generate_trade_id(page)
+        updates["Trade ID"] = rich_text(trade_id)
+        notes.append(f"Generated Trade ID: {trade_id}")
+
+    # Default costs to 0 when blank, as confirmed.
+    if get_number(page, "Commission") is None:
+        updates["Commission"] = number(0)
+        notes.append("Commission blank → set to 0")
+    if get_number(page, "Swap / Fees") is None:
+        updates["Swap / Fees"] = number(0)
+        notes.append("Swap / Fees blank → set to 0")
+
+    pair = get_text(page, "Pair")
+    direction = get_text(page, "Direction")
+    entry = get_number(page, "Entry Price")
+    exit_price = get_number(page, "Exit Price")
+    stop = get_number(page, "Stop Loss")
+    target = get_number(page, "Take Profit")
+    lot = get_number(page, "Lot Size")
+
+    if get_number(page, "Price Move") is None and entry is not None and exit_price is not None and direction:
+        multiplier = 1 if direction == "Buy" else -1
+        updates["Price Move"] = number((exit_price - entry) * multiplier)
+        notes.append("Price Move calculated from Entry/Exit/Direction")
 
     gross = get_number(page, "Gross P/L")
-    commission = get_number(page, "Commission") or 0.0
-    fees = get_number(page, "Swap / Fees") or 0.0
-    net = get_number(page, "Net P/L")
+    if gross is None:
+        estimated_gross, gross_note = estimate_gross_pl(page, symbol_settings)
+        if estimated_gross is not None:
+            gross = estimated_gross
+            updates["Gross P/L"] = number(gross)
+            notes.append(gross_note or "Gross P/L estimated")
 
+    commission = get_number(page, "Commission")
+    if commission is None:
+        commission = 0.0
+    fees = get_number(page, "Swap / Fees")
+    if fees is None:
+        fees = 0.0
+
+    net = get_number(page, "Net P/L")
     if net is None and gross is not None:
         net = gross - commission - fees
         updates["Net P/L"] = number(net)
+        notes.append("Net P/L calculated as Gross P/L - Commission - Swap/Fees")
 
     risk_amount = get_number(page, "Risk Amount")
-    result_r = get_number(page, "Result R")
-    if result_r is None and net is not None and risk_amount not in (None, 0):
+    if get_number(page, "Result R") is None and net is not None and risk_amount not in (None, 0):
         updates["Result R"] = number(net / abs(risk_amount))
+        notes.append("Result R calculated from Net P/L and Risk Amount")
 
-    entry = get_number(page, "Entry Price")
-    stop = get_number(page, "Stop Loss")
-    target = get_number(page, "Take Profit")
-    planned_r = get_number(page, "Planned R")
-    if planned_r is None and entry is not None and stop is not None and target is not None:
+    if get_number(page, "Planned R") is None and entry is not None and stop is not None and target is not None:
         risk_per_unit = abs(entry - stop)
         reward_per_unit = abs(target - entry)
         if risk_per_unit > 0:
             updates["Planned R"] = number(reward_per_unit / risk_per_unit)
+            notes.append("Planned R calculated from Entry, SL, TP")
 
-    result = get_text(page, "Result")
-    if not result and net is not None:
+    if not get_text(page, "Result") and net is not None:
         if net > 0:
             updates["Result"] = select("Win")
         elif net < 0:
             updates["Result"] = select("Loss")
         else:
             updates["Result"] = select("Break Even")
+        notes.append("Result calculated from Net P/L")
+
+    entry_dt = parse_datetime(get_text(page, "Entry DateTime"))
+    exit_dt = parse_datetime(get_text(page, "Exit DateTime"))
+    if get_number(page, "Trade Duration Minutes") is None and entry_dt and exit_dt:
+        duration_minutes = (exit_dt - entry_dt).total_seconds() / 60
+        if duration_minutes >= 0:
+            updates["Trade Duration Minutes"] = number(duration_minutes)
+            notes.append("Trade Duration calculated from Entry/Exit DateTime")
+
+    # Dashboard readiness is a KPI-readiness indicator, not visibility. Dashboard shows all trades.
+    # Use updated or existing values to evaluate readiness.
+    fake_page = {"properties": {**page.get("properties", {})}}
+    missing = get_missing_fields(page)
+    if "Trade ID" in missing and "Trade ID" in updates:
+        missing.remove("Trade ID")
+    if "Net P/L" in missing and ("Net P/L" in updates or net is not None):
+        missing.remove("Net P/L")
+    if "Result R" in missing and "Result R" in updates:
+        missing.remove("Result R")
+    if "Result" in missing and "Result" in updates:
+        missing.remove("Result")
+
+    updates["Dashboard Ready"] = checkbox(len(missing) == 0)
+    updates["Missing Required Fields"] = rich_text(", ".join(missing) if missing else "None")
+    if missing:
+        updates["Calculation Status"] = select("Partial" if notes else "Needs Manual Input")
+    else:
+        updates["Calculation Status"] = select("Complete")
+
+    if notes:
+        updates["Auto Calculation Notes"] = rich_text(" | ".join([n for n in notes if n]))
+    elif missing:
+        updates["Auto Calculation Notes"] = rich_text("No automatic calculation applied. Missing required source fields.")
+    else:
+        updates["Auto Calculation Notes"] = rich_text("Checked. No changes needed.")
 
     return updates
 
@@ -114,10 +239,11 @@ def run_trade_maintenance() -> int:
     if not TRADES_DATABASE_ID:
         raise RuntimeError("Missing NOTION_TRADES_DATABASE_ID")
     notion = NotionClient()
+    symbol_settings = load_symbol_settings()
     pages = notion.query_database_all(TRADES_DATABASE_ID, {})
     updated = 0
     for page in pages:
-        updates = build_maintenance_updates(page)
+        updates = build_maintenance_updates(page, symbol_settings)
         if not updates:
             continue
         notion.update_page(page["id"], updates)

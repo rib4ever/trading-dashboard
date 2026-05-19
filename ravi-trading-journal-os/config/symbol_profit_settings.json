@@ -1,0 +1,17 @@
+{
+  "default_currency": "USD",
+  "symbols": {
+    "XAUUSD": {"contract_size": 100, "price_decimals": 2, "note": "Typical gold CFD: 1 lot = 100 oz. Verify with broker."},
+    "BTCUSD": {"contract_size": 1, "price_decimals": 2, "note": "Broker-specific. Verify IC Markets contract size."},
+    "NAS100": {"contract_size": 1, "price_decimals": 2, "note": "Broker-specific index CFD. Verify point value."},
+    "SOLUSD": {"contract_size": 1, "price_decimals": 2, "note": "Broker-specific crypto CFD."},
+    "XRPUSD": {"contract_size": 1, "price_decimals": 5, "note": "Broker-specific crypto CFD."},
+    "EURUSD": {"contract_size": 100000, "price_decimals": 5, "note": "Standard FX lot assumption."},
+    "GBPUSD": {"contract_size": 100000, "price_decimals": 5, "note": "Standard FX lot assumption."},
+    "AUDUSD": {"contract_size": 100000, "price_decimals": 5, "note": "Standard FX lot assumption."},
+    "NZDUSD": {"contract_size": 100000, "price_decimals": 5, "note": "Standard FX lot assumption."},
+    "USDCAD": {"contract_size": 100000, "price_decimals": 5, "note": "Approximation in USD requires conversion; broker/MT5 import is final truth."},
+    "USDJPY": {"contract_size": 100000, "price_decimals": 3, "note": "Approximation in USD requires conversion; broker/MT5 import is final truth."},
+    "GBPJPY": {"contract_size": 100000, "price_decimals": 3, "note": "Approximation in USD requires conversion; broker/MT5 import is final truth."}
+  }
+}

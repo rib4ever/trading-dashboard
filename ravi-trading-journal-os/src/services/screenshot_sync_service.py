@@ -15,6 +15,7 @@ from src.utils.filename_utils import generate_screenshot_filename, get_extension
 TRADES_DATABASE_ID = os.environ.get("NOTION_TRADES_DATABASE_ID")
 SCREENSHOTS_DATABASE_ID = os.environ.get("NOTION_SCREENSHOTS_DATABASE_ID")
 GOOGLE_DRIVE_ROOT_FOLDER_ID = os.environ.get("GOOGLE_DRIVE_ROOT_FOLDER_ID")
+AUTO_MARK_AI_READY_AFTER_SCREENSHOT_SYNC = os.environ.get("AUTO_MARK_AI_READY_AFTER_SCREENSHOT_SYNC", "false").lower() == "true"
 
 SLOT_CONFIG = [
     (1, "Screenshot Slot 1 Type", "Screenshot Slot 1 File"),
@@ -30,6 +31,9 @@ STATUS_PENDING = "Pending Upload"
 STATUS_MANUAL = "Needs Manual Check"
 STATUS_ERROR = "Error"
 STATUS_NOT_STARTED = "Not Started"
+AI_STATUS_READY = "Ready for AI Review"
+AI_STATUS_COMPLETE = "AI Review Complete"
+AI_STATUS_ERROR = "AI Review Error"
 
 
 def _prop(page: dict[str, Any], name: str) -> dict[str, Any] | None:
@@ -98,7 +102,21 @@ def download_file(url: str) -> bytes:
     return response.content
 
 
-def update_trade_status(notion: NotionClient, page_id: str, status: str, notes: str, processed: bool, folder_url: str | None = None) -> None:
+def should_mark_ready_for_ai(page: dict[str, Any], status: str, processed: bool) -> tuple[bool, str | None]:
+    if not AUTO_MARK_AI_READY_AFTER_SCREENSHOT_SYNC:
+        return False, None
+    if status != STATUS_SYNCED or not processed:
+        return False, None
+    raw_story = get_text(page, "Raw Journal Story")
+    if not raw_story:
+        return False, "AI auto-ready skipped: Raw Journal Story is blank."
+    current_ai_status = get_text(page, "AI Review Status")
+    if current_ai_status in [AI_STATUS_COMPLETE, AI_STATUS_ERROR]:
+        return False, f"AI Review Status unchanged because current status is {current_ai_status}."
+    return True, "AI Review Status auto-set to Ready for AI Review by full pipeline."
+
+
+def update_trade_status(notion: NotionClient, page: dict[str, Any], status: str, notes: str, processed: bool, folder_url: str | None = None) -> None:
     props: dict[str, Any] = {
         "Screenshot Sync Status": notion_select(status),
         "Screenshot Sync Notes": notion_rich_text(notes),
@@ -107,30 +125,26 @@ def update_trade_status(notion: NotionClient, page_id: str, status: str, notes: 
     }
     if folder_url:
         props["Google Drive Trade Folder"] = {"url": folder_url}
-    notion.update_page(page_id, props)
+    mark_ai_ready, ai_note = should_mark_ready_for_ai(page, status, processed)
+    if mark_ai_ready:
+        props["AI Review Status"] = notion_select(AI_STATUS_READY)
+        props["AI Review Mode"] = notion_select("Contact Sheet")
+    if ai_note:
+        props["Screenshot Sync Notes"] = notion_rich_text(f"{notes} | {ai_note}")
+    notion.update_page(page["id"], props)
 
 
 def query_ready_trades(notion: NotionClient) -> list[dict[str, Any]]:
     if not TRADES_DATABASE_ID:
         raise RuntimeError("Missing NOTION_TRADES_DATABASE_ID")
-    payload = {
-        "filter": {
-            "property": "Screenshot Sync Status",
-            "select": {"equals": STATUS_READY},
-        }
-    }
+    payload = {"filter": {"property": "Screenshot Sync Status", "select": {"equals": STATUS_READY}}}
     return notion.query_database(TRADES_DATABASE_ID, payload)
 
 
 def screenshot_source_exists(notion: NotionClient, source_key: str) -> bool:
     if not SCREENSHOTS_DATABASE_ID:
         raise RuntimeError("Missing NOTION_SCREENSHOTS_DATABASE_ID")
-    payload = {
-        "filter": {
-            "property": "Screenshot Source Key",
-            "rich_text": {"equals": source_key},
-        }
-    }
+    payload = {"filter": {"property": "Screenshot Source Key", "rich_text": {"equals": source_key}}}
     return bool(notion.query_database(SCREENSHOTS_DATABASE_ID, payload))
 
 
@@ -181,7 +195,6 @@ def create_screenshot_record(
 
 
 def process_trade(page: dict[str, Any], notion: NotionClient, drive: GoogleDriveClient, slot_mapping: dict[str, Any]) -> None:
-    page_id = page["id"]
     trade_id = get_text(page, "Trade ID")
     trade_date_raw = get_date(page, "Date")
     pair = get_text(page, "Pair")
@@ -189,7 +202,7 @@ def process_trade(page: dict[str, Any], notion: NotionClient, drive: GoogleDrive
 
     missing = [name for name, value in [("Trade ID", trade_id), ("Date", trade_date_raw), ("Pair", pair), ("Direction", direction)] if not value]
     if missing:
-        update_trade_status(notion, page_id, STATUS_MANUAL, "Missing required fields: " + ", ".join(missing), False)
+        update_trade_status(notion, page, STATUS_MANUAL, "Missing required fields: " + ", ".join(missing), False)
         return
 
     trade_date = format_trade_date(trade_date_raw)
@@ -203,10 +216,7 @@ def process_trade(page: dict[str, Any], notion: NotionClient, drive: GoogleDrive
     month_folder = drive.get_or_create_folder(month, year_folder["id"])
     trade_folder = drive.get_or_create_folder(f"{trade_id}_{pair}_{direction}".upper(), month_folder["id"])
 
-    subfolders = {
-        name: drive.get_or_create_folder(name, trade_folder["id"])
-        for name in ["01_context", "02_entry", "03_exit", "04_review", "05_mistakes", "99_extra"]
-    }
+    subfolders = {name: drive.get_or_create_folder(name, trade_folder["id"]) for name in ["01_context", "02_entry", "03_exit", "04_review", "05_mistakes", "99_extra"]}
 
     processed = 0
     skipped_empty = 0
@@ -224,9 +234,7 @@ def process_trade(page: dict[str, Any], notion: NotionClient, drive: GoogleDrive
         if not slot_type and not files:
             skipped_empty += 1
             continue
-
         attempted_slots += 1
-
         if slot_type and not files:
             has_pending = True
             notes.append(f"Slot {slot_number}: type selected but no file")
@@ -251,19 +259,12 @@ def process_trade(page: dict[str, Any], notion: NotionClient, drive: GoogleDrive
 
         try:
             extension = get_extension(original_name)
-            final_file_name = generate_screenshot_filename(
-                trade_id=trade_id,
-                pair=pair,
-                trade_date=trade_date,
-                timeframe=mapping["timeframe"],
-                image_type=mapping["image_type"],
-                extension=extension,
-            )
+            final_file_name = generate_screenshot_filename(trade_id=trade_id, pair=pair, trade_date=trade_date, timeframe=mapping["timeframe"], image_type=mapping["image_type"], extension=extension)
             file_bytes = download_file(original_url)
             mime_type = mimetypes.guess_type(final_file_name)[0] or "image/png"
             target_folder = subfolders[mapping["drive_subfolder"]]
             drive_file = drive.upload_bytes(file_bytes, final_file_name, target_folder["id"], mime_type)
-            create_screenshot_record(notion, page_id, trade_id, pair, trade_date, slot_number, slot_type, mapping, source_key, original_url, drive_file, target_folder, final_file_name)
+            create_screenshot_record(notion, page["id"], trade_id, pair, trade_date, slot_number, slot_type, mapping, source_key, original_url, drive_file, target_folder, final_file_name)
             processed += 1
         except Exception as exc:
             has_error = True
@@ -285,13 +286,8 @@ def process_trade(page: dict[str, Any], notion: NotionClient, drive: GoogleDrive
         final_status = STATUS_NOT_STARTED
 
     processed_flag = processed > 0 or skipped_duplicates > 0
-    summary = (
-        f"Processed: {processed}. "
-        f"Duplicate skipped: {skipped_duplicates}. "
-        f"Empty skipped: {skipped_empty}. "
-        f"Notes: {' | '.join(notes) if notes else 'No issues.'}"
-    )
-    update_trade_status(notion, page_id, final_status, summary, processed_flag, trade_folder.get("webViewLink"))
+    summary = f"Processed: {processed}. Duplicate skipped: {skipped_duplicates}. Empty skipped: {skipped_empty}. Notes: {' | '.join(notes) if notes else 'No issues.'}"
+    update_trade_status(notion, page, final_status, summary, processed_flag, trade_folder.get("webViewLink"))
 
 
 def run_screenshot_sync() -> None:

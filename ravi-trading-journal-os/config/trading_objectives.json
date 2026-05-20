@@ -1,0 +1,41 @@
+{
+  "currency": "EUR",
+  "timezone": "Europe/Paris",
+  "profile": "Ravi Custom 01 - Live Trading Guardrails",
+  "daily": {
+    "profitTarget": 50,
+    "maxLoss": -50,
+    "maxTrades": 3,
+    "maxLosingTrades": 2,
+    "stopTradingWhenMaxLossHit": true,
+    "stopTradingWhenMaxLosingTradesHit": true,
+    "stopTradingWhenMaxTradesHit": true
+  },
+  "weekly": {
+    "profitTarget": 200,
+    "maxLoss": -150,
+    "maxTrades": 15,
+    "maxLosingTrades": 6
+  },
+  "monthly": {
+    "profitTarget": 800,
+    "maxLoss": -400,
+    "maxTrades": 60,
+    "maxLosingTrades": 20
+  },
+  "alerts": {
+    "enabled": true,
+    "telegramEnabled": true,
+    "warnAtProgressPercent": 80,
+    "warnAtLossPercent": 80,
+    "warnAtTradeCountPercent": 80,
+    "warnAtLosingTradeCountPercent": 80,
+    "sendOnlyWhenBreachedOrWarning": true
+  },
+  "notes": {
+    "dailyProfitTarget": "Target net profit for the current trading day.",
+    "dailyMaxLoss": "Negative number. If daily net P/L is equal or below this, dashboard should show STOP TRADING.",
+    "maxTrades": "Maximum trades allowed for the period.",
+    "maxLosingTrades": "Maximum losing trades allowed for the period."
+  }
+}

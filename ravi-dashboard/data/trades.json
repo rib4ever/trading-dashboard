@@ -58,8 +58,10 @@
           "driveUrl": "https://drive.google.com/file/d/1FUt68F-fvEKpvC9P0Zqnjmiw55US7a2d/view?usp=drivesdk",
           "fileId": "1FUt68F-fvEKpvC9P0Zqnjmiw55US7a2d",
           "thumbnailUrl": "https://drive.google.com/thumbnail?id=1FUt68F-fvEKpvC9P0Zqnjmiw55US7a2d&sz=w1600",
+          "localUrl": "",
           "fileName": "TRD-20260519-9CB0C1_XAUUSD_2026-05-19_4H_BEFORE.png",
-          "source": "trade_screenshots_db"
+          "source": "trade_screenshots_db",
+          "stableAsset": false
         },
         {
           "name": "TRD-20260519-9CB0C1 — 1H BEFORE",
@@ -71,8 +73,10 @@
           "driveUrl": "https://drive.google.com/file/d/1LeUfs3c27RblLEVzgAv2U0Dv6haFrmv_/view?usp=drivesdk",
           "fileId": "1LeUfs3c27RblLEVzgAv2U0Dv6haFrmv_",
           "thumbnailUrl": "https://drive.google.com/thumbnail?id=1LeUfs3c27RblLEVzgAv2U0Dv6haFrmv_&sz=w1600",
+          "localUrl": "",
           "fileName": "TRD-20260519-9CB0C1_XAUUSD_2026-05-19_1H_BEFORE.png",
-          "source": "trade_screenshots_db"
+          "source": "trade_screenshots_db",
+          "stableAsset": false
         },
         {
           "name": "TRD-20260519-9CB0C1 — 5M ENTRY",
@@ -84,8 +88,10 @@
           "driveUrl": "https://drive.google.com/file/d/1jXNQoMH_HbdRHkIz5nhdOM8Bpkr00kYa/view?usp=drivesdk",
           "fileId": "1jXNQoMH_HbdRHkIz5nhdOM8Bpkr00kYa",
           "thumbnailUrl": "https://drive.google.com/thumbnail?id=1jXNQoMH_HbdRHkIz5nhdOM8Bpkr00kYa&sz=w1600",
+          "localUrl": "",
           "fileName": "TRD-20260519-9CB0C1_XAUUSD_2026-05-19_5M_ENTRY.png",
-          "source": "trade_screenshots_db"
+          "source": "trade_screenshots_db",
+          "stableAsset": false
         }
       ]
     },
@@ -145,8 +151,10 @@
           "driveUrl": "https://drive.google.com/file/d/1GpmgmxALxEF1VOfUOJnCblES5EEj5guV/view?usp=drivesdk",
           "fileId": "1GpmgmxALxEF1VOfUOJnCblES5EEj5guV",
           "thumbnailUrl": "https://drive.google.com/thumbnail?id=1GpmgmxALxEF1VOfUOJnCblES5EEj5guV&sz=w1600",
+          "localUrl": "",
           "fileName": "TRD-20260516-TEST01_XAUUSD_2026-05-16_4H_BEFORE.png",
-          "source": "trade_screenshots_db"
+          "source": "trade_screenshots_db",
+          "stableAsset": false
         }
       ]
     },

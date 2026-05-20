@@ -263,15 +263,8 @@ def normalize_trade(page: dict[str, Any], screenshots: list[dict[str, Any]]) -> 
     dashboard_ready = bool(value(page, "Dashboard Ready"))
     missing_fields = value(page, "Missing Required Fields") or ""
     calculation_status = value(page, "Calculation Status") or "Not Checked"
-    ai_story = value(page, "AI Story Review") or ""
-    auto_session = session_from_paris_time(entry_paris)
-    auto_killzone = killzone_from_paris_time(entry_paris)
-    fallback_story = "\n\n".join([
-        value(page, "AI Review") or "",
-        value(page, "AI Reality Check") or "",
-        value(page, "AI Mistake Diagnosis") or "",
-        value(page, "AI Future Rules") or "",
-    ]).strip()
+    auto_session = value(page, "Auto Session") or session_from_paris_time(entry_paris)
+    auto_killzone = value(page, "Killzone") or killzone_from_paris_time(entry_paris)
     return {
         "id": trade_id,
         "notionPageId": page.get("id"),
@@ -287,10 +280,14 @@ def normalize_trade(page: dict[str, Any], screenshots: list[dict[str, Any]]) -> 
         "exitTime": format_paris_time(exit_raw),
         "pair": value(page, "Pair") or "Unknown",
         "direction": value(page, "Direction") or "Unknown",
-        "setup": value(page, "Setup Model") or "Unknown",
-        "session": value(page, "Session") or auto_session,
-        "autoSession": value(page, "Auto Session") or auto_session,
-        "killzone": value(page, "Killzone") or auto_killzone,
+        "setup": value(page, "AI Corrected Setup Model") or value(page, "Setup Model") or "Unknown",
+        "manualSetup": value(page, "Setup Model") or "Unknown",
+        "aiCorrectedSetup": value(page, "AI Corrected Setup Model") or "",
+        "aiSetupCorrectionNotes": value(page, "AI Setup Correction Notes") or "",
+        "session": auto_session,
+        "manualSession": value(page, "Session") or "",
+        "autoSession": auto_session,
+        "killzone": auto_killzone,
         "result": value(page, "Result") or "Incomplete",
         "net": num(page, "Net P/L"),
         "gross": num(page, "Gross P/L"),
@@ -312,7 +309,6 @@ def normalize_trade(page: dict[str, Any], screenshots: list[dict[str, Any]]) -> 
         "calculationStatus": calculation_status,
         "autoCalculationNotes": value(page, "Auto Calculation Notes") or "",
         "rules": bool(value(page, "Followed Rules")),
-        "quality": value(page, "Trade Quality") or "",
         "mistakes": value(page, "Mistake Type") or [],
         "rawJournalStory": value(page, "Raw Journal Story") or "",
         "ai": value(page, "AI Review Status") or "Not Requested",
@@ -327,10 +323,10 @@ def normalize_trade(page: dict[str, Any], screenshots: list[dict[str, Any]]) -> 
         "aiDisciplineScore": num(page, "AI Discipline Score"),
         "aiConfidence": num(page, "AI Review Confidence"),
         "aiReview": value(page, "AI Review") or "",
-        "aiStoryReview": ai_story or fallback_story,
         "aiRealityCheck": value(page, "AI Reality Check") or "",
         "aiMistakeDiagnosis": value(page, "AI Mistake Diagnosis") or "",
         "aiFutureRules": value(page, "AI Future Rules") or "",
+        "aiEvidenceWarning": value(page, "AI Evidence Warning") or "",
         "driveFolder": value(page, "Google Drive Trade Folder") or "",
         "screenshotSyncStatus": value(page, "Screenshot Sync Status") or "",
         "screenshots": screenshots,

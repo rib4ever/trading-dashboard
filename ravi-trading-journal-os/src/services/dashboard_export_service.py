@@ -62,6 +62,21 @@ def num(page: dict[str, Any], name: str) -> float:
         return 0.0
 
 
+def trade_date_from_entry(page: dict[str, Any]) -> str:
+    """Dashboard reporting date.
+
+    Broker Entry DateTime is the source of truth for calendar/KPIs.
+    Notion Date is only fallback, and Notion created_time is last fallback.
+    """
+    entry_dt = value(page, "Entry DateTime")
+    if entry_dt:
+        return str(entry_dt)[:10]
+    notion_date = value(page, "Date")
+    if notion_date:
+        return str(notion_date)[:10]
+    return page.get("created_time", "")[:10]
+
+
 def safe_filename(text: str) -> str:
     clean = re.sub(r"[^A-Za-z0-9._-]+", "-", text.strip())
     clean = re.sub(r"-+", "-", clean).strip("-._")
@@ -153,20 +168,11 @@ def query_screenshots_for_trade(notion: NotionClient, trade_id: str) -> list[dic
 
 
 def persist_dashboard_screenshots(screenshots: list[dict[str, Any]], trade_id: str) -> list[dict[str, Any]]:
-    """Create stable local dashboard screenshot assets.
-
-    Rule:
-    - If a local asset already exists, keep it unchanged.
-    - Only download from Google Drive when there is a Drive file id and the local asset is missing.
-    - Temporary Notion URLs remain fallback only and are not considered stable.
-    """
     if not screenshots:
         return screenshots
-
     SCREENSHOT_ASSET_DIR.mkdir(parents=True, exist_ok=True)
     drive = None
     enriched: list[dict[str, Any]] = []
-
     for shot in screenshots:
         slot = int(float(shot.get("slot") or 0)) if str(shot.get("slot") or "").replace(".", "", 1).isdigit() else 0
         source_name = shot.get("fileName") or shot.get("name") or f"slot-{slot}.png"
@@ -176,7 +182,6 @@ def persist_dashboard_screenshots(screenshots: list[dict[str, Any]], trade_id: s
         asset_name = safe_filename(f"{trade_id}_slot-{slot}_{stable_key}") + ext
         asset_path = SCREENSHOT_ASSET_DIR / asset_name
         local_url = f"./assets/screenshots/{asset_name}"
-
         if file_id and not asset_path.exists():
             try:
                 if drive is None:
@@ -185,7 +190,6 @@ def persist_dashboard_screenshots(screenshots: list[dict[str, Any]], trade_id: s
                 print(f"Downloaded dashboard screenshot asset: {asset_name}")
             except Exception as exc:
                 print(f"Warning: could not download Drive screenshot {file_id}: {exc}")
-
         if asset_path.exists():
             shot["localUrl"] = local_url
             shot["thumbnailUrl"] = local_url
@@ -193,12 +197,12 @@ def persist_dashboard_screenshots(screenshots: list[dict[str, Any]], trade_id: s
         else:
             shot["stableAsset"] = False
         enriched.append(shot)
-
     return enriched
 
 
 def normalize_trade(page: dict[str, Any], screenshots: list[dict[str, Any]]) -> dict[str, Any]:
     trade_id = value(page, "Trade ID") or page.get("id")
+    entry_dt = value(page, "Entry DateTime")
     dashboard_ready = bool(value(page, "Dashboard Ready"))
     missing_fields = value(page, "Missing Required Fields") or ""
     calculation_status = value(page, "Calculation Status") or "Not Checked"
@@ -214,8 +218,9 @@ def normalize_trade(page: dict[str, Any], screenshots: list[dict[str, Any]]) -> 
         "notionPageId": page.get("id"),
         "notionUrl": page.get("url"),
         "name": value(page, "Trade Name") or trade_id,
-        "date": value(page, "Date") or value(page, "Entry DateTime") or page.get("created_time", "")[:10],
-        "entryDateTime": value(page, "Entry DateTime"),
+        "date": trade_date_from_entry(page),
+        "dateSource": "Entry DateTime" if entry_dt else ("Date" if value(page, "Date") else "Notion created_time"),
+        "entryDateTime": entry_dt,
         "exitDateTime": value(page, "Exit DateTime"),
         "pair": value(page, "Pair") or "Unknown",
         "direction": value(page, "Direction") or "Unknown",
@@ -262,7 +267,7 @@ def run_dashboard_export() -> None:
     if not TRADES_DATABASE_ID:
         raise RuntimeError("Missing NOTION_TRADES_DATABASE_ID")
     notion = NotionClient()
-    pages = notion.query_database_all(TRADES_DATABASE_ID, {"sorts": [{"property": "Date", "direction": "descending"}]})
+    pages = notion.query_database_all(TRADES_DATABASE_ID, {"sorts": [{"property": "Entry DateTime", "direction": "descending"}, {"property": "Date", "direction": "descending"}]})
     trades = []
     for page in pages:
         trade_id = value(page, "Trade ID") or page.get("id")

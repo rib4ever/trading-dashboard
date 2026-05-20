@@ -96,10 +96,6 @@ def format_paris_datetime(raw: str | None) -> str:
 
 
 def trade_date_from_entry(page: dict[str, Any]) -> str:
-    """Dashboard reporting date based on broker entry time in Europe/Paris.
-
-    This prevents UTC conversion from moving a trade to the previous/next calendar day.
-    """
     entry_dt = paris_datetime(value(page, "Entry DateTime"))
     if entry_dt:
         return entry_dt.date().isoformat()
@@ -293,8 +289,8 @@ def normalize_trade(page: dict[str, Any], screenshots: list[dict[str, Any]]) -> 
         "direction": value(page, "Direction") or "Unknown",
         "setup": value(page, "Setup Model") or "Unknown",
         "session": value(page, "Session") or auto_session,
-        "autoSession": auto_session,
-        "killzone": auto_killzone,
+        "autoSession": value(page, "Auto Session") or auto_session,
+        "killzone": value(page, "Killzone") or auto_killzone,
         "result": value(page, "Result") or "Incomplete",
         "net": num(page, "Net P/L"),
         "gross": num(page, "Gross P/L"),
@@ -320,6 +316,15 @@ def normalize_trade(page: dict[str, Any], screenshots: list[dict[str, Any]]) -> 
         "mistakes": value(page, "Mistake Type") or [],
         "rawJournalStory": value(page, "Raw Journal Story") or "",
         "ai": value(page, "AI Review Status") or "Not Requested",
+        "aiVerdict": value(page, "AI Verdict") or "",
+        "aiTradeScore": num(page, "AI Trade Score"),
+        "aiHtfContextScore": num(page, "AI HTF Context Score"),
+        "aiSetupQualityScore": num(page, "AI Setup Quality Score"),
+        "aiEntryExecutionScore": num(page, "AI Entry Execution Score"),
+        "aiRiskManagementScore": num(page, "AI Risk Management Score"),
+        "aiJournalAccuracyScore": num(page, "AI Journal Accuracy Score"),
+        "aiScreenshotEvidenceScore": num(page, "AI Screenshot Evidence Score"),
+        "aiDisciplineScore": num(page, "AI Discipline Score"),
         "aiConfidence": num(page, "AI Review Confidence"),
         "aiReview": value(page, "AI Review") or "",
         "aiStoryReview": ai_story or fallback_story,

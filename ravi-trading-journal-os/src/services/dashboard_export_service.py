@@ -1,8 +1,10 @@
 import json
 import os
 import re
+from datetime import datetime
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from src.clients.google_drive_client import GoogleDriveClient
 from src.clients.notion_client import NotionClient
@@ -15,6 +17,8 @@ DASHBOARD_DIR = REPO_ROOT / "ravi-dashboard"
 DASHBOARD_DATA_DIR = DASHBOARD_DIR / "data"
 SCREENSHOT_ASSET_DIR = DASHBOARD_DIR / "assets" / "screenshots"
 EXPORT_PATH = DASHBOARD_DATA_DIR / "trades.json"
+PARIS_TZ = ZoneInfo("Europe/Paris")
+UTC_TZ = ZoneInfo("UTC")
 
 SLOT_CONFIG = [
     (1, "Screenshot Slot 1 Type", "Screenshot Slot 1 File"),
@@ -62,19 +66,74 @@ def num(page: dict[str, Any], name: str) -> float:
         return 0.0
 
 
-def trade_date_from_entry(page: dict[str, Any]) -> str:
-    """Dashboard reporting date.
+def parse_notion_datetime(raw: str | None) -> datetime | None:
+    if not raw:
+        return None
+    try:
+        dt = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=PARIS_TZ)
+        return dt
+    except Exception:
+        return None
 
-    Broker Entry DateTime is the source of truth for calendar/KPIs.
-    Notion Date is only fallback, and Notion created_time is last fallback.
+
+def paris_datetime(raw: str | None) -> datetime | None:
+    dt = parse_notion_datetime(raw)
+    if not dt:
+        return None
+    return dt.astimezone(PARIS_TZ)
+
+
+def format_paris_time(raw: str | None) -> str:
+    dt = paris_datetime(raw)
+    return dt.strftime("%H:%M") if dt else ""
+
+
+def format_paris_datetime(raw: str | None) -> str:
+    dt = paris_datetime(raw)
+    return dt.strftime("%Y-%m-%d %H:%M") if dt else ""
+
+
+def trade_date_from_entry(page: dict[str, Any]) -> str:
+    """Dashboard reporting date based on broker entry time in Europe/Paris.
+
+    This prevents UTC conversion from moving a trade to the previous/next calendar day.
     """
-    entry_dt = value(page, "Entry DateTime")
+    entry_dt = paris_datetime(value(page, "Entry DateTime"))
     if entry_dt:
-        return str(entry_dt)[:10]
+        return entry_dt.date().isoformat()
     notion_date = value(page, "Date")
     if notion_date:
         return str(notion_date)[:10]
-    return page.get("created_time", "")[:10]
+    created_dt = paris_datetime(page.get("created_time"))
+    return created_dt.date().isoformat() if created_dt else page.get("created_time", "")[:10]
+
+
+def session_from_paris_time(dt: datetime | None) -> str:
+    if not dt:
+        return "Unknown"
+    minutes = dt.hour * 60 + dt.minute
+    if 0 <= minutes < 8 * 60:
+        return "Asian"
+    if 8 * 60 <= minutes < 13 * 60 + 30:
+        return "London"
+    if 13 * 60 + 30 <= minutes < 22 * 60:
+        return "New York"
+    return "Off Session"
+
+
+def killzone_from_paris_time(dt: datetime | None) -> str:
+    if not dt:
+        return "Unknown"
+    minutes = dt.hour * 60 + dt.minute
+    if 8 * 60 <= minutes < 11 * 60:
+        return "London Killzone"
+    if 13 * 60 + 30 <= minutes < 16 * 60:
+        return "New York AM Killzone"
+    if 19 * 60 <= minutes < 21 * 60:
+        return "New York PM Killzone"
+    return "Off Killzone"
 
 
 def safe_filename(text: str) -> str:
@@ -202,11 +261,15 @@ def persist_dashboard_screenshots(screenshots: list[dict[str, Any]], trade_id: s
 
 def normalize_trade(page: dict[str, Any], screenshots: list[dict[str, Any]]) -> dict[str, Any]:
     trade_id = value(page, "Trade ID") or page.get("id")
-    entry_dt = value(page, "Entry DateTime")
+    entry_raw = value(page, "Entry DateTime")
+    exit_raw = value(page, "Exit DateTime")
+    entry_paris = paris_datetime(entry_raw)
     dashboard_ready = bool(value(page, "Dashboard Ready"))
     missing_fields = value(page, "Missing Required Fields") or ""
     calculation_status = value(page, "Calculation Status") or "Not Checked"
     ai_story = value(page, "AI Story Review") or ""
+    auto_session = session_from_paris_time(entry_paris)
+    auto_killzone = killzone_from_paris_time(entry_paris)
     fallback_story = "\n\n".join([
         value(page, "AI Review") or "",
         value(page, "AI Reality Check") or "",
@@ -219,13 +282,19 @@ def normalize_trade(page: dict[str, Any], screenshots: list[dict[str, Any]]) -> 
         "notionUrl": page.get("url"),
         "name": value(page, "Trade Name") or trade_id,
         "date": trade_date_from_entry(page),
-        "dateSource": "Entry DateTime" if entry_dt else ("Date" if value(page, "Date") else "Notion created_time"),
-        "entryDateTime": entry_dt,
-        "exitDateTime": value(page, "Exit DateTime"),
+        "dateSource": "Entry DateTime Paris" if entry_raw else ("Date" if value(page, "Date") else "Notion created_time Paris"),
+        "entryDateTime": entry_raw,
+        "exitDateTime": exit_raw,
+        "entryDateTimeParis": format_paris_datetime(entry_raw),
+        "exitDateTimeParis": format_paris_datetime(exit_raw),
+        "entryTime": format_paris_time(entry_raw),
+        "exitTime": format_paris_time(exit_raw),
         "pair": value(page, "Pair") or "Unknown",
         "direction": value(page, "Direction") or "Unknown",
         "setup": value(page, "Setup Model") or "Unknown",
-        "session": value(page, "Session") or "Unknown",
+        "session": value(page, "Session") or auto_session,
+        "autoSession": auto_session,
+        "killzone": auto_killzone,
         "result": value(page, "Result") or "Incomplete",
         "net": num(page, "Net P/L"),
         "gross": num(page, "Gross P/L"),

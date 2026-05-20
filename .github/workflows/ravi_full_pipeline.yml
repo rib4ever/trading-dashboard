@@ -80,6 +80,7 @@ jobs:
         env:
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
           NOTION_TRADES_DATABASE_ID: ${{ secrets.NOTION_TRADES_DATABASE_ID }}
+          NOTION_SCREENSHOTS_DATABASE_ID: ${{ secrets.NOTION_SCREENSHOTS_DATABASE_ID }}
 
       - name: Commit dashboard data
         run: |

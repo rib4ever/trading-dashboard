@@ -16,7 +16,11 @@
       "pair": "XAUUSD",
       "direction": "Sell",
       "setup": "OB Entry",
+      "manualSetup": "OB Entry",
+      "aiCorrectedSetup": "",
+      "aiSetupCorrectionNotes": "",
       "session": "New York",
+      "manualSession": "",
       "autoSession": "New York",
       "killzone": "New York AM Killzone",
       "result": "Win",
@@ -40,7 +44,6 @@
       "calculationStatus": "Complete",
       "autoCalculationNotes": "Checked. No changes needed.",
       "rules": true,
-      "quality": "B",
       "mistakes": [
         "Closed Early",
         "Bad Risk"
@@ -58,10 +61,10 @@
       "aiDisciplineScore": 65.0,
       "aiConfidence": 0.75,
       "aiReview": "The trade is a partially valid OB Entry on 5M timeframe aligned with HTF downtrend bias, but the entry confirmation is weak and the FVG claim is not fully supported. The stop loss and take profit are logical but the early manual exit reduced the R multiple. Verdict: PARTIALLY VALID BUT WEAK EXECUTION.",
-      "aiStoryReview": "Verdict: The trade is partially valid but shows weak execution and incomplete confirmation. [Screenshot: 15M BEFORE] shows a clear HTF downtrend with lower highs and lower lows and a marked key level down. This confirms the bearish bias claimed by Ravi. Key Levels / Liquidity: The supply zone (OB) is clearly marked on the 5M charts [Screenshot: 5M ENTRY and 5M EXIT]. This zone aligns with the HTF structure and acts as a resistance area. There is no clear evidence of a liquidity sweep before entry, so the liquidity claim is unproven. POI / FVG / OB Quality: The FVG marked on 5M is partially mitigated and not strongly reacted to, making the FVG claim weak. The OB supply zone is valid and price reacts there, supporting the OB Entry model. Entry Validation: The entry at 4502.98 is on the supply zone but lacks strong confirmation such as displacement, reclaim, or lower timeframe CHOCH/BOS. Entry timing is early relative to full confirmation. Exit / Management: The trade was manually closed before reaching full 2R target, reducing realized R to 1.3. Stop loss is logically placed above the supply zone. Mistakes: Early manual exit reduced profit potential. Entry confirmation was weak, increasing risk. Future Rules: Only enter OB trades after clear lower timeframe confirmation such as displacement or reclaim. Avoid entering on partially mitigated FVGs. Do not close trades early without technical reason. Always confirm liquidity sweeps if claiming them. Use more comprehensive screenshots including lower timeframe structure for better validation.",
       "aiRealityCheck": "Ravi claims a HTF downtrend which is confirmed by the 15M screenshot showing lower highs and lower lows. The FVG claim is contradicted as the FVG zone is partially mitigated and reaction is weak on 5M. The OB supply zone claim is confirmed by the 5M screenshots showing a marked supply zone with price reaction. Entry timing is unproven as no clear displacement or reclaim confirmation is visible on 5M entry screenshot. The manual early exit is confirmed by the exit screenshot and trade notes. Overall, the journal story partially matches but overstates FVG importance and entry confirmation.",
       "aiMistakeDiagnosis": "Main mistakes include entering the trade without strong lower timeframe confirmation such as displacement or reclaim after the OB formation, and closing the trade early without technical justification, reducing the planned R multiple. The FVG claim is overstated and not supported by clear evidence. The entry is therefore weak and partially invalid in terms of confirmation.",
       "aiFutureRules": "1. Only enter OB trades after clear lower timeframe confirmation such as displacement, reclaim, or CHOCH/BOS. 2. Do not rely on partially mitigated FVGs for entry signals. 3. Confirm liquidity sweeps with clear price action before entry. 4. Place stop loss beyond structural highs/lows or liquidity points. 5. Avoid manual early exits unless triggered by technical signals. 6. Upload comprehensive screenshots including lower timeframe structure and confirmation candles before entry.",
+      "aiEvidenceWarning": "Lower timeframe (1M or 3M) structure and confirmation screenshots, Clear evidence of displacement or reclaim after OB formation, Screenshot showing liquidity sweep if claimed | HTF context is bearish as shown on 15M with lower highs and lower lows and a marked key level down. The OB supply zone on 5M is visible and price reacts there, confirming the setup model. Entry execution is weak due to lack of clear displacement or reclaim confirmation on lower timeframe. Risk management is logical with SL above supply zone and TP near logical support. Journal story partially matches screenshots but overstates FVG importance and does not mention weak entry confirmation. Screenshot quality is adequate but limited to 3 images. Discipline is moderate due to early manual exit reducing planned R. Overall, a partially valid trade with room for improvement.",
       "driveFolder": "https://drive.google.com/drive/folders/1XTu2FlyOZbe2_sBMqcZuDgpnEdQ0065A",
       "screenshotSyncStatus": "Synced to Drive",
       "screenshots": [
@@ -158,7 +161,11 @@
       "pair": "XAUUSD",
       "direction": "Sell",
       "setup": "FVG Entry",
+      "manualSetup": "FVG Entry",
+      "aiCorrectedSetup": "",
+      "aiSetupCorrectionNotes": "",
       "session": "Off Session",
+      "manualSession": "",
       "autoSession": "Off Session",
       "killzone": "Off Killzone",
       "result": "Win",
@@ -182,7 +189,6 @@
       "calculationStatus": "Complete",
       "autoCalculationNotes": "Checked. No changes needed.",
       "rules": true,
-      "quality": "C",
       "mistakes": [
         "Closed Early"
       ],
@@ -199,10 +205,10 @@
       "aiDisciplineScore": 65.0,
       "aiConfidence": 0.75,
       "aiReview": "The trade is partially valid but shows weaknesses in entry confirmation and setup classification. The HTF context confirms a downtrend, and the entry targets buy-side liquidity as claimed. However, the FVG entry model selected by Ravi is not fully supported by the screenshots, which show a liquidity sweep and POI rather than a fresh FVG reaction. Entry timing lacks clear displacement or reclaim confirmation. Stop loss is logically placed above recent structure. The trade was closed early without a clear technical reason. Verdict: PARTIALLY VALID BUT WEAK EXECUTION.",
-      "aiStoryReview": "Verdict: The trade aligns with a bearish HTF context but the entry model is misclassified and entry confirmation is weak. [Screenshot: 4H BEFORE], [Screenshot: 1H BEFORE], [Screenshot: 5M ENTRY]\n\nHTF Context: The 4H and 1H charts show a clear downtrend with lower highs and lower lows, confirmed by marked HTF key levels labeled as 'Down'. This supports a bearish bias. [Screenshot: 4H BEFORE], [Screenshot: 1H BEFORE]\n\nKey Levels / Liquidity: The 5M chart shows a marked POI and liquidity zone on the buy side below price, consistent with the target for the sell trade. The liquidity sweep is visible as price dips below recent lows before retracing. [Screenshot: 5M ENTRY]\n\nPOI / FVG / OB Quality: The claimed FVG on 5M is not fresh or clearly unmitigated; price is already inside or passing through the zone. The zone is small and not strongly defended. The setup better fits a liquidity sweep into a POI rather than a clean FVG entry. [Screenshot: 5M ENTRY]\n\nEntry Validation: Entry at 4505.73 occurs after some price reaction but lacks clear displacement, reclaim, or CHOCH confirmation on the 5M chart. Entry appears slightly early relative to ideal confirmation signals. [Screenshot: 5M ENTRY]\n\nExit / Management: Stop loss is placed above recent highs (~4517.67), which is logical. No take profit is defined. The trade was closed early manually without a visible technical trigger. [Screenshot: 5M ENTRY]\n\nMistakes: Misclassification of setup as FVG Entry. Entry taken without strong confirmation signals. Early exit without technical reason reduces potential profit.\n\nFuture Rules: Confirm clear displacement or reclaim on lower timeframe before entry. Only label FVG if fresh and unmitigated with clear reaction. Define take profit targets before entry. Avoid early manual exits without technical justification.",
       "aiRealityCheck": "Ravi claims a HTF downtrend and FVG reaction on 5M. HTF downtrend is confirmed by 4H and 1H charts. The FVG reaction claim is contradicted because the FVG zone is not fresh or clearly defended; price is passing through it. The liquidity sweep claim is confirmed by price dipping below recent lows on 5M. Entry timing is unproven as no clear reclaim or displacement is visible. The early exit claim is confirmed by manual close without technical trigger.",
       "aiMistakeDiagnosis": "Main mistakes are mislabeling the setup as FVG Entry when it is a liquidity sweep, entering without clear lower timeframe confirmation (displacement/reclaim/CHOCH), and closing the trade early without technical reason. These reduce the trade's quality and potential profit.",
       "aiFutureRules": "1. Only classify setups as FVG Entry if the FVG is fresh, unmitigated, and price shows clear reaction.\n2. Require clear lower timeframe confirmation (displacement, reclaim, CHOCH) before entry.\n3. Define take profit targets aligned with HTF liquidity or structure before entering.\n4. Avoid early manual exits unless triggered by technical signals.\n5. Validate all key levels and liquidity zones with multiple timeframe confirmation.",
+      "aiEvidenceWarning": "HTF context is clearly bearish/downtrend with valid key levels. Setup quality is moderate due to mislabeling of FVG and only partial POI clarity. Entry execution is weak because no clear displacement or reclaim confirmation is visible before entry. Risk management is acceptable with SL above structure but no TP defined. Journal partially matches screenshots but overstates FVG reaction. Screenshots are clear but limited to 3 images. Discipline is average due to early exit without technical reason.",
       "driveFolder": "https://drive.google.com/drive/folders/1DW4vPFPhcW6eefPPweCG-721IW0qwhFc",
       "screenshotSyncStatus": "Synced to Drive",
       "screenshots": [

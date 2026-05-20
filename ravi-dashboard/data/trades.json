@@ -57,11 +57,11 @@
           "category": "01_context",
           "driveUrl": "https://drive.google.com/file/d/1FUt68F-fvEKpvC9P0Zqnjmiw55US7a2d/view?usp=drivesdk",
           "fileId": "1FUt68F-fvEKpvC9P0Zqnjmiw55US7a2d",
-          "thumbnailUrl": "https://drive.google.com/thumbnail?id=1FUt68F-fvEKpvC9P0Zqnjmiw55US7a2d&sz=w1600",
-          "localUrl": "",
+          "thumbnailUrl": "./assets/screenshots/TRD-20260519-9CB0C1_slot-1_1FUt68F-fvEKpvC9P0Zqnjmiw55US7a2d.png",
+          "localUrl": "./assets/screenshots/TRD-20260519-9CB0C1_slot-1_1FUt68F-fvEKpvC9P0Zqnjmiw55US7a2d.png",
           "fileName": "TRD-20260519-9CB0C1_XAUUSD_2026-05-19_4H_BEFORE.png",
           "source": "trade_screenshots_db",
-          "stableAsset": false
+          "stableAsset": true
         },
         {
           "name": "TRD-20260519-9CB0C1 — 1H BEFORE",
@@ -72,11 +72,11 @@
           "category": "01_context",
           "driveUrl": "https://drive.google.com/file/d/1LeUfs3c27RblLEVzgAv2U0Dv6haFrmv_/view?usp=drivesdk",
           "fileId": "1LeUfs3c27RblLEVzgAv2U0Dv6haFrmv_",
-          "thumbnailUrl": "https://drive.google.com/thumbnail?id=1LeUfs3c27RblLEVzgAv2U0Dv6haFrmv_&sz=w1600",
-          "localUrl": "",
+          "thumbnailUrl": "./assets/screenshots/TRD-20260519-9CB0C1_slot-2_1LeUfs3c27RblLEVzgAv2U0Dv6haFrmv.png",
+          "localUrl": "./assets/screenshots/TRD-20260519-9CB0C1_slot-2_1LeUfs3c27RblLEVzgAv2U0Dv6haFrmv.png",
           "fileName": "TRD-20260519-9CB0C1_XAUUSD_2026-05-19_1H_BEFORE.png",
           "source": "trade_screenshots_db",
-          "stableAsset": false
+          "stableAsset": true
         },
         {
           "name": "TRD-20260519-9CB0C1 — 5M ENTRY",
@@ -87,11 +87,11 @@
           "category": "02_entry",
           "driveUrl": "https://drive.google.com/file/d/1jXNQoMH_HbdRHkIz5nhdOM8Bpkr00kYa/view?usp=drivesdk",
           "fileId": "1jXNQoMH_HbdRHkIz5nhdOM8Bpkr00kYa",
-          "thumbnailUrl": "https://drive.google.com/thumbnail?id=1jXNQoMH_HbdRHkIz5nhdOM8Bpkr00kYa&sz=w1600",
-          "localUrl": "",
+          "thumbnailUrl": "./assets/screenshots/TRD-20260519-9CB0C1_slot-3_1jXNQoMH_HbdRHkIz5nhdOM8Bpkr00kYa.png",
+          "localUrl": "./assets/screenshots/TRD-20260519-9CB0C1_slot-3_1jXNQoMH_HbdRHkIz5nhdOM8Bpkr00kYa.png",
           "fileName": "TRD-20260519-9CB0C1_XAUUSD_2026-05-19_5M_ENTRY.png",
           "source": "trade_screenshots_db",
-          "stableAsset": false
+          "stableAsset": true
         }
       ]
     },
@@ -150,11 +150,11 @@
           "category": "01_context",
           "driveUrl": "https://drive.google.com/file/d/1GpmgmxALxEF1VOfUOJnCblES5EEj5guV/view?usp=drivesdk",
           "fileId": "1GpmgmxALxEF1VOfUOJnCblES5EEj5guV",
-          "thumbnailUrl": "https://drive.google.com/thumbnail?id=1GpmgmxALxEF1VOfUOJnCblES5EEj5guV&sz=w1600",
-          "localUrl": "",
+          "thumbnailUrl": "./assets/screenshots/TRD-20260516-TEST01_slot-1_1GpmgmxALxEF1VOfUOJnCblES5EEj5guV.png",
+          "localUrl": "./assets/screenshots/TRD-20260516-TEST01_slot-1_1GpmgmxALxEF1VOfUOJnCblES5EEj5guV.png",
           "fileName": "TRD-20260516-TEST01_XAUUSD_2026-05-16_4H_BEFORE.png",
           "source": "trade_screenshots_db",
-          "stableAsset": false
+          "stableAsset": true
         }
       ]
     },

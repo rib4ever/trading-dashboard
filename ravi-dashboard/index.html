@@ -7,8 +7,9 @@
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
   <title>Ravi Trading Dashboard</title>
-  <link rel="stylesheet" href="./styles.css?v=20260520-03" />
-  <link rel="stylesheet" href="./themes.css?v=20260520-03" />
+  <link rel="stylesheet" href="./styles.css?v=20260520-04" />
+  <link rel="stylesheet" href="./themes.css?v=20260520-04" />
+  <link rel="stylesheet" href="./pro.css?v=20260520-04" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
@@ -32,11 +33,22 @@
       <button class="tab-btn" data-tab="system">System Map</button>
     </nav>
 
+    <section class="filter-bar">
+      <div class="filter-title"><span>Professional Filters</span><strong>Focus your review</strong></div>
+      <select id="pairFilter" class="select"><option value="all">All Pairs</option></select>
+      <select id="sessionFilter" class="select"><option value="all">All Sessions</option></select>
+      <select id="setupFilter" class="select"><option value="all">All Setups</option></select>
+      <select id="resultFilter" class="select"><option value="all">All Results</option><option value="Win">Wins</option><option value="Loss">Losses</option><option value="Incomplete">Incomplete</option></select>
+      <button id="resetFilters" class="ghost-btn">Reset</button>
+    </section>
+
     <section class="kpi-grid pro-kpis">
       <article class="kpi-card primary"><span>Total Net P/L</span><strong id="netProfit">€0.00</strong><em>Realized performance</em></article>
       <article class="kpi-card"><span>Win Rate</span><strong id="winRate">0%</strong><em>Completed trades</em></article>
       <article class="kpi-card"><span>Profit Factor</span><strong id="profitFactor">0.00</strong><em>Gross win / gross loss</em></article>
       <article class="kpi-card"><span>Expectancy</span><strong id="expectancy">€0.00</strong><em>Average per trade</em></article>
+      <article class="kpi-card"><span>Max Drawdown</span><strong id="maxDrawdown">€0.00</strong><em>Peak-to-valley risk</em></article>
+      <article class="kpi-card"><span>Avg Win / Loss</span><strong id="avgWinLoss">€0 / €0</strong><em>Payoff profile</em></article>
       <article class="kpi-card"><span>Average R</span><strong id="averageR">0.00R</strong><em>Risk performance</em></article>
       <article class="kpi-card"><span>Total Trades</span><strong id="totalTrades">0</strong><em>All trades loaded</em></article>
       <article class="kpi-card"><span>Best Pair</span><strong id="bestPair">-</strong><em>Highest net P/L</em></article>
@@ -45,6 +57,7 @@
 
     <section id="tab-calendar" class="tab-section active">
       <section class="calendar-panel"><div class="calendar-header"><button id="prevMonth" class="icon-btn">‹</button><h2 id="calendarTitle">Calendar</h2><button id="nextMonth" class="icon-btn">›</button><div class="calendar-totals"><span>P/L: <strong id="calendarPL">€0.00</strong></span><span>Trades: <strong id="calendarTrades">0</strong></span></div></div><div class="calendar-grid" id="calendarGrid"></div></section>
+      <section class="day-review-panel" id="dayReviewPanel"><div class="panel-header"><h2 id="dayReviewTitle">Select a day</h2><span id="dayReviewSummary">Click a calendar day to review trades</span></div><div id="dayReviewRows" class="day-review-rows"></div></section>
     </section>
 
     <section id="tab-analytics" class="tab-section">
@@ -77,6 +90,6 @@
       </section>
     </section>
   </div>
-  <script src="./app.js?v=20260520-03"></script>
+  <script src="./app.js?v=20260520-04"></script>
 </body>
 </html>

@@ -1,15 +1,19 @@
 import json
 import os
+import re
 from pathlib import Path
 from typing import Any
 
+from src.clients.google_drive_client import GoogleDriveClient
 from src.clients.notion_client import NotionClient
 
 TRADES_DATABASE_ID = os.environ.get("NOTION_TRADES_DATABASE_ID")
 SCREENSHOTS_DATABASE_ID = os.environ.get("NOTION_SCREENSHOTS_DATABASE_ID")
 ROOT_DIR = Path(__file__).resolve().parents[2]
 REPO_ROOT = ROOT_DIR.parent
-DASHBOARD_DATA_DIR = REPO_ROOT / "ravi-dashboard" / "data"
+DASHBOARD_DIR = REPO_ROOT / "ravi-dashboard"
+DASHBOARD_DATA_DIR = DASHBOARD_DIR / "data"
+SCREENSHOT_ASSET_DIR = DASHBOARD_DIR / "assets" / "screenshots"
 EXPORT_PATH = DASHBOARD_DATA_DIR / "trades.json"
 
 SLOT_CONFIG = [
@@ -58,6 +62,17 @@ def num(page: dict[str, Any], name: str) -> float:
         return 0.0
 
 
+def safe_filename(text: str) -> str:
+    clean = re.sub(r"[^A-Za-z0-9._-]+", "-", text.strip())
+    clean = re.sub(r"-+", "-", clean).strip("-._")
+    return clean or "screenshot"
+
+
+def file_extension(name: str) -> str:
+    suffix = Path(name or "").suffix.lower()
+    return suffix if suffix in {".png", ".jpg", ".jpeg", ".webp"} else ".png"
+
+
 def file_url(file_obj: dict[str, Any]) -> str:
     if not file_obj:
         return ""
@@ -103,8 +118,9 @@ def fallback_screenshots_from_trade_page(page: dict[str, Any]) -> list[dict[str,
             "driveUrl": url,
             "fileId": "",
             "thumbnailUrl": url,
+            "localUrl": "",
             "fileName": name,
-            "source": "trade_page_slot",
+            "source": "trade_page_slot_temporary_fallback",
         })
     return rows
 
@@ -129,10 +145,56 @@ def query_screenshots_for_trade(notion: NotionClient, trade_id: str) -> list[dic
             "driveUrl": value(page, "Google Drive URL") or "",
             "fileId": file_id,
             "thumbnailUrl": f"https://drive.google.com/thumbnail?id={file_id}&sz=w1600" if file_id else "",
+            "localUrl": "",
             "fileName": value(page, "Final File Name") or "",
             "source": "trade_screenshots_db",
         })
     return sorted(rows, key=lambda x: x.get("slot") or 99)
+
+
+def persist_dashboard_screenshots(screenshots: list[dict[str, Any]], trade_id: str) -> list[dict[str, Any]]:
+    """Create stable local dashboard screenshot assets.
+
+    Rule:
+    - If a local asset already exists, keep it unchanged.
+    - Only download from Google Drive when there is a Drive file id and the local asset is missing.
+    - Temporary Notion URLs remain fallback only and are not considered stable.
+    """
+    if not screenshots:
+        return screenshots
+
+    SCREENSHOT_ASSET_DIR.mkdir(parents=True, exist_ok=True)
+    drive = None
+    enriched: list[dict[str, Any]] = []
+
+    for shot in screenshots:
+        slot = int(float(shot.get("slot") or 0)) if str(shot.get("slot") or "").replace(".", "", 1).isdigit() else 0
+        source_name = shot.get("fileName") or shot.get("name") or f"slot-{slot}.png"
+        ext = file_extension(source_name)
+        file_id = shot.get("fileId") or ""
+        stable_key = file_id or f"slot-{slot}-{safe_filename(source_name)}"
+        asset_name = safe_filename(f"{trade_id}_slot-{slot}_{stable_key}") + ext
+        asset_path = SCREENSHOT_ASSET_DIR / asset_name
+        local_url = f"./assets/screenshots/{asset_name}"
+
+        if file_id and not asset_path.exists():
+            try:
+                if drive is None:
+                    drive = GoogleDriveClient()
+                asset_path.write_bytes(drive.download_bytes(file_id))
+                print(f"Downloaded dashboard screenshot asset: {asset_name}")
+            except Exception as exc:
+                print(f"Warning: could not download Drive screenshot {file_id}: {exc}")
+
+        if asset_path.exists():
+            shot["localUrl"] = local_url
+            shot["thumbnailUrl"] = local_url
+            shot["stableAsset"] = True
+        else:
+            shot["stableAsset"] = False
+        enriched.append(shot)
+
+    return enriched
 
 
 def normalize_trade(page: dict[str, Any], screenshots: list[dict[str, Any]]) -> dict[str, Any]:
@@ -205,7 +267,9 @@ def run_dashboard_export() -> None:
     for page in pages:
         trade_id = value(page, "Trade ID") or page.get("id")
         screenshots = query_screenshots_for_trade(notion, trade_id)
-        if not screenshots:
+        if screenshots:
+            screenshots = persist_dashboard_screenshots(screenshots, trade_id)
+        else:
             screenshots = fallback_screenshots_from_trade_page(page)
         trades.append(normalize_trade(page, screenshots))
     DASHBOARD_DATA_DIR.mkdir(parents=True, exist_ok=True)

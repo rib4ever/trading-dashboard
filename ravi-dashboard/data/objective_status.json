@@ -1,0 +1,106 @@
+{
+  "generatedAt": "2026-05-21T01:29:23.491489+02:00",
+  "profile": "Ravi Custom 01 - Live Trading Guardrails",
+  "currency": "EUR",
+  "timezone": "Europe/Paris",
+  "objectives": {
+    "daily": {
+      "profitTarget": 50,
+      "maxLoss": -50,
+      "maxTrades": 3,
+      "maxLosingTrades": 2,
+      "stopTradingWhenMaxLossHit": true,
+      "stopTradingWhenMaxLosingTradesHit": true,
+      "stopTradingWhenMaxTradesHit": true
+    },
+    "weekly": {
+      "profitTarget": 200,
+      "maxLoss": -150,
+      "maxTrades": 15,
+      "maxLosingTrades": 6
+    },
+    "monthly": {
+      "profitTarget": 800,
+      "maxLoss": -400,
+      "maxTrades": 60,
+      "maxLosingTrades": 20
+    }
+  },
+  "alerts": {
+    "enabled": true,
+    "telegramEnabled": true,
+    "warnAtProgressPercent": 80,
+    "warnAtLossPercent": 80,
+    "warnAtTradeCountPercent": 80,
+    "warnAtLosingTradeCountPercent": 80,
+    "sendOnlyWhenBreachedOrWarning": true
+  },
+  "periods": {
+    "daily": {
+      "period": "daily",
+      "net": 0,
+      "trades": 0,
+      "losingTrades": 0,
+      "profitTarget": 50.0,
+      "maxLoss": -50.0,
+      "maxTrades": 3,
+      "maxLosingTrades": 2,
+      "profitProgressPercent": 0.0,
+      "lossProgressPercent": 0.0,
+      "tradeProgressPercent": 0.0,
+      "losingTradeProgressPercent": 0.0,
+      "profitTargetHit": false,
+      "maxLossHit": false,
+      "maxTradesHit": false,
+      "maxLosingTradesHit": false,
+      "level": "ok",
+      "action": "CONTINUE",
+      "warnings": [],
+      "breaches": []
+    },
+    "weekly": {
+      "period": "weekly",
+      "net": 48.45,
+      "trades": 2,
+      "losingTrades": 0,
+      "profitTarget": 200.0,
+      "maxLoss": -150.0,
+      "maxTrades": 15,
+      "maxLosingTrades": 6,
+      "profitProgressPercent": 24.23,
+      "lossProgressPercent": 0.0,
+      "tradeProgressPercent": 13.33,
+      "losingTradeProgressPercent": 0.0,
+      "profitTargetHit": false,
+      "maxLossHit": false,
+      "maxTradesHit": false,
+      "maxLosingTradesHit": false,
+      "level": "ok",
+      "action": "CONTINUE",
+      "warnings": [],
+      "breaches": []
+    },
+    "monthly": {
+      "period": "monthly",
+      "net": 48.45,
+      "trades": 2,
+      "losingTrades": 0,
+      "profitTarget": 800.0,
+      "maxLoss": -400.0,
+      "maxTrades": 60,
+      "maxLosingTrades": 20,
+      "profitProgressPercent": 6.06,
+      "lossProgressPercent": 0.0,
+      "tradeProgressPercent": 3.33,
+      "losingTradeProgressPercent": 0.0,
+      "profitTargetHit": false,
+      "maxLossHit": false,
+      "maxTradesHit": false,
+      "maxLosingTradesHit": false,
+      "level": "ok",
+      "action": "CONTINUE",
+      "warnings": [],
+      "breaches": []
+    }
+  }
+}

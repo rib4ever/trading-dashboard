@@ -4,7 +4,8 @@
     const n = Number(v) || 0;
     return `${n < 0 ? '-' : ''}€${Math.abs(n).toFixed(2)}`;
   };
-  const isCompleted = (t) => t.dashboardReady === true && !['Incomplete', '', null, undefined].includes(t.result);
+  const hasTradeResult = (t) => !['Incomplete', '', null, undefined].includes(t.result);
+  const isCompleted = (t) => hasTradeResult(t) && (Number.isFinite(Number(t.net)) || Number.isFinite(Number(t.gross)));
   const dateKey = (d) => String(d || '').slice(0, 10);
 
   async function loadPhase2Trades() {
@@ -93,7 +94,7 @@
       const losses = completed.filter((t) => String(t.result).includes('Loss')).length;
       const screenshots = filtered.reduce((s, t) => s + ((t.screenshots || []).length || 0), 0);
       pills.innerHTML = [
-        `${completed.length} completed`,
+        `${completed.length} P/L trades`,
         `${wins} wins`,
         `${losses} losses`,
         `${screenshots} screenshots`,

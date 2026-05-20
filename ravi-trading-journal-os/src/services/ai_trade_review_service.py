@@ -31,6 +31,19 @@ VALID_VERDICTS = {
     "INSUFFICIENT EVIDENCE TO VALIDATE",
 }
 
+VALID_SETUP_MODELS = {
+    "SMC Sweep Reversal",
+    "SMC Continuation",
+    "NCI Market Story",
+    "FVG Entry",
+    "OB Entry",
+    "SATS Confirmation",
+    "Liquidity Sweep",
+    "Invalid Entry",
+    "Unclear / Insufficient Evidence",
+    "Custom",
+}
+
 
 def _prop(page: dict[str, Any], name: str) -> dict[str, Any] | None:
     return page.get("properties", {}).get(name)
@@ -62,7 +75,7 @@ def get_text(page: dict[str, Any], name: str) -> str | None:
 
 
 def notion_rich_text(value: str) -> dict[str, Any]:
-    return {"rich_text": [{"text": {"content": value[:1900]}}]}
+    return {"rich_text": [{"text": {"content": str(value or "")[:1900]}}]}
 
 
 def notion_select(value: str) -> dict[str, Any]:
@@ -96,6 +109,21 @@ def normalized_verdict(value: Any, summary: str = "") -> str:
     return "INSUFFICIENT EVIDENCE TO VALIDATE"
 
 
+def normalized_setup_model(value: Any) -> str:
+    setup = str(value or "").strip()
+    if setup in VALID_SETUP_MODELS:
+        return setup
+    lower = setup.lower()
+    for candidate in VALID_SETUP_MODELS:
+        if candidate.lower() in lower:
+            return candidate
+    if "invalid" in lower:
+        return "Invalid Entry"
+    if "insufficient" in lower or "unclear" in lower:
+        return "Unclear / Insufficient Evidence"
+    return "Unclear / Insufficient Evidence"
+
+
 def query_ready_trades(notion: NotionClient) -> list[dict[str, Any]]:
     if not TRADES_DATABASE_ID:
         raise RuntimeError("Missing NOTION_TRADES_DATABASE_ID")
@@ -117,10 +145,10 @@ def query_screenshot_records(notion: NotionClient, trade_id: str) -> list[dict[s
 def build_trade_context(page: dict[str, Any]) -> dict[str, str | None]:
     fields = [
         "Trade Name", "Trade ID", "Date", "Entry DateTime", "Exit DateTime", "Broker Entry Time", "Broker Exit Time",
-        "Pair", "Direction", "Account", "Session", "Auto Session", "Killzone", "Setup Model",
-        "Result", "Trade Quality", "Followed Rules", "Mistake Type", "Entry Price", "Exit Price",
+        "Pair", "Direction", "Account", "Session", "Auto Session", "Killzone", "Setup Model", "AI Corrected Setup Model",
+        "Result", "Followed Rules", "Mistake Type", "Entry Price", "Exit Price",
         "Stop Loss", "Take Profit", "Risk %", "Risk Amount", "Planned R", "Result R", "Net P/L",
-        "Raw Journal Story", "Notes", "Google Drive Trade Folder",
+        "Raw Journal Story", "Google Drive Trade Folder",
     ]
     return {name: get_text(page, name) for name in fields}
 
@@ -196,7 +224,7 @@ def _post_openai_with_retries(payload: dict[str, Any]) -> dict[str, Any]:
 
 def call_openai_review(prompt: str, trade_context: dict[str, Any], screenshots: list[dict[str, str | None]], contact_sheet_url: str, image_count: int) -> dict[str, Any]:
     user_text = {
-        "task": "Review this trade strictly, score it, and return the required JSON only.",
+        "task": "Review this trade strictly, score it, classify the corrected setup model, and return the required JSON only.",
         "review_mode": "single compressed contact sheet",
         "trade_context": trade_context,
         "screenshot_records": screenshots,
@@ -244,18 +272,24 @@ def update_trade_review(notion: NotionClient, page_id: str, review: dict[str, An
     needs_more = bool(review.get("needs_more_screenshots"))
     confidence = float(review.get("confidence", 0.0) or 0.0)
     verdict = normalized_verdict(review.get("verdict"), str(review.get("summary", "")))
+    corrected_setup = normalized_setup_model(review.get("corrected_setup_model"))
     score_reasoning = str(review.get("score_reasoning", ""))
+    missing_evidence = ", ".join(review.get("missing_evidence", []) or [])
+    setup_notes = str(review.get("setup_correction_notes", ""))
+    evidence_warning = " | ".join(x for x in [missing_evidence, score_reasoning] if x)
+
     props = {
         "AI Review Status": notion_select(AI_STATUS_MORE_SCREENSHOTS if needs_more else AI_STATUS_COMPLETE),
         "AI Review": notion_rich_text(str(review.get("summary", ""))),
-        "AI Story Review": notion_rich_text(str(review.get("story_review", ""))),
         "AI Reality Check": notion_rich_text(str(review.get("reality_check", ""))),
         "AI Mistake Diagnosis": notion_rich_text(str(review.get("mistake_diagnosis", ""))),
         "AI Future Rules": notion_rich_text(str(review.get("future_rules", ""))),
-        "AI Evidence Warning": notion_rich_text(", ".join(review.get("missing_evidence", []) or [])),
+        "AI Evidence Warning": notion_rich_text(evidence_warning),
         "AI Review Confidence": notion_number(max(0.0, min(confidence, 1.0))),
         "AI Reviewed Time": notion_date(now_iso()),
         "AI Verdict": notion_select(verdict),
+        "AI Corrected Setup Model": notion_select(corrected_setup),
+        "AI Setup Correction Notes": notion_rich_text(setup_notes),
         "AI Trade Score": notion_number(clamp_score(review.get("trade_score"))),
         "AI HTF Context Score": notion_number(clamp_score(review.get("htf_context_score"))),
         "AI Setup Quality Score": notion_number(clamp_score(review.get("setup_quality_score"))),
@@ -265,8 +299,6 @@ def update_trade_review(notion: NotionClient, page_id: str, review: dict[str, An
         "AI Screenshot Evidence Score": notion_number(clamp_score(review.get("screenshot_evidence_score"))),
         "AI Discipline Score": notion_number(clamp_score(review.get("discipline_score"))),
     }
-    if score_reasoning:
-        props["AI Evidence Warning"] = notion_rich_text((props["AI Evidence Warning"]["rich_text"][0]["text"]["content"] + " | " + score_reasoning).strip(" |"))
     notion.update_page(page_id, props)
 
 
@@ -282,7 +314,7 @@ def process_trade(page: dict[str, Any], notion: NotionClient, drive: GoogleDrive
     page_id = page["id"]
     trade_context = build_trade_context(page)
     trade_id = trade_context.get("Trade ID")
-    raw_story = trade_context.get("Raw Journal Story") or trade_context.get("Notes")
+    raw_story = trade_context.get("Raw Journal Story")
 
     if not trade_id:
         update_trade_error(notion, page_id, "Missing Trade ID. Cannot perform AI review.")
@@ -297,6 +329,8 @@ def process_trade(page: dict[str, Any], notion: NotionClient, drive: GoogleDrive
         update_trade_review(notion, page_id, {
             "summary": "AI review cannot be completed because no synced screenshot records were found. Verdict: INSUFFICIENT EVIDENCE TO VALIDATE.",
             "verdict": "INSUFFICIENT EVIDENCE TO VALIDATE",
+            "corrected_setup_model": "Unclear / Insufficient Evidence",
+            "setup_correction_notes": "No screenshots were available, so the setup model cannot be validated.",
             "trade_score": 10,
             "htf_context_score": 0,
             "setup_quality_score": 0,
@@ -306,7 +340,6 @@ def process_trade(page: dict[str, Any], notion: NotionClient, drive: GoogleDrive
             "screenshot_evidence_score": 0,
             "discipline_score": 20,
             "score_reasoning": "No screenshots were available, so the trade cannot be validated.",
-            "story_review": "Verdict: INSUFFICIENT EVIDENCE TO VALIDATE. No synced screenshots were available.",
             "reality_check": "No screenshots are available to compare against the journal story.",
             "mistake_diagnosis": "Missing visual evidence.",
             "future_rules": "Upload and sync chart screenshots before requesting AI review.",

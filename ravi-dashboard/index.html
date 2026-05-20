@@ -7,105 +7,28 @@
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
   <title>Ravi Trading Dashboard</title>
-  <link rel="stylesheet" href="./styles.css?v=20260520-06" />
-  <link rel="stylesheet" href="./themes.css?v=20260520-06" />
-  <link rel="stylesheet" href="./pro.css?v=20260520-06" />
+  <link rel="stylesheet" href="./styles.css?v=20260520-07" />
+  <link rel="stylesheet" href="./themes.css?v=20260520-07" />
+  <link rel="stylesheet" href="./pro.css?v=20260520-07" />
+  <link rel="stylesheet" href="./pro-phase2.css?v=20260520-07" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
   <div class="app-shell">
     <header class="topbar">
-      <div>
-        <p class="eyebrow">Trading Journal OS</p>
-        <h1>Ravi Trading Dashboard</h1>
-        <p id="dataStatus" class="eyebrow">Loading dashboard data...</p>
-      </div>
-      <div class="top-actions">
-        <select id="themeSelect" class="select">
-          <option value="dark">Dark Professional</option>
-          <option value="violet">Violet Night</option>
-          <option value="purpleRose">Purple Rose</option>
-          <option value="pinkNeon">Pink Neon</option>
-          <option value="marine">Marine Blue</option>
-          <option value="ocean">Ocean Depth</option>
-          <option value="earth">Earthy Brown</option>
-          <option value="forest">Forest Moss</option>
-          <option value="glass">Glass Terminal</option>
-          <option value="lightPro">Light Professional</option>
-          <option value="sky">Light Sky Blue</option>
-          <option value="lightOcean">Light Ocean</option>
-          <option value="lightRose">Light Rose</option>
-          <option value="lightEarth">Light Earth</option>
-          <option value="notion">Clean Notion</option>
-        </select>
-        <select id="periodFilter" class="select"><option value="all">All Time</option><option value="month">This Month</option><option value="week">This Week</option></select>
-      </div>
+      <div><p class="eyebrow">Trading Journal OS</p><h1>Ravi Trading Dashboard</h1><p id="dataStatus" class="eyebrow">Loading dashboard data...</p></div>
+      <div class="top-actions"><select id="themeSelect" class="select"><option value="dark">Dark Professional</option><option value="violet">Violet Night</option><option value="purpleRose">Purple Rose</option><option value="pinkNeon">Pink Neon</option><option value="marine">Marine Blue</option><option value="ocean">Ocean Depth</option><option value="earth">Earthy Brown</option><option value="forest">Forest Moss</option><option value="glass">Glass Terminal</option><option value="lightPro">Light Professional</option><option value="sky">Light Sky Blue</option><option value="lightOcean">Light Ocean</option><option value="lightRose">Light Rose</option><option value="lightEarth">Light Earth</option><option value="notion">Clean Notion</option></select><select id="periodFilter" class="select"><option value="all">All Time</option><option value="month">This Month</option><option value="week">This Week</option></select></div>
     </header>
-
-    <nav class="dashboard-tabs">
-      <button class="tab-btn active" data-tab="calendar">Calendar</button>
-      <button class="tab-btn" data-tab="analytics">Analytics</button>
-      <button class="tab-btn" data-tab="trades">Trade Log</button>
-      <button class="tab-btn" data-tab="system">System Map</button>
-    </nav>
-
-    <section class="filter-bar">
-      <div class="filter-title"><span>Professional Filters</span><strong>Focus your review</strong></div>
-      <select id="pairFilter" class="select"><option value="all">All Pairs</option></select>
-      <select id="sessionFilter" class="select"><option value="all">All Sessions</option></select>
-      <select id="setupFilter" class="select"><option value="all">All Setups</option></select>
-      <select id="resultFilter" class="select"><option value="all">All Results</option><option value="Win">Wins</option><option value="Loss">Losses</option><option value="Incomplete">Incomplete</option></select>
-      <button id="resetFilters" class="ghost-btn">Reset</button>
-    </section>
-
-    <section class="kpi-grid pro-kpis">
-      <article class="kpi-card primary"><span>Total Net P/L</span><strong id="netProfit">€0.00</strong><em>Realized performance</em></article>
-      <article class="kpi-card"><span>Win Rate</span><strong id="winRate">0%</strong><em>Completed trades</em></article>
-      <article class="kpi-card"><span>Profit Factor</span><strong id="profitFactor">0.00</strong><em>Gross win / gross loss</em></article>
-      <article class="kpi-card"><span>Expectancy</span><strong id="expectancy">€0.00</strong><em>Average per trade</em></article>
-      <article class="kpi-card"><span>Max Drawdown</span><strong id="maxDrawdown">€0.00</strong><em>Peak-to-valley risk</em></article>
-      <article class="kpi-card"><span>Avg Win / Loss</span><strong id="avgWinLoss">€0 / €0</strong><em>Payoff profile</em></article>
-      <article class="kpi-card"><span>Average R</span><strong id="averageR">0.00R</strong><em>Risk performance</em></article>
-      <article class="kpi-card"><span>Total Trades</span><strong id="totalTrades">0</strong><em>All trades loaded</em></article>
-      <article class="kpi-card"><span>Best Pair</span><strong id="bestPair">-</strong><em>Highest net P/L</em></article>
-      <article class="kpi-card"><span>Rule Follow Rate</span><strong id="ruleRate">0%</strong><em>Discipline score</em></article>
-    </section>
-
-    <section id="tab-calendar" class="tab-section active">
-      <section class="calendar-panel"><div class="calendar-header"><button id="prevMonth" class="icon-btn">‹</button><h2 id="calendarTitle">Calendar</h2><button id="nextMonth" class="icon-btn">›</button><div class="calendar-totals"><span>P/L: <strong id="calendarPL">€0.00</strong></span><span>Trades: <strong id="calendarTrades">0</strong></span></div></div><div class="calendar-grid" id="calendarGrid"></div></section>
-      <section class="day-review-panel" id="dayReviewPanel"><div class="panel-header"><h2 id="dayReviewTitle">Select a day</h2><span id="dayReviewSummary">Click a calendar day to review trades</span></div><div id="dayReviewRows" class="day-review-rows"></div></section>
-    </section>
-
-    <section id="tab-analytics" class="tab-section">
-      <main class="dashboard-grid">
-        <section class="panel wide"><div class="panel-header"><h2>Equity Curve</h2><span>Net P/L over time</span></div><canvas id="equityChart"></canvas></section>
-        <section class="panel"><div class="panel-header"><h2>Win / Loss</h2><span>Result split</span></div><canvas id="winLossChart"></canvas></section>
-        <section class="panel"><div class="panel-header"><h2>Pair Performance</h2><span>Net P/L by pair</span></div><canvas id="pairChart"></canvas></section>
-        <section class="panel"><div class="panel-header"><h2>Setup Performance</h2><span>Net P/L by setup</span></div><canvas id="setupChart"></canvas></section>
-        <section class="panel"><div class="panel-header"><h2>Session Performance</h2><span>Net P/L by session</span></div><canvas id="sessionChart"></canvas></section>
-        <section class="panel"><div class="panel-header"><h2>Mistake Tracker</h2><span>Repeated issues</span></div><canvas id="mistakeChart"></canvas></section>
-      </main>
-    </section>
-
-    <section id="tab-trades" class="tab-section">
-      <section class="table-panel"><div class="panel-header"><h2>Trade Log</h2><span>All exported trades</span></div><div class="table-wrap"><table><thead><tr><th>Date</th><th>Pair</th><th>Dir</th><th>Setup</th><th>Session</th><th>Result</th><th>Net P/L</th><th>R</th><th>Rules</th><th>Status</th></tr></thead><tbody id="tradeRows"></tbody></table></div></section>
-    </section>
-
-    <section id="tab-system" class="tab-section">
-      <section class="system-hero">
-        <div><p class="eyebrow">System Map / Core Workflow</p><h2>Trading Journal OS Network Map</h2><p class="hero-text">Notion is your input layer, Google Drive stores original evidence, GitHub Actions runs automation, OpenAI supervises your trade story, and this dashboard visualizes performance.</p></div>
-        <div class="status-card"><span>Live Dashboard</span><strong>GitHub Pages</strong><em>Same link refreshes after export/deploy</em></div>
-      </section>
-      <section class="flow-grid">
-        <article class="flow-card"><span>1</span><h3>Notion Trade Entry</h3><p>Fill trade details, journal story, execution data, and screenshots.</p></article>
-        <article class="flow-card"><span>2</span><h3>Screenshot Sync</h3><p>Evidence is archived into Google Drive and indexed by Trade ID.</p></article>
-        <article class="flow-card"><span>3</span><h3>AI Supervisor</h3><p>AI compares your journal story with screenshots and writes objective feedback.</p></article>
-        <article class="flow-card"><span>4</span><h3>Dashboard Export</h3><p>Notion data becomes optimized JSON and persistent screenshot assets.</p></article>
-        <article class="flow-card"><span>5</span><h3>GitHub Pages</h3><p>The dashboard deploys as a visual, mobile-friendly analytics page.</p></article>
-        <article class="flow-card"><span>6</span><h3>Future MT5 Import</h3><p>Broker execution will become the final truth for P/L, commissions, and tickets.</p></article>
-      </section>
-    </section>
+    <nav class="dashboard-tabs"><button class="tab-btn active" data-tab="calendar">Calendar</button><button class="tab-btn" data-tab="analytics">Analytics</button><button class="tab-btn" data-tab="trades">Trade Log</button><button class="tab-btn" data-tab="system">System Map</button></nav>
+    <section class="filter-bar"><div class="filter-title"><span>Professional Filters</span><strong>Focus your review</strong></div><select id="pairFilter" class="select"><option value="all">All Pairs</option></select><select id="sessionFilter" class="select"><option value="all">All Sessions</option></select><select id="setupFilter" class="select"><option value="all">All Setups</option></select><select id="resultFilter" class="select"><option value="all">All Results</option><option value="Win">Wins</option><option value="Loss">Losses</option><option value="Incomplete">Incomplete</option></select><div class="date-filter"><label>From</label><input id="dateFrom" type="date" /></div><div class="date-filter"><label>To</label><input id="dateTo" type="date" /></div><button id="resetFilters" class="ghost-btn">Reset</button></section>
+    <section class="kpi-grid pro-kpis"><article class="kpi-card primary"><span>Total Net P/L</span><strong id="netProfit">€0.00</strong><em>Realized performance</em></article><article class="kpi-card"><span>Win Rate</span><strong id="winRate">0%</strong><em>Completed trades</em></article><article class="kpi-card"><span>Profit Factor</span><strong id="profitFactor">0.00</strong><em>Gross win / gross loss</em></article><article class="kpi-card"><span>Expectancy</span><strong id="expectancy">€0.00</strong><em>Average per trade</em></article><article class="kpi-card"><span>Max Drawdown</span><strong id="maxDrawdown">€0.00</strong><em>Peak-to-valley risk</em></article><article class="kpi-card"><span>Avg Win / Loss</span><strong id="avgWinLoss">€0 / €0</strong><em>Payoff profile</em></article><article class="kpi-card"><span>Average R</span><strong id="averageR">0.00R</strong><em>Risk performance</em></article><article class="kpi-card"><span>Total Trades</span><strong id="totalTrades">0</strong><em>Filtered trades</em></article><article class="kpi-card"><span>Best Pair</span><strong id="bestPair">-</strong><em>Highest net P/L</em></article><article class="kpi-card"><span>Rule Follow Rate</span><strong id="ruleRate">0%</strong><em>Discipline score</em></article></section>
+    <section class="pro-insight-grid"><article class="insight-card good"><span>Best Day</span><strong id="bestDay">-</strong><em id="bestDayNote">No day selected</em></article><article class="insight-card risk"><span>Worst Day</span><strong id="worstDay">-</strong><em id="worstDayNote">No loss day yet</em></article><article class="insight-card"><span>Best Session</span><strong id="bestSessionInsight">-</strong><em>Most profitable filtered session</em></article><article class="insight-card warning"><span>Dashboard Readiness</span><strong id="readinessScore">0%</strong><em id="readinessNote">Waiting for trades</em></article></section>
+    <section class="pro-note-panel"><h3>Professional Progression</h3><p id="proSuggestion">Add more completed trades to unlock stronger statistical insights.</p><div class="quick-pill-row" id="quickPills"></div></section>
+    <section id="tab-calendar" class="tab-section active"><section class="calendar-panel"><div class="calendar-header"><button id="prevMonth" class="icon-btn">‹</button><h2 id="calendarTitle">Calendar</h2><button id="nextMonth" class="icon-btn">›</button><div class="calendar-totals"><span>P/L: <strong id="calendarPL">€0.00</strong></span><span>Trades: <strong id="calendarTrades">0</strong></span></div></div><div class="calendar-grid" id="calendarGrid"></div></section><section class="day-review-panel" id="dayReviewPanel"><div class="panel-header"><h2 id="dayReviewTitle">Select a day</h2><span id="dayReviewSummary">Click a calendar day to review trades</span></div><div id="dayReviewRows" class="day-review-rows"></div></section></section>
+    <section id="tab-analytics" class="tab-section"><main class="dashboard-grid"><section class="panel wide"><div class="panel-header"><h2>Equity Curve</h2><span>Net P/L over time</span></div><canvas id="equityChart"></canvas></section><section class="panel"><div class="panel-header"><h2>Win / Loss</h2><span>Result split</span></div><canvas id="winLossChart"></canvas></section><section class="panel"><div class="panel-header"><h2>Pair Performance</h2><span>Net P/L by pair</span></div><canvas id="pairChart"></canvas></section><section class="panel"><div class="panel-header"><h2>Setup Performance</h2><span>Net P/L by setup</span></div><canvas id="setupChart"></canvas></section><section class="panel"><div class="panel-header"><h2>Session Performance</h2><span>Net P/L by session</span></div><canvas id="sessionChart"></canvas></section><section class="panel"><div class="panel-header"><h2>Mistake Tracker</h2><span>Repeated issues</span></div><canvas id="mistakeChart"></canvas></section></main></section>
+    <section id="tab-trades" class="tab-section"><section class="table-panel"><div class="panel-header"><h2>Trade Log</h2><span>All exported trades</span></div><div class="table-wrap"><table><thead><tr><th>Date</th><th>Pair</th><th>Dir</th><th>Setup</th><th>Session</th><th>Result</th><th>Net P/L</th><th>R</th><th>Rules</th><th>Status</th></tr></thead><tbody id="tradeRows"></tbody></table></div></section></section>
+    <section id="tab-system" class="tab-section"><section class="system-hero"><div><p class="eyebrow">System Map / Core Workflow</p><h2>Trading Journal OS Network Map</h2><p class="hero-text">Notion is your input layer, Google Drive stores original evidence, GitHub Actions runs automation, OpenAI supervises your trade story, and this dashboard visualizes performance.</p></div><div class="status-card"><span>Live Dashboard</span><strong>GitHub Pages</strong><em>Same link refreshes after export/deploy</em></div></section><section class="flow-grid"><article class="flow-card"><span>1</span><h3>Notion Trade Entry</h3><p>Fill trade details, journal story, execution data, and screenshots.</p></article><article class="flow-card"><span>2</span><h3>Screenshot Sync</h3><p>Evidence is archived into Google Drive and indexed by Trade ID.</p></article><article class="flow-card"><span>3</span><h3>AI Supervisor</h3><p>AI compares your journal story with screenshots and writes objective feedback.</p></article><article class="flow-card"><span>4</span><h3>Dashboard Export</h3><p>Notion data becomes optimized JSON and persistent screenshot assets.</p></article><article class="flow-card"><span>5</span><h3>GitHub Pages</h3><p>The dashboard deploys as a visual, mobile-friendly analytics page.</p></article><article class="flow-card"><span>6</span><h3>Future MT5 Import</h3><p>Broker execution will become the final truth for P/L, commissions, and tickets.</p></article></section></section>
   </div>
-  <script src="./app.js?v=20260520-06"></script>
+  <script src="./app.js?v=20260520-07"></script>
 </body>
 </html>

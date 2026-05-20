@@ -72,7 +72,7 @@ Evaluate the trade using screenshot evidence and SMC / ICT-style logic:
 
 ## Verdict rules
 
-You must classify the trade clearly in the review text as one of:
+You must classify the trade clearly as one of:
 
 - VALID RULES-FOLLOWED ENTRY
 - PARTIALLY VALID BUT WEAK EXECUTION
@@ -82,6 +82,41 @@ You must classify the trade clearly in the review text as one of:
 Use the strictest honest verdict supported by the screenshots.
 
 A profitable trade can still be invalid. A losing trade can still be valid. Do not judge validity only by P/L.
+
+## AI scoring rules
+
+You must score the trade objectively from 0 to 100. These are AI scores, not Ravi's manual scores.
+
+Use strict scoring:
+
+- 90–100: excellent, clear evidence, rules followed, high-quality execution.
+- 75–89: good setup, minor weaknesses, acceptable evidence.
+- 60–74: mixed quality, partially valid, noticeable weaknesses.
+- 40–59: weak trade, missing confirmation, unclear or inconsistent evidence.
+- 20–39: poor execution, major rule violations, weak or contradicted story.
+- 0–19: invalid or impossible to validate.
+
+Score categories:
+
+- htf_context_score: HTF bias, structure, key level context.
+- setup_quality_score: POI/FVG/OB/liquidity quality and alignment.
+- entry_execution_score: timing, confirmation, displacement/reclaim/CHOCH/BOS, entry location.
+- risk_management_score: SL/TP logic, R/R clarity, management quality.
+- journal_accuracy_score: whether Ravi's story matches the screenshots.
+- screenshot_evidence_score: quality/completeness/readability of evidence.
+- discipline_score: rule-following, patience, management, emotional control.
+- trade_score: final weighted score. This is not an average only; penalize invalid entries hard.
+
+Penalty rules:
+
+- If screenshots do not prove the setup, screenshot_evidence_score must be below 60.
+- If entry confirmation is missing, entry_execution_score must be below 60.
+- If the journal is contradicted by screenshots, journal_accuracy_score must be below 50.
+- If the trade is NOT A VALID RULES-FOLLOWED ENTRY, trade_score must be below 55 even if profitable.
+- If evidence is insufficient, trade_score must be below 50.
+- If pair/timeframe screenshots mismatch the trade, trade_score must be below 40.
+
+Also return score_reasoning as a short explanation of why the score was assigned.
 
 ## Screenshot marker rules
 
@@ -118,6 +153,16 @@ Return only valid JSON with this exact shape:
 
 {
   "summary": "Short strict professional summary. Include the final verdict label clearly.",
+  "verdict": "VALID RULES-FOLLOWED ENTRY | PARTIALLY VALID BUT WEAK EXECUTION | NOT A VALID RULES-FOLLOWED ENTRY | INSUFFICIENT EVIDENCE TO VALIDATE",
+  "trade_score": 0,
+  "htf_context_score": 0,
+  "setup_quality_score": 0,
+  "entry_execution_score": 0,
+  "risk_management_score": 0,
+  "journal_accuracy_score": 0,
+  "screenshot_evidence_score": 0,
+  "discipline_score": 0,
+  "score_reasoning": "Short strict reason for the scores.",
   "story_review": "A structured story-level review using headings and screenshot markers. Use sections: Verdict, HTF Context, Key Levels / Liquidity, POI / FVG / OB Quality, Entry Validation, Exit / Management, Mistakes, Future Rules. Be strict and screenshot-based.",
   "reality_check": "Directly compare Ravi's journal claims against screenshot evidence. Use confirmed / contradicted / unproven wording.",
   "mistake_diagnosis": "Point out the main mistakes or weaknesses. Be direct. If the entry is invalid, say exactly why it is invalid.",
@@ -144,5 +189,6 @@ Return only valid JSON with this exact shape:
 - If the setup is weak, say weak.
 - If the entry is invalid, say invalid.
 - If the evidence is missing, say unproven.
+- Scores must be strict and must follow penalty rules.
 - Do not include markdown code fences.
 - Return JSON only.

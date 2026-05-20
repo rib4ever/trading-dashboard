@@ -5,7 +5,7 @@ import os
 from google.oauth2 import service_account
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseUpload
+from googleapiclient.http import MediaIoBaseDownload, MediaIoBaseUpload
 
 
 class GoogleDriveClient:
@@ -70,3 +70,13 @@ class GoogleDriveClient:
             fields="id,name,webViewLink,webContentLink",
             supportsAllDrives=True,
         ).execute()
+
+    def download_bytes(self, file_id: str) -> bytes:
+        """Download a Google Drive binary file by ID."""
+        request = self.service.files().get_media(fileId=file_id, supportsAllDrives=True)
+        buffer = io.BytesIO()
+        downloader = MediaIoBaseDownload(buffer, request)
+        done = False
+        while not done:
+            _, done = downloader.next_chunk()
+        return buffer.getvalue()

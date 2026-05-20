@@ -86,12 +86,20 @@ jobs:
           GOOGLE_OAUTH_REFRESH_TOKEN: ${{ secrets.GOOGLE_OAUTH_REFRESH_TOKEN }}
           GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
 
-      - name: Commit dashboard data and screenshot assets
+      - name: 05b - Calculate objectives and risk guardrails
+        run: |
+          cd ravi-trading-journal-os
+          PYTHONPATH=. python scripts/run_objective_guardrails.py
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+
+      - name: Commit dashboard data, objective status and screenshot assets
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add ravi-dashboard/data/trades.json ravi-dashboard/assets/screenshots
-          git diff --cached --quiet || git commit -m "Run Ravi full pipeline and refresh dashboard data/assets"
+          git add ravi-dashboard/data/trades.json ravi-dashboard/data/objective_status.json ravi-dashboard/assets/screenshots ravi-trading-journal-os/config/trading_objectives.json
+          git diff --cached --quiet || git commit -m "Run Ravi full pipeline and refresh dashboard objectives/data/assets"
           git push
 
       - uses: actions/configure-pages@v5

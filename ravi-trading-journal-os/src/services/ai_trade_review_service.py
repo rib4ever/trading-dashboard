@@ -24,6 +24,13 @@ AI_STATUS_ERROR = "AI Review Error"
 MAX_SCREENSHOTS = int(os.environ.get("AI_REVIEW_MAX_SCREENSHOTS", "3"))
 OPENAI_MAX_RETRIES = int(os.environ.get("OPENAI_MAX_RETRIES", "3"))
 
+VALID_VERDICTS = {
+    "VALID RULES-FOLLOWED ENTRY",
+    "PARTIALLY VALID BUT WEAK EXECUTION",
+    "NOT A VALID RULES-FOLLOWED ENTRY",
+    "INSUFFICIENT EVIDENCE TO VALIDATE",
+}
+
 
 def _prop(page: dict[str, Any], name: str) -> dict[str, Any] | None:
     return page.get("properties", {}).get(name)
@@ -70,6 +77,25 @@ def notion_date(value: str) -> dict[str, Any]:
     return {"date": {"start": value}}
 
 
+def clamp_score(value: Any) -> float:
+    try:
+        n = float(value)
+    except Exception:
+        n = 0.0
+    return round(max(0.0, min(n, 100.0)), 2)
+
+
+def normalized_verdict(value: Any, summary: str = "") -> str:
+    verdict = str(value or "").strip().upper()
+    if verdict in VALID_VERDICTS:
+        return verdict
+    text = f"{verdict} {summary}".upper()
+    for candidate in VALID_VERDICTS:
+        if candidate in text:
+            return candidate
+    return "INSUFFICIENT EVIDENCE TO VALIDATE"
+
+
 def query_ready_trades(notion: NotionClient) -> list[dict[str, Any]]:
     if not TRADES_DATABASE_ID:
         raise RuntimeError("Missing NOTION_TRADES_DATABASE_ID")
@@ -90,7 +116,8 @@ def query_screenshot_records(notion: NotionClient, trade_id: str) -> list[dict[s
 
 def build_trade_context(page: dict[str, Any]) -> dict[str, str | None]:
     fields = [
-        "Trade Name", "Trade ID", "Date", "Pair", "Direction", "Account", "Session", "Setup Model",
+        "Trade Name", "Trade ID", "Date", "Entry DateTime", "Exit DateTime", "Broker Entry Time", "Broker Exit Time",
+        "Pair", "Direction", "Account", "Session", "Auto Session", "Killzone", "Setup Model",
         "Result", "Trade Quality", "Followed Rules", "Mistake Type", "Entry Price", "Exit Price",
         "Stop Loss", "Take Profit", "Risk %", "Risk Amount", "Planned R", "Result R", "Net P/L",
         "Raw Journal Story", "Notes", "Google Drive Trade Folder",
@@ -169,7 +196,7 @@ def _post_openai_with_retries(payload: dict[str, Any]) -> dict[str, Any]:
 
 def call_openai_review(prompt: str, trade_context: dict[str, Any], screenshots: list[dict[str, str | None]], contact_sheet_url: str, image_count: int) -> dict[str, Any]:
     user_text = {
-        "task": "Review this trade and return the required JSON only.",
+        "task": "Review this trade strictly, score it, and return the required JSON only.",
         "review_mode": "single compressed contact sheet",
         "trade_context": trade_context,
         "screenshot_records": screenshots,
@@ -187,7 +214,7 @@ def call_openai_review(prompt: str, trade_context: dict[str, Any], screenshots: 
                 {"type": "input_image", "image_url": contact_sheet_url},
             ],
         }],
-        "temperature": 0.2,
+        "temperature": 0.1,
     }
 
     data = _post_openai_with_retries(payload)
@@ -216,15 +243,30 @@ def call_openai_review(prompt: str, trade_context: dict[str, Any], screenshots: 
 def update_trade_review(notion: NotionClient, page_id: str, review: dict[str, Any]) -> None:
     needs_more = bool(review.get("needs_more_screenshots"))
     confidence = float(review.get("confidence", 0.0) or 0.0)
+    verdict = normalized_verdict(review.get("verdict"), str(review.get("summary", "")))
+    score_reasoning = str(review.get("score_reasoning", ""))
     props = {
         "AI Review Status": notion_select(AI_STATUS_MORE_SCREENSHOTS if needs_more else AI_STATUS_COMPLETE),
         "AI Review": notion_rich_text(str(review.get("summary", ""))),
+        "AI Story Review": notion_rich_text(str(review.get("story_review", ""))),
         "AI Reality Check": notion_rich_text(str(review.get("reality_check", ""))),
         "AI Mistake Diagnosis": notion_rich_text(str(review.get("mistake_diagnosis", ""))),
         "AI Future Rules": notion_rich_text(str(review.get("future_rules", ""))),
+        "AI Evidence Warning": notion_rich_text(", ".join(review.get("missing_evidence", []) or [])),
         "AI Review Confidence": notion_number(max(0.0, min(confidence, 1.0))),
         "AI Reviewed Time": notion_date(now_iso()),
+        "AI Verdict": notion_select(verdict),
+        "AI Trade Score": notion_number(clamp_score(review.get("trade_score"))),
+        "AI HTF Context Score": notion_number(clamp_score(review.get("htf_context_score"))),
+        "AI Setup Quality Score": notion_number(clamp_score(review.get("setup_quality_score"))),
+        "AI Entry Execution Score": notion_number(clamp_score(review.get("entry_execution_score"))),
+        "AI Risk Management Score": notion_number(clamp_score(review.get("risk_management_score"))),
+        "AI Journal Accuracy Score": notion_number(clamp_score(review.get("journal_accuracy_score"))),
+        "AI Screenshot Evidence Score": notion_number(clamp_score(review.get("screenshot_evidence_score"))),
+        "AI Discipline Score": notion_number(clamp_score(review.get("discipline_score"))),
     }
+    if score_reasoning:
+        props["AI Evidence Warning"] = notion_rich_text((props["AI Evidence Warning"]["rich_text"][0]["text"]["content"] + " | " + score_reasoning).strip(" |"))
     notion.update_page(page_id, props)
 
 
@@ -253,12 +295,24 @@ def process_trade(page: dict[str, Any], notion: NotionClient, drive: GoogleDrive
     screenshots = build_screenshot_context(screenshot_pages)
     if not screenshots:
         update_trade_review(notion, page_id, {
-            "summary": "AI review cannot be completed because no synced screenshot records were found.",
+            "summary": "AI review cannot be completed because no synced screenshot records were found. Verdict: INSUFFICIENT EVIDENCE TO VALIDATE.",
+            "verdict": "INSUFFICIENT EVIDENCE TO VALIDATE",
+            "trade_score": 10,
+            "htf_context_score": 0,
+            "setup_quality_score": 0,
+            "entry_execution_score": 0,
+            "risk_management_score": 0,
+            "journal_accuracy_score": 20,
+            "screenshot_evidence_score": 0,
+            "discipline_score": 20,
+            "score_reasoning": "No screenshots were available, so the trade cannot be validated.",
+            "story_review": "Verdict: INSUFFICIENT EVIDENCE TO VALIDATE. No synced screenshots were available.",
             "reality_check": "No screenshots are available to compare against the journal story.",
             "mistake_diagnosis": "Missing visual evidence.",
             "future_rules": "Upload and sync chart screenshots before requesting AI review.",
             "confidence": 0.1,
             "needs_more_screenshots": True,
+            "missing_evidence": ["No synced screenshot records found"],
         })
         return
 
@@ -282,3 +336,7 @@ def run_ai_trade_review() -> None:
                 update_trade_error(notion, page["id"], str(exc))
             except Exception as update_exc:
                 print(f"Failed to update AI review error status: {update_exc}")
+
+
+if __name__ == "__main__":
+    run_ai_trade_review()

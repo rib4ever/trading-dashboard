@@ -4,12 +4,14 @@ import os
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from src.clients.notion_client import NotionClient
 
 TRADES_DATABASE_ID = os.environ.get("NOTION_TRADES_DATABASE_ID")
 ROOT_DIR = Path(__file__).resolve().parents[2]
 SYMBOL_SETTINGS_PATH = ROOT_DIR / "config" / "symbol_profit_settings.json"
+PARIS_TZ = ZoneInfo("Europe/Paris")
 
 
 def load_symbol_settings() -> dict[str, Any]:
@@ -62,8 +64,61 @@ def checkbox(value: bool) -> dict[str, Any]:
     return {"checkbox": value}
 
 
+def parse_datetime(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=PARIS_TZ)
+        return dt
+    except Exception:
+        return None
+
+
+def paris_datetime(value: str | None) -> datetime | None:
+    dt = parse_datetime(value)
+    if not dt:
+        return None
+    return dt.astimezone(PARIS_TZ)
+
+
+def time_24h(value: str | None) -> str:
+    dt = paris_datetime(value)
+    return dt.strftime("%H:%M") if dt else ""
+
+
+def session_from_paris_time(dt: datetime | None) -> str:
+    if not dt:
+        return "Unknown"
+    minutes = dt.hour * 60 + dt.minute
+    if 0 <= minutes < 8 * 60:
+        return "Asian"
+    if 8 * 60 <= minutes < 13 * 60 + 30:
+        return "London"
+    if 13 * 60 + 30 <= minutes < 22 * 60:
+        return "New York"
+    return "Off Session"
+
+
+def killzone_from_paris_time(dt: datetime | None) -> str:
+    if not dt:
+        return "Unknown"
+    minutes = dt.hour * 60 + dt.minute
+    if 8 * 60 <= minutes < 11 * 60:
+        return "London Killzone"
+    if 13 * 60 + 30 <= minutes < 16 * 60:
+        return "New York AM Killzone"
+    if 19 * 60 <= minutes < 21 * 60:
+        return "New York PM Killzone"
+    return "Off Killzone"
+
+
 def date_token(page: dict[str, Any]) -> str:
-    raw = get_text(page, "Date") or get_text(page, "Entry DateTime") or page.get("created_time")
+    entry_dt = paris_datetime(get_text(page, "Entry DateTime"))
+    if entry_dt:
+        return entry_dt.strftime("%Y%m%d")
+    raw = get_text(page, "Date") or page.get("created_time")
     if not raw:
         return datetime.utcnow().strftime("%Y%m%d")
     return str(raw)[:10].replace("-", "")
@@ -80,15 +135,6 @@ def generate_trade_id(page: dict[str, Any]) -> str:
     ])
     suffix = hashlib.sha1(seed.encode("utf-8")).hexdigest()[:6].upper()
     return f"TRD-{date_part}-{suffix}"
-
-
-def parse_datetime(value: str | None) -> datetime | None:
-    if not value:
-        return None
-    try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except Exception:
-        return None
 
 
 def estimate_gross_pl(page: dict[str, Any], symbol_settings: dict[str, Any]) -> tuple[float | None, str | None]:
@@ -115,8 +161,6 @@ def estimate_gross_pl(page: dict[str, Any], symbol_settings: dict[str, Any]) -> 
 def get_missing_fields(page: dict[str, Any]) -> list[str]:
     required = ["Trade ID", "Date", "Pair", "Direction"]
     missing = [field for field in required if not get_text(page, field)]
-
-    # KPI useful fields: not blocking dashboard visibility, but needed for proper KPI cards/charts.
     kpi_required = ["Result", "Net P/L", "Result R"]
     for field in kpi_required:
         value = get_text(page, field) if field == "Result" else get_number(page, field)
@@ -134,7 +178,26 @@ def build_maintenance_updates(page: dict[str, Any], symbol_settings: dict[str, A
         updates["Trade ID"] = rich_text(trade_id)
         notes.append(f"Generated Trade ID: {trade_id}")
 
-    # Default costs to 0 when blank, as confirmed.
+    entry_dt = paris_datetime(get_text(page, "Entry DateTime"))
+    exit_dt = paris_datetime(get_text(page, "Exit DateTime"))
+    entry_time = time_24h(get_text(page, "Entry DateTime"))
+    exit_time = time_24h(get_text(page, "Exit DateTime"))
+    auto_session = session_from_paris_time(entry_dt)
+    auto_killzone = killzone_from_paris_time(entry_dt)
+
+    if entry_time and get_text(page, "Broker Entry Time") != entry_time:
+        updates["Broker Entry Time"] = rich_text(entry_time)
+        notes.append(f"Broker Entry Time set from Entry DateTime Paris time: {entry_time}")
+    if exit_time and get_text(page, "Broker Exit Time") != exit_time:
+        updates["Broker Exit Time"] = rich_text(exit_time)
+        notes.append(f"Broker Exit Time set from Exit DateTime Paris time: {exit_time}")
+    if auto_session and get_text(page, "Auto Session") != auto_session:
+        updates["Auto Session"] = select(auto_session)
+        notes.append(f"Auto Session calculated from broker entry time: {auto_session}")
+    if auto_killzone and get_text(page, "Killzone") != auto_killzone:
+        updates["Killzone"] = select(auto_killzone)
+        notes.append(f"Killzone calculated from broker entry time: {auto_killzone}")
+
     if get_number(page, "Commission") is None:
         updates["Commission"] = number(0)
         notes.append("Commission blank → set to 0")
@@ -148,7 +211,6 @@ def build_maintenance_updates(page: dict[str, Any], symbol_settings: dict[str, A
     exit_price = get_number(page, "Exit Price")
     stop = get_number(page, "Stop Loss")
     target = get_number(page, "Take Profit")
-    lot = get_number(page, "Lot Size")
 
     if get_number(page, "Price Move") is None and entry is not None and exit_price is not None and direction:
         multiplier = 1 if direction == "Buy" else -1
@@ -197,17 +259,12 @@ def build_maintenance_updates(page: dict[str, Any], symbol_settings: dict[str, A
             updates["Result"] = select("Break Even")
         notes.append("Result calculated from Net P/L")
 
-    entry_dt = parse_datetime(get_text(page, "Entry DateTime"))
-    exit_dt = parse_datetime(get_text(page, "Exit DateTime"))
     if get_number(page, "Trade Duration Minutes") is None and entry_dt and exit_dt:
         duration_minutes = (exit_dt - entry_dt).total_seconds() / 60
         if duration_minutes >= 0:
             updates["Trade Duration Minutes"] = number(duration_minutes)
             notes.append("Trade Duration calculated from Entry/Exit DateTime")
 
-    # Dashboard readiness is a KPI-readiness indicator, not visibility. Dashboard shows all trades.
-    # Use updated or existing values to evaluate readiness.
-    fake_page = {"properties": {**page.get("properties", {})}}
     missing = get_missing_fields(page)
     if "Trade ID" in missing and "Trade ID" in updates:
         missing.remove("Trade ID")
@@ -220,10 +277,7 @@ def build_maintenance_updates(page: dict[str, Any], symbol_settings: dict[str, A
 
     updates["Dashboard Ready"] = checkbox(len(missing) == 0)
     updates["Missing Required Fields"] = rich_text(", ".join(missing) if missing else "None")
-    if missing:
-        updates["Calculation Status"] = select("Partial" if notes else "Needs Manual Input")
-    else:
-        updates["Calculation Status"] = select("Complete")
+    updates["Calculation Status"] = select("Complete" if not missing else ("Partial" if notes else "Needs Manual Input"))
 
     if notes:
         updates["Auto Calculation Notes"] = rich_text(" | ".join([n for n in notes if n]))
